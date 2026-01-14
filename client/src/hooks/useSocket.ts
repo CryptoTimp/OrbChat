@@ -819,7 +819,7 @@ export function useSocket() {
       // Now update Firebase (this happens asynchronously, but UI is already updated)
       if (alreadyOwned) {
         await updateUserOrbs(playerId, newOrbs);
-        addNotification(`Item already owned!`, 'info');
+        addNotification(`Item already owned!`, 'error');
         console.log('Loot box item already owned, no refund. new orbs:', newOrbs);
       } else {
         await Promise.all([
