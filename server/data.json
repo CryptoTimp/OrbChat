@@ -1,0 +1,1454 @@
+{
+  "players": {},
+  "shop_items": {
+    "hat_cowboy": {
+      "id": "hat_cowboy",
+      "name": "Cowboy Hat",
+      "price": 800,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_cowboy.png",
+      "rarity": "uncommon"
+    },
+    "hat_beanie": {
+      "id": "hat_beanie",
+      "name": "Cozy Beanie",
+      "price": 150,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_beanie.png",
+      "rarity": "common"
+    },
+    "hat_cap": {
+      "id": "hat_cap",
+      "name": "Baseball Cap",
+      "price": 200,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_cap.png",
+      "rarity": "common"
+    },
+    "hat_beret": {
+      "id": "hat_beret",
+      "name": "Artist Beret",
+      "price": 250,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_beret.png",
+      "rarity": "common"
+    },
+    "hat_wizard": {
+      "id": "hat_wizard",
+      "name": "Wizard Hat",
+      "price": 1200,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_wizard.png",
+      "rarity": "uncommon"
+    },
+    "hat_crown": {
+      "id": "hat_crown",
+      "name": "Royal Crown",
+      "price": 25000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_crown.png",
+      "rarity": "epic"
+    },
+    "hat_halo": {
+      "id": "hat_halo",
+      "name": "Angel Halo",
+      "price": 6000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_halo.png",
+      "rarity": "rare"
+    },
+    "hat_horns": {
+      "id": "hat_horns",
+      "name": "Devil Horns",
+      "price": 5000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_horns.png",
+      "rarity": "rare"
+    },
+    "hat_tiara": {
+      "id": "hat_tiara",
+      "name": "Princess Tiara",
+      "price": 7500,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_tiara.png",
+      "rarity": "rare"
+    },
+    "hat_chef": {
+      "id": "hat_chef",
+      "name": "Chef Hat",
+      "price": 600,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_chef.png",
+      "rarity": "uncommon"
+    },
+    "hat_tophat": {
+      "id": "hat_tophat",
+      "name": "Top Hat",
+      "price": 1500,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_tophat.png",
+      "rarity": "uncommon"
+    },
+    "hat_hardhat": {
+      "id": "hat_hardhat",
+      "name": "Hard Hat",
+      "price": 300,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_hardhat.png",
+      "rarity": "common"
+    },
+    "hat_pirate": {
+      "id": "hat_pirate",
+      "name": "Pirate Tricorn",
+      "price": 1000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_pirate.png",
+      "rarity": "uncommon"
+    },
+    "hat_viking": {
+      "id": "hat_viking",
+      "name": "Viking Helm",
+      "price": 4500,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_viking.png",
+      "rarity": "rare"
+    },
+    "hat_ninja": {
+      "id": "hat_ninja",
+      "name": "Ninja Headband",
+      "price": 900,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_ninja.png",
+      "rarity": "uncommon"
+    },
+    "hat_knight": {
+      "id": "hat_knight",
+      "name": "Knight Helmet",
+      "price": 8000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_knight.png",
+      "rarity": "rare"
+    },
+    "hat_astronaut": {
+      "id": "hat_astronaut",
+      "name": "Space Helmet",
+      "price": 35000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_astronaut.png",
+      "rarity": "epic"
+    },
+    "hat_cat": {
+      "id": "hat_cat",
+      "name": "Cat Ears",
+      "price": 750,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_cat.png",
+      "rarity": "uncommon"
+    },
+    "hat_bunny": {
+      "id": "hat_bunny",
+      "name": "Bunny Ears",
+      "price": 750,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_bunny.png",
+      "rarity": "uncommon"
+    },
+    "hat_mohawk": {
+      "id": "hat_mohawk",
+      "name": "Punk Mohawk",
+      "price": 850,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_mohawk.png",
+      "rarity": "uncommon"
+    },
+    "hat_afro": {
+      "id": "hat_afro",
+      "name": "Groovy Afro",
+      "price": 950,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_afro.png",
+      "rarity": "uncommon"
+    },
+    "hat_santa": {
+      "id": "hat_santa",
+      "name": "Santa Hat",
+      "price": 1200,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_santa.png",
+      "rarity": "uncommon"
+    },
+    "hat_party": {
+      "id": "hat_party",
+      "name": "Party Hat",
+      "price": 100,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_party.png",
+      "rarity": "common"
+    },
+    "hat_dragon": {
+      "id": "hat_dragon",
+      "name": "Dragon Helm",
+      "price": 45000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_dragon.png",
+      "rarity": "epic"
+    },
+    "hat_phoenix": {
+      "id": "hat_phoenix",
+      "name": "Phoenix Crest",
+      "price": 50000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_phoenix.png",
+      "rarity": "epic"
+    },
+    "shirt_red": {
+      "id": "shirt_red",
+      "name": "Red Shirt",
+      "price": 100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_red.png",
+      "rarity": "common"
+    },
+    "shirt_blue": {
+      "id": "shirt_blue",
+      "name": "Blue Shirt",
+      "price": 100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_blue.png",
+      "rarity": "common"
+    },
+    "shirt_green": {
+      "id": "shirt_green",
+      "name": "Green Shirt",
+      "price": 100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_green.png",
+      "rarity": "common"
+    },
+    "shirt_yellow": {
+      "id": "shirt_yellow",
+      "name": "Yellow Shirt",
+      "price": 100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_yellow.png",
+      "rarity": "common"
+    },
+    "shirt_purple": {
+      "id": "shirt_purple",
+      "name": "Purple Shirt",
+      "price": 100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_purple.png",
+      "rarity": "common"
+    },
+    "shirt_pink": {
+      "id": "shirt_pink",
+      "name": "Pink Shirt",
+      "price": 100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_pink.png",
+      "rarity": "common"
+    },
+    "shirt_black": {
+      "id": "shirt_black",
+      "name": "Black Shirt",
+      "price": 150,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_black.png",
+      "rarity": "common"
+    },
+    "shirt_white": {
+      "id": "shirt_white",
+      "name": "White Shirt",
+      "price": 150,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_white.png",
+      "rarity": "common"
+    },
+    "shirt_hoodie": {
+      "id": "shirt_hoodie",
+      "name": "Cozy Hoodie",
+      "price": 800,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_hoodie.png",
+      "rarity": "uncommon"
+    },
+    "shirt_hawaiian": {
+      "id": "shirt_hawaiian",
+      "name": "Hawaiian Shirt",
+      "price": 700,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_hawaiian.png",
+      "rarity": "uncommon"
+    },
+    "shirt_striped": {
+      "id": "shirt_striped",
+      "name": "Striped Tee",
+      "price": 200,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_striped.png",
+      "rarity": "common"
+    },
+    "shirt_tuxedo": {
+      "id": "shirt_tuxedo",
+      "name": "Tuxedo",
+      "price": 5000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_tuxedo.png",
+      "rarity": "rare"
+    },
+    "robe_wizard": {
+      "id": "robe_wizard",
+      "name": "Wizard Robe",
+      "price": 1500,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_wizard.png",
+      "rarity": "uncommon"
+    },
+    "robe_dark": {
+      "id": "robe_dark",
+      "name": "Dark Robes",
+      "price": 6000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_dark.png",
+      "rarity": "rare"
+    },
+    "dress_princess": {
+      "id": "dress_princess",
+      "name": "Princess Dress",
+      "price": 7000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/dress_princess.png",
+      "rarity": "rare"
+    },
+    "robe_angel": {
+      "id": "robe_angel",
+      "name": "Angel Robes",
+      "price": 8000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_angel.png",
+      "rarity": "rare"
+    },
+    "armor_knight": {
+      "id": "armor_knight",
+      "name": "Knight Armor",
+      "price": 9000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/armor_knight.png",
+      "rarity": "rare"
+    },
+    "armor_samurai": {
+      "id": "armor_samurai",
+      "name": "Samurai Armor",
+      "price": 9500,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/armor_samurai.png",
+      "rarity": "rare"
+    },
+    "armor_gold": {
+      "id": "armor_gold",
+      "name": "Golden Armor",
+      "price": 35000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/armor_gold.png",
+      "rarity": "epic"
+    },
+    "coat_chef": {
+      "id": "coat_chef",
+      "name": "Chef Coat",
+      "price": 600,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/coat_chef.png",
+      "rarity": "uncommon"
+    },
+    "coat_lab": {
+      "id": "coat_lab",
+      "name": "Lab Coat",
+      "price": 700,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/coat_lab.png",
+      "rarity": "uncommon"
+    },
+    "suit_space": {
+      "id": "suit_space",
+      "name": "Space Suit",
+      "price": 10000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/suit_space.png",
+      "rarity": "rare"
+    },
+    "coat_pirate": {
+      "id": "coat_pirate",
+      "name": "Pirate Coat",
+      "price": 1200,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/coat_pirate.png",
+      "rarity": "uncommon"
+    },
+    "gi_ninja": {
+      "id": "gi_ninja",
+      "name": "Ninja Gi",
+      "price": 1100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/gi_ninja.png",
+      "rarity": "uncommon"
+    },
+    "vest_cowboy": {
+      "id": "vest_cowboy",
+      "name": "Cowboy Vest",
+      "price": 650,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/vest_cowboy.png",
+      "rarity": "uncommon"
+    },
+    "tunic_viking": {
+      "id": "tunic_viking",
+      "name": "Viking Tunic",
+      "price": 900,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/tunic_viking.png",
+      "rarity": "uncommon"
+    },
+    "jacket_punk": {
+      "id": "jacket_punk",
+      "name": "Punk Jacket",
+      "price": 1000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/jacket_punk.png",
+      "rarity": "uncommon"
+    },
+    "jacket_neon": {
+      "id": "jacket_neon",
+      "name": "Neon Cyber Jacket",
+      "price": 7500,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/jacket_neon.png",
+      "rarity": "rare"
+    },
+    "jacket_leather": {
+      "id": "jacket_leather",
+      "name": "Leather Jacket",
+      "price": 1100,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/jacket_leather.png",
+      "rarity": "uncommon"
+    },
+    "robe_dragon": {
+      "id": "robe_dragon",
+      "name": "Dragon Robe",
+      "price": 40000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_dragon.png",
+      "rarity": "epic"
+    },
+    "armor_demon": {
+      "id": "armor_demon",
+      "name": "Demon Armor",
+      "price": 45000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/armor_demon.png",
+      "rarity": "epic"
+    },
+    "acc_glasses": {
+      "id": "acc_glasses",
+      "name": "Cool Glasses",
+      "price": 200,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_glasses.png",
+      "rarity": "common"
+    },
+    "acc_sunglasses": {
+      "id": "acc_sunglasses",
+      "name": "Sunglasses",
+      "price": 250,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_sunglasses.png",
+      "rarity": "common"
+    },
+    "acc_monocle": {
+      "id": "acc_monocle",
+      "name": "Fancy Monocle",
+      "price": 800,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_monocle.png",
+      "rarity": "uncommon"
+    },
+    "acc_eyepatch": {
+      "id": "acc_eyepatch",
+      "name": "Pirate Eyepatch",
+      "price": 150,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_eyepatch.png",
+      "rarity": "common"
+    },
+    "acc_mask": {
+      "id": "acc_mask",
+      "name": "Mystery Mask",
+      "price": 700,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_mask.png",
+      "rarity": "uncommon"
+    },
+    "acc_cybervisor": {
+      "id": "acc_cybervisor",
+      "name": "Cyber Visor",
+      "price": 1500,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_cybervisor.png",
+      "rarity": "uncommon"
+    },
+    "acc_scarf": {
+      "id": "acc_scarf",
+      "name": "Cozy Scarf",
+      "price": 300,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_scarf.png",
+      "rarity": "common"
+    },
+    "acc_bowtie": {
+      "id": "acc_bowtie",
+      "name": "Dapper Bowtie",
+      "price": 200,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_bowtie.png",
+      "rarity": "common"
+    },
+    "acc_necklace": {
+      "id": "acc_necklace",
+      "name": "Gold Necklace",
+      "price": 1000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_necklace.png",
+      "rarity": "uncommon"
+    },
+    "acc_wings_angel": {
+      "id": "acc_wings_angel",
+      "name": "Angel Wings",
+      "price": 25000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_angel.png",
+      "rarity": "epic"
+    },
+    "acc_wings_devil": {
+      "id": "acc_wings_devil",
+      "name": "Devil Wings",
+      "price": 25000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_devil.png",
+      "rarity": "epic"
+    },
+    "acc_wings_fairy": {
+      "id": "acc_wings_fairy",
+      "name": "Fairy Wings",
+      "price": 9000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_fairy.png",
+      "rarity": "rare"
+    },
+    "acc_backpack": {
+      "id": "acc_backpack",
+      "name": "Adventure Pack",
+      "price": 600,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_backpack.png",
+      "rarity": "uncommon"
+    },
+    "acc_jetpack": {
+      "id": "acc_jetpack",
+      "name": "Jetpack",
+      "price": 35000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_jetpack.png",
+      "rarity": "epic"
+    },
+    "acc_sword": {
+      "id": "acc_sword",
+      "name": "Hero Sword",
+      "price": 5000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_sword.png",
+      "rarity": "rare"
+    },
+    "acc_staff": {
+      "id": "acc_staff",
+      "name": "Magic Staff",
+      "price": 6000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_staff.png",
+      "rarity": "rare"
+    },
+    "acc_shield": {
+      "id": "acc_shield",
+      "name": "Knight Shield",
+      "price": 1400,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_shield.png",
+      "rarity": "uncommon"
+    },
+    "acc_guitar": {
+      "id": "acc_guitar",
+      "name": "Rock Guitar",
+      "price": 7000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_guitar.png",
+      "rarity": "rare"
+    },
+    "acc_wand": {
+      "id": "acc_wand",
+      "name": "Sparkle Wand",
+      "price": 900,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_wand.png",
+      "rarity": "uncommon"
+    },
+    "acc_wings_dragon": {
+      "id": "acc_wings_dragon",
+      "name": "Dragon Wings",
+      "price": 100000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_dragon.png",
+      "rarity": "legendary"
+    },
+    "acc_aura_fire": {
+      "id": "acc_aura_fire",
+      "name": "Fire Aura",
+      "price": 125000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_fire.png",
+      "rarity": "legendary"
+    },
+    "acc_aura_ice": {
+      "id": "acc_aura_ice",
+      "name": "Ice Aura",
+      "price": 125000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_ice.png",
+      "rarity": "legendary"
+    },
+    "boost_swift": {
+      "id": "boost_swift",
+      "name": "Swift Sneakers",
+      "price": 2000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_swift.png",
+      "rarity": "uncommon",
+      "speed_multiplier": 1.25,
+      "trail_color": "#22c55e"
+    },
+    "boost_runner": {
+      "id": "boost_runner",
+      "name": "Runner's Rush",
+      "price": 8000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_runner.png",
+      "rarity": "rare",
+      "speed_multiplier": 1.4,
+      "trail_color": "#3b82f6"
+    },
+    "boost_dash": {
+      "id": "boost_dash",
+      "name": "Dash Master",
+      "price": 25000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_dash.png",
+      "rarity": "epic",
+      "speed_multiplier": 1.6,
+      "trail_color": "#a855f7"
+    },
+    "boost_lightning": {
+      "id": "boost_lightning",
+      "name": "Lightning Step",
+      "price": 40000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_lightning.png",
+      "rarity": "epic",
+      "speed_multiplier": 1.8,
+      "trail_color": "#f59e0b"
+    },
+    "boost_sonic": {
+      "id": "boost_sonic",
+      "name": "Sonic Surge",
+      "price": 80000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_sonic.png",
+      "rarity": "legendary",
+      "speed_multiplier": 2,
+      "trail_color": "#ef4444"
+    },
+    "boost_phantom": {
+      "id": "boost_phantom",
+      "name": "Phantom Velocity",
+      "price": 200000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_phantom.png",
+      "rarity": "legendary",
+      "speed_multiplier": 2.5,
+      "trail_color": "#ec4899"
+    },
+    "legs_jeans_blue": {
+      "id": "legs_jeans_blue",
+      "name": "Blue Jeans",
+      "price": 100,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_jeans_blue.png",
+      "rarity": "common"
+    },
+    "legs_jeans_black": {
+      "id": "legs_jeans_black",
+      "name": "Black Jeans",
+      "price": 100,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_jeans_black.png",
+      "rarity": "common"
+    },
+    "legs_shorts": {
+      "id": "legs_shorts",
+      "name": "Casual Shorts",
+      "price": 80,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_shorts.png",
+      "rarity": "common"
+    },
+    "legs_sweatpants": {
+      "id": "legs_sweatpants",
+      "name": "Comfy Sweats",
+      "price": 100,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_sweatpants.png",
+      "rarity": "common"
+    },
+    "legs_chef": {
+      "id": "legs_chef",
+      "name": "Chef Trousers",
+      "price": 500,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_chef.png",
+      "rarity": "uncommon"
+    },
+    "legs_suit": {
+      "id": "legs_suit",
+      "name": "Suit Pants",
+      "price": 600,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_suit.png",
+      "rarity": "uncommon"
+    },
+    "legs_lab": {
+      "id": "legs_lab",
+      "name": "Lab Pants",
+      "price": 550,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_lab.png",
+      "rarity": "uncommon"
+    },
+    "legs_wizard": {
+      "id": "legs_wizard",
+      "name": "Wizard Robes",
+      "price": 800,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_wizard.png",
+      "rarity": "uncommon"
+    },
+    "legs_knight": {
+      "id": "legs_knight",
+      "name": "Knight Greaves",
+      "price": 5000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_knight.png",
+      "rarity": "rare"
+    },
+    "legs_samurai": {
+      "id": "legs_samurai",
+      "name": "Samurai Hakama",
+      "price": 5500,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_samurai.png",
+      "rarity": "rare"
+    },
+    "legs_ninja": {
+      "id": "legs_ninja",
+      "name": "Ninja Pants",
+      "price": 900,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_ninja.png",
+      "rarity": "uncommon"
+    },
+    "legs_pirate": {
+      "id": "legs_pirate",
+      "name": "Pirate Breeches",
+      "price": 750,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_pirate.png",
+      "rarity": "uncommon"
+    },
+    "legs_viking": {
+      "id": "legs_viking",
+      "name": "Viking Leggings",
+      "price": 1000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_viking.png",
+      "rarity": "uncommon"
+    },
+    "legs_cowboy": {
+      "id": "legs_cowboy",
+      "name": "Cowboy Chaps",
+      "price": 700,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_cowboy.png",
+      "rarity": "uncommon"
+    },
+    "legs_astronaut": {
+      "id": "legs_astronaut",
+      "name": "Space Suit Legs",
+      "price": 8000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_astronaut.png",
+      "rarity": "rare"
+    },
+    "legs_punk": {
+      "id": "legs_punk",
+      "name": "Punk Ripped Jeans",
+      "price": 650,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_punk.png",
+      "rarity": "uncommon"
+    },
+    "legs_neon": {
+      "id": "legs_neon",
+      "name": "Neon Cyber Pants",
+      "price": 6000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_neon.png",
+      "rarity": "rare"
+    },
+    "legs_princess": {
+      "id": "legs_princess",
+      "name": "Princess Skirt",
+      "price": 6500,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_princess.png",
+      "rarity": "rare"
+    },
+    "legs_angel": {
+      "id": "legs_angel",
+      "name": "Angelic Robes",
+      "price": 7000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_angel.png",
+      "rarity": "rare"
+    },
+    "legs_dragon": {
+      "id": "legs_dragon",
+      "name": "Dragon Leg Armor",
+      "price": 30000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_dragon.png",
+      "rarity": "epic"
+    },
+    "legs_demon": {
+      "id": "legs_demon",
+      "name": "Demon Greaves",
+      "price": 35000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_demon.png",
+      "rarity": "epic"
+    },
+    "legs_phoenix": {
+      "id": "legs_phoenix",
+      "name": "Phoenix Leggings",
+      "price": 40000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_phoenix.png",
+      "rarity": "epic"
+    },
+    "legs_gold": {
+      "id": "legs_gold",
+      "name": "Golden Armor Legs",
+      "price": 85000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_gold.png",
+      "rarity": "legendary"
+    },
+    "cape_red": {
+      "id": "cape_red",
+      "name": "Red Cape",
+      "price": 250,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_red.png",
+      "rarity": "common"
+    },
+    "cape_blue": {
+      "id": "cape_blue",
+      "name": "Blue Cape",
+      "price": 250,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_blue.png",
+      "rarity": "common"
+    },
+    "cape_green": {
+      "id": "cape_green",
+      "name": "Green Cape",
+      "price": 250,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_green.png",
+      "rarity": "common"
+    },
+    "cape_black": {
+      "id": "cape_black",
+      "name": "Shadow Cape",
+      "price": 800,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_black.png",
+      "rarity": "uncommon"
+    },
+    "cape_white": {
+      "id": "cape_white",
+      "name": "Pure Cape",
+      "price": 800,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_white.png",
+      "rarity": "uncommon"
+    },
+    "cape_purple": {
+      "id": "cape_purple",
+      "name": "Mystic Cape",
+      "price": 1000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_purple.png",
+      "rarity": "uncommon"
+    },
+    "cape_royal": {
+      "id": "cape_royal",
+      "name": "Royal Cape",
+      "price": 6000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_royal.png",
+      "rarity": "rare"
+    },
+    "cape_knight": {
+      "id": "cape_knight",
+      "name": "Knight's Cloak",
+      "price": 7000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_knight.png",
+      "rarity": "rare"
+    },
+    "cape_wizard": {
+      "id": "cape_wizard",
+      "name": "Wizard's Mantle",
+      "price": 8000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_wizard.png",
+      "rarity": "rare"
+    },
+    "cape_vampire": {
+      "id": "cape_vampire",
+      "name": "Vampire Cloak",
+      "price": 9000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_vampire.png",
+      "rarity": "rare"
+    },
+    "cape_ninja": {
+      "id": "cape_ninja",
+      "name": "Ninja Shroud",
+      "price": 1500,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_ninja.png",
+      "rarity": "uncommon"
+    },
+    "cape_pirate": {
+      "id": "cape_pirate",
+      "name": "Captain's Cape",
+      "price": 1400,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_pirate.png",
+      "rarity": "uncommon"
+    },
+    "cape_fire": {
+      "id": "cape_fire",
+      "name": "Flame Cape",
+      "price": 25000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_fire.png",
+      "rarity": "epic"
+    },
+    "cape_ice": {
+      "id": "cape_ice",
+      "name": "Frost Cape",
+      "price": 25000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_ice.png",
+      "rarity": "epic"
+    },
+    "cape_lightning": {
+      "id": "cape_lightning",
+      "name": "Storm Cape",
+      "price": 30000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_lightning.png",
+      "rarity": "epic"
+    },
+    "cape_nature": {
+      "id": "cape_nature",
+      "name": "Nature's Embrace",
+      "price": 8500,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_nature.png",
+      "rarity": "rare"
+    },
+    "cape_dragon": {
+      "id": "cape_dragon",
+      "name": "Dragonscale Cape",
+      "price": 45000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_dragon.png",
+      "rarity": "epic"
+    },
+    "cape_phoenix": {
+      "id": "cape_phoenix",
+      "name": "Phoenix Plume",
+      "price": 80000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_phoenix.png",
+      "rarity": "legendary"
+    },
+    "cape_void": {
+      "id": "cape_void",
+      "name": "Void Shroud",
+      "price": 100000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_void.png",
+      "rarity": "legendary"
+    },
+    "cape_celestial": {
+      "id": "cape_celestial",
+      "name": "Celestial Mantle",
+      "price": 150000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_celestial.png",
+      "rarity": "legendary"
+    },
+    "cape_rainbow": {
+      "id": "cape_rainbow",
+      "name": "Prismatic Cape",
+      "price": 200000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_rainbow.png",
+      "rarity": "legendary"
+    },
+    "cape_galaxy": {
+      "id": "cape_galaxy",
+      "name": "Galactic Shroud",
+      "price": 250000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_galaxy.png",
+      "rarity": "legendary"
+    },
+    "hat_golden": {
+      "id": "hat_golden",
+      "name": "Golden Crown",
+      "price": 85000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_golden.png",
+      "rarity": "legendary"
+    },
+    "hat_phoenix_legendary": {
+      "id": "hat_phoenix_legendary",
+      "name": "Phoenix Crown",
+      "price": 95000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_phoenix_legendary.png",
+      "rarity": "legendary"
+    },
+    "hat_void": {
+      "id": "hat_void",
+      "name": "Void Helm",
+      "price": 110000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_void.png",
+      "rarity": "legendary"
+    },
+    "hat_celestial": {
+      "id": "hat_celestial",
+      "name": "Celestial Halo",
+      "price": 150000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_celestial.png",
+      "rarity": "legendary"
+    },
+    "hat_galaxy": {
+      "id": "hat_galaxy",
+      "name": "Galaxy Crown",
+      "price": 200000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_galaxy.png",
+      "rarity": "legendary"
+    },
+    "hat_rainbow": {
+      "id": "hat_rainbow",
+      "name": "Prismatic Crown",
+      "price": 180000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_rainbow.png",
+      "rarity": "legendary"
+    },
+    "hat_demon": {
+      "id": "hat_demon",
+      "name": "Demon Crown",
+      "price": 48000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_demon.png",
+      "rarity": "epic"
+    },
+    "armor_golden": {
+      "id": "armor_golden",
+      "name": "Golden Plate Armor",
+      "price": 90000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/armor_golden.png",
+      "rarity": "legendary"
+    },
+    "robe_phoenix_legendary": {
+      "id": "robe_phoenix_legendary",
+      "name": "Phoenix Vestments",
+      "price": 100000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_phoenix_legendary.png",
+      "rarity": "legendary"
+    },
+    "armor_void": {
+      "id": "armor_void",
+      "name": "Void Armor",
+      "price": 115000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/armor_void.png",
+      "rarity": "legendary"
+    },
+    "robe_celestial": {
+      "id": "robe_celestial",
+      "name": "Celestial Robes",
+      "price": 155000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_celestial.png",
+      "rarity": "legendary"
+    },
+    "armor_galaxy": {
+      "id": "armor_galaxy",
+      "name": "Galactic Armor",
+      "price": 210000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/armor_galaxy.png",
+      "rarity": "legendary"
+    },
+    "robe_rainbow": {
+      "id": "robe_rainbow",
+      "name": "Prismatic Robes",
+      "price": 185000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_rainbow.png",
+      "rarity": "legendary"
+    },
+    "robe_phoenix": {
+      "id": "robe_phoenix",
+      "name": "Phoenix Robe",
+      "price": 48000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/robe_phoenix.png",
+      "rarity": "epic"
+    },
+    "legs_phoenix_legendary": {
+      "id": "legs_phoenix_legendary",
+      "name": "Phoenix Greaves",
+      "price": 95000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_phoenix_legendary.png",
+      "rarity": "legendary"
+    },
+    "legs_void": {
+      "id": "legs_void",
+      "name": "Void Leggings",
+      "price": 105000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_void.png",
+      "rarity": "legendary"
+    },
+    "legs_celestial": {
+      "id": "legs_celestial",
+      "name": "Celestial Pants",
+      "price": 145000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_celestial.png",
+      "rarity": "legendary"
+    },
+    "legs_galaxy": {
+      "id": "legs_galaxy",
+      "name": "Galactic Leggings",
+      "price": 195000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_galaxy.png",
+      "rarity": "legendary"
+    },
+    "legs_rainbow": {
+      "id": "legs_rainbow",
+      "name": "Prismatic Pants",
+      "price": 175000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_rainbow.png",
+      "rarity": "legendary"
+    },
+    "boost_orb_lucky": {
+      "id": "boost_orb_lucky",
+      "name": "Lucky Charm",
+      "price": 3000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_orb_lucky.png",
+      "rarity": "uncommon",
+      "orb_multiplier": 1.1,
+      "trail_color": "#fbbf24"
+    },
+    "boost_orb_fortune": {
+      "id": "boost_orb_fortune",
+      "name": "Fortune Finder",
+      "price": 12000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_orb_fortune.png",
+      "rarity": "rare",
+      "orb_multiplier": 1.25,
+      "trail_color": "#3b82f6"
+    },
+    "boost_orb_wealth": {
+      "id": "boost_orb_wealth",
+      "name": "Wealth Magnet",
+      "price": 35000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_orb_wealth.png",
+      "rarity": "epic",
+      "orb_multiplier": 1.5,
+      "trail_color": "#a855f7"
+    },
+    "boost_orb_treasure": {
+      "id": "boost_orb_treasure",
+      "name": "Treasure Seeker",
+      "price": 55000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_orb_treasure.png",
+      "rarity": "epic",
+      "orb_multiplier": 1.75,
+      "trail_color": "#f59e0b"
+    },
+    "boost_orb_platinum": {
+      "id": "boost_orb_platinum",
+      "name": "Platinum Collector",
+      "price": 120000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_orb_platinum.png",
+      "rarity": "legendary",
+      "orb_multiplier": 2,
+      "trail_color": "#ef4444"
+    },
+    "boost_orb_divine": {
+      "id": "boost_orb_divine",
+      "name": "Divine Harvest",
+      "price": 300000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_orb_divine.png",
+      "rarity": "legendary",
+      "orb_multiplier": 3,
+      "trail_color": "#ec4899"
+    },
+    "acc_aura_golden": {
+      "id": "acc_aura_golden",
+      "name": "Golden Aura",
+      "price": 88000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_golden.png",
+      "rarity": "legendary"
+    },
+    "acc_aura_phoenix": {
+      "id": "acc_aura_phoenix",
+      "name": "Phoenix Aura",
+      "price": 98000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_phoenix.png",
+      "rarity": "legendary"
+    },
+    "acc_aura_void": {
+      "id": "acc_aura_void",
+      "name": "Void Aura",
+      "price": 108000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_void.png",
+      "rarity": "legendary"
+    },
+    "acc_aura_celestial": {
+      "id": "acc_aura_celestial",
+      "name": "Celestial Aura",
+      "price": 148000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_celestial.png",
+      "rarity": "legendary"
+    },
+    "acc_aura_galaxy": {
+      "id": "acc_aura_galaxy",
+      "name": "Galactic Aura",
+      "price": 198000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_galaxy.png",
+      "rarity": "legendary"
+    },
+    "acc_aura_rainbow": {
+      "id": "acc_aura_rainbow",
+      "name": "Prismatic Aura",
+      "price": 178000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_aura_rainbow.png",
+      "rarity": "legendary"
+    },
+    "acc_wings_golden": {
+      "id": "acc_wings_golden",
+      "name": "Golden Wings",
+      "price": 92000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_golden.png",
+      "rarity": "legendary"
+    },
+    "acc_wings_phoenix": {
+      "id": "acc_wings_phoenix",
+      "name": "Phoenix Wings",
+      "price": 102000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_phoenix.png",
+      "rarity": "legendary"
+    },
+    "acc_wings_void": {
+      "id": "acc_wings_void",
+      "name": "Void Wings",
+      "price": 112000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_void.png",
+      "rarity": "legendary"
+    },
+    "acc_wings_celestial": {
+      "id": "acc_wings_celestial",
+      "name": "Celestial Wings",
+      "price": 152000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_celestial.png",
+      "rarity": "legendary"
+    },
+    "acc_wings_galaxy": {
+      "id": "acc_wings_galaxy",
+      "name": "Galactic Wings",
+      "price": 202000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_galaxy.png",
+      "rarity": "legendary"
+    },
+    "acc_wings_rainbow": {
+      "id": "acc_wings_rainbow",
+      "name": "Prismatic Wings",
+      "price": 182000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_rainbow.png",
+      "rarity": "legendary"
+    },
+    "acc_weapon_golden": {
+      "id": "acc_weapon_golden",
+      "name": "Golden Dual Blades",
+      "price": 90000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_weapon_golden.png",
+      "rarity": "legendary"
+    },
+    "acc_weapon_phoenix": {
+      "id": "acc_weapon_phoenix",
+      "name": "Phoenix Dual Flames",
+      "price": 100000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_weapon_phoenix.png",
+      "rarity": "legendary"
+    },
+    "acc_weapon_void": {
+      "id": "acc_weapon_void",
+      "name": "Void Dual Scythes",
+      "price": 110000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_weapon_void.png",
+      "rarity": "legendary"
+    },
+    "acc_weapon_celestial": {
+      "id": "acc_weapon_celestial",
+      "name": "Celestial Dual Orbs",
+      "price": 150000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_weapon_celestial.png",
+      "rarity": "legendary"
+    },
+    "acc_weapon_galaxy": {
+      "id": "acc_weapon_galaxy",
+      "name": "Galactic Dual Blades",
+      "price": 200000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_weapon_galaxy.png",
+      "rarity": "legendary"
+    },
+    "acc_weapon_rainbow": {
+      "id": "acc_weapon_rainbow",
+      "name": "Prismatic Dual Prisms",
+      "price": 180000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_weapon_rainbow.png",
+      "rarity": "legendary"
+    },
+    "pet_golden": {
+      "id": "pet_golden",
+      "name": "Golden Dragon",
+      "price": 250000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_golden.png",
+      "rarity": "legendary"
+    },
+    "pet_phoenix": {
+      "id": "pet_phoenix",
+      "name": "Phoenix Companion",
+      "price": 280000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_phoenix.png",
+      "rarity": "legendary"
+    },
+    "pet_void": {
+      "id": "pet_void",
+      "name": "Void Shadow",
+      "price": 300000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_void.png",
+      "rarity": "legendary"
+    },
+    "pet_celestial": {
+      "id": "pet_celestial",
+      "name": "Celestial Star",
+      "price": 350000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_celestial.png",
+      "rarity": "legendary"
+    },
+    "pet_galaxy": {
+      "id": "pet_galaxy",
+      "name": "Galactic Nebula",
+      "price": 400000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_galaxy.png",
+      "rarity": "legendary"
+    },
+    "pet_rainbow": {
+      "id": "pet_rainbow",
+      "name": "Prismatic Spirit",
+      "price": 380000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_rainbow.png",
+      "rarity": "legendary"
+    }
+  },
+  "inventory": []
+}

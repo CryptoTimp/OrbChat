@@ -1,0 +1,357 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Particle rise animation for legendary items in chat */
+@keyframes particle-rise-chat {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-20px) scale(0);
+    opacity: 0;
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a1a2e;
+}
+
+body {
+  font-family: 'Press Start 2P', monospace;
+}
+
+/* Pixel-perfect rendering for canvas */
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Custom scrollbar for chat */
+.chat-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Speech bubble animation */
+@keyframes bubble-appear {
+  0% {
+    transform: scale(0.8) translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.speech-bubble {
+  animation: bubble-appear 0.2s ease-out;
+}
+
+/* Floating animation for decorative elements */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-20px) scale(1.2);
+    opacity: 0.6;
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Slide-in animation for notifications */
+@keyframes slide-in {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-right {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out forwards;
+}
+
+/* Custom scrollbar for room list */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 200, 255, 0.3);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 200, 255, 0.5);
+}
+
+/* Custom scrollbar for loot boxes - matches amber/orange theme */
+.lootbox-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.lootbox-scroll::-webkit-scrollbar-track {
+  background: rgba(17, 24, 39, 0.8);
+  border-radius: 4px;
+}
+
+.lootbox-scroll::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.6);
+  border-radius: 4px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.lootbox-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.8);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+/* Firefox scrollbar */
+.lootbox-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(245, 158, 11, 0.6) rgba(17, 24, 39, 0.8);
+}
+
+/* Legendary particle float animations for Buy Orbs modal */
+@keyframes float-particle-1 {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.8;
+  }
+  90% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-200px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+@keyframes float-particle-2 {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.7;
+  }
+  90% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-180px) translateX(10px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes float-particle-3 {
+  0% {
+    transform: translateY(0) scale(1.2);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  90% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-220px) scale(0.4);
+    opacity: 0;
+  }
+}
+
+@keyframes float-particle-4 {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-170px) translateX(-10px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes float-particle-5 {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.8;
+  }
+  90% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-190px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+.animate-float-particle-1 {
+  animation: float-particle-1 3s ease-out infinite;
+}
+
+.animate-float-particle-2 {
+  animation: float-particle-2 3.5s ease-out infinite 0.5s;
+}
+
+.animate-float-particle-3 {
+  animation: float-particle-3 2.8s ease-out infinite 1s;
+}
+
+.animate-float-particle-4 {
+  animation: float-particle-4 3.2s ease-out infinite 1.5s;
+}
+
+.animate-float-particle-5 {
+  animation: float-particle-5 3s ease-out infinite 2s;
+}
+
+/* Button particle animations for Buy Orbs button */
+@keyframes btn-particle-1 {
+  0% {
+    transform: translateY(8px) translateX(-8px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-12px) translateX(-6px);
+    opacity: 0;
+  }
+}
+
+@keyframes btn-particle-2 {
+  0% {
+    transform: translateY(8px) translateX(0px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.7;
+  }
+  80% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-14px) translateX(2px);
+    opacity: 0;
+  }
+}
+
+@keyframes btn-particle-3 {
+  0% {
+    transform: translateY(8px) translateX(8px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-10px) translateX(6px);
+    opacity: 0;
+  }
+}
+
+@keyframes btn-particle-4 {
+  0% {
+    transform: translateY(8px) translateX(16px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  80% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-12px) translateX(14px);
+    opacity: 0;
+  }
+}
+
+.animate-btn-particle-1 {
+  animation: btn-particle-1 1.8s ease-out infinite;
+}
+
+.animate-btn-particle-2 {
+  animation: btn-particle-2 2s ease-out infinite 0.4s;
+}
+
+.animate-btn-particle-3 {
+  animation: btn-particle-3 1.6s ease-out infinite 0.8s;
+}
+
+.animate-btn-particle-4 {
+  animation: btn-particle-4 2.2s ease-out infinite 1.2s;
+}
