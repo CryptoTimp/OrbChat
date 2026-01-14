@@ -4,19 +4,26 @@ import { useSocket } from '../hooks/useSocket';
 import { playClickSound, playCloseSound, playPurchaseSound } from '../utils/sounds';
 
 const LOG_PRICE = 100; // Orbs per log
+const AXE_PRICE = 5000; // Orbs for axe
+const AXE_ITEM_ID = 'tool_axe';
 
 export function LogDealerModal() {
   const logDealerOpen = useGameStore(state => state.logDealerOpen);
   const toggleLogDealer = useGameStore(state => state.toggleLogDealer);
   const inventory = useGameStore(state => state.inventory);
   const localPlayer = useGameStore(state => state.localPlayer);
-  const { sellLogs } = useSocket();
+  const playerId = useGameStore(state => state.playerId);
+  const { sellLogs, purchaseItem } = useSocket();
   
   const [isSelling, setIsSelling] = useState(false);
+  const [isPurchasingAxe, setIsPurchasingAxe] = useState(false);
   
   // Count logs in inventory
   const logCount = inventory.filter(item => item.itemId === 'log').length;
   const totalOrbs = logCount * LOG_PRICE;
+  
+  // Check if player has axe
+  const hasAxe = inventory.some(item => item.itemId === AXE_ITEM_ID);
   
   useEffect(() => {
     if (!logDealerOpen) {
@@ -38,6 +45,27 @@ export function LogDealerModal() {
       setIsSelling(false);
     }, 1000);
   };
+
+  const handlePurchaseAxe = async () => {
+    if (!playerId || !localPlayer || hasAxe || isPurchasingAxe) return;
+    
+    if (localPlayer.orbs < AXE_PRICE) {
+      console.log('Insufficient orbs for axe');
+      return;
+    }
+    
+    setIsPurchasingAxe(true);
+    playPurchaseSound();
+    
+    try {
+      // Purchase axe using the same logic as regular shop items
+      await purchaseItem(AXE_ITEM_ID);
+    } catch (error) {
+      console.error('Failed to purchase axe:', error);
+    } finally {
+      setIsPurchasingAxe(false);
+    }
+  };
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={() => { playCloseSound(); toggleLogDealer(); }}>
@@ -56,6 +84,32 @@ export function LogDealerModal() {
           <p className="text-gray-300 font-pixel text-sm mb-4">
             I'll buy your logs for {LOG_PRICE} orbs each.
           </p>
+          
+          {/* Axe Purchase Section - only show if player doesn't have axe */}
+          {!hasAxe && (
+            <div className="bg-gray-800 rounded-lg p-4 mb-4 border-2 border-amber-500/50">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-amber-400 font-pixel text-sm mb-1">🪓 Axe</h3>
+                  <p className="text-gray-400 font-pixel text-xs">Required to cut trees</p>
+                </div>
+                <div className="text-cyan-300 font-pixel text-sm">● {AXE_PRICE.toLocaleString()}</div>
+              </div>
+              <button
+                onClick={handlePurchaseAxe}
+                disabled={!localPlayer || localPlayer.orbs < AXE_PRICE || isPurchasingAxe}
+                className={`
+                  w-full py-2 rounded font-pixel text-sm transition-all
+                  ${localPlayer && localPlayer.orbs >= AXE_PRICE && !isPurchasingAxe
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'
+                  }
+                `}
+              >
+                {isPurchasingAxe ? 'Purchasing...' : localPlayer && localPlayer.orbs < AXE_PRICE ? 'Not Enough Orbs' : 'Buy Axe'}
+              </button>
+            </div>
+          )}
           
           <div className="bg-gray-800 rounded-lg p-4 mb-4">
             <div className="flex items-center justify-between mb-2">

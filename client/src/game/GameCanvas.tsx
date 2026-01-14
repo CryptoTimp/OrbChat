@@ -88,7 +88,7 @@ export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { getKeys } = useKeyboard();
-  const { move, collectOrb, interactWithShrine, startCuttingTree, completeCuttingTree } = useSocket();
+  const { move, collectOrb, interactWithShrine, startCuttingTree, completeCuttingTree, cancelCuttingTree } = useSocket();
   const toggleLogDealer = useGameStore(state => state.toggleLogDealer);
   
   // Track container size for responsive canvas
@@ -115,7 +115,7 @@ export function GameCanvas() {
   const [hoveredShrine, setHoveredShrine] = useState<string | null>(null);
   
   // Tree cutting state
-  const cuttingTreeRef = useRef<{ treeId: string; startTime: number; duration: number } | null>(null);
+  const cuttingTreeRef = useRef<{ treeId: string; startTime: number; duration: number; startX: number; startY: number } | null>(null);
   const [cuttingTree, setCuttingTree] = useState<{ treeId: string; progress: number } | null>(null);
   const lastChopSoundSecondRef = useRef<number>(-1); // Track last second when chopping sound was played
   
@@ -133,6 +133,7 @@ export function GameCanvas() {
   // Pending tree interaction (tree to cut when player gets in range)
   const pendingTreeInteractionRef = useRef<TreeData | null>(null);
   const pendingLogDealerInteractionRef = useRef<boolean>(false);
+  const pendingLootBoxDealerInteractionRef = useRef<boolean>(false);
   
   // Hovered dealer state
   const [hoveredDealerId, setHoveredDealerId] = useState<string | null>(null);
@@ -226,6 +227,7 @@ export function GameCanvas() {
       const camera = cameraRef.current;
       const worldPos = screenToWorld(camera, scaledX, scaledY);
       
+      // Left click = interactions only (no movement)
       // Check if clicking on a shrine (in scaled world coordinates)
       const worldXScaled = worldPos.x * SCALE;
       const worldYScaled = worldPos.y * SCALE;
@@ -346,6 +348,38 @@ export function GameCanvas() {
           }
           return; // Don't move via normal click handling
         }
+        
+        // Check if clicking on loot box dealer
+        if (clickedDealerId === 'loot_box_dealer') {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer) {
+            // Get loot box dealer position from dealerPositions map
+            const dealerPos = dealerPositions.get('loot_box_dealer');
+            if (dealerPos) {
+              // Player position is in unscaled coordinates, convert to scaled for comparison
+              const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+              const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+              const dx = dealerPos.x - playerCenterX;
+              const dy = dealerPos.y - playerCenterY;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              
+              // Use same range as NPC stalls (25 * SCALE)
+              const INTERACTION_RANGE = 25 * SCALE;
+              if (dist < INTERACTION_RANGE) {
+                // Player is near loot box dealer, open shop on lootboxes tab
+                playClickSound();
+                openShopWithFilter('lootboxes');
+                pendingLootBoxDealerInteractionRef.current = false; // Clear pending
+              } else {
+                // Player is far away, walk to dealer first
+                // Convert dealer position to unscaled coordinates for click target
+                setClickTarget(dealerPos.x / SCALE, dealerPos.y / SCALE);
+                pendingLootBoxDealerInteractionRef.current = true; // Set pending interaction
+              }
+            }
+          }
+          return; // Don't move via normal click handling
+        }
       }
       
       // Check if clicking on an NPC (villager or centurion)
@@ -377,7 +411,10 @@ export function GameCanvas() {
               const playerId = useGameStore.getState().playerId;
               const duration = 3000 + Math.random() * 5000; // 3-8 seconds
               const startTime = Date.now();
-              cuttingTreeRef.current = { treeId, startTime, duration };
+              const currentLocalPlayer = useGameStore.getState().localPlayer;
+              const startX = currentLocalPlayer?.x || 0;
+              const startY = currentLocalPlayer?.y || 0;
+              cuttingTreeRef.current = { treeId, startTime, duration, startX, startY };
               // Set progress bar state immediately
               setCuttingTree({ treeId, progress: 0 });
               // Clear player trail to prevent ghost image during chopping
@@ -392,6 +429,21 @@ export function GameCanvas() {
               // Player is far away, walk to tree first
               const treeCenterX = clickedTree.trunkX + clickedTree.trunkW / 2;
               const treeCenterY = clickedTree.trunkY + clickedTree.trunkH / 2;
+              
+              // Cancel current tree cutting if clicking on a different tree or clicking to move
+              if (cuttingTreeRef.current) {
+                const { treeId } = cuttingTreeRef.current;
+                console.log('Clicked while cutting tree, canceling');
+                const playerId = useGameStore.getState().playerId;
+                if (playerId) {
+                  setPlayerChopping(playerId, false);
+                  cancelCuttingTree(treeId);
+                }
+                cuttingTreeRef.current = null;
+                setCuttingTree(null);
+                lastChopSoundSecondRef.current = -1;
+              }
+              
               setClickTarget(treeCenterX / SCALE, treeCenterY / SCALE);
               pendingTreeInteractionRef.current = clickedTree;
             }
@@ -400,18 +452,75 @@ export function GameCanvas() {
         }
       }
       
-      // Clear pending tree interaction if clicking elsewhere
+      // Clear pending tree interaction if clicking elsewhere (but not moving)
       if (pendingTreeInteractionRef.current) {
         pendingTreeInteractionRef.current = null;
       }
       
-      // Set click target (in world coordinates, not scaled)
+      // Left click with no interaction = do nothing (movement is right click only)
+    };
+    
+    // Handle right-click for movement (mousedown event)
+    const handleRightClick = (e: MouseEvent) => {
+      // Only handle right-clicks (button 2) directly on canvas
+      if (e.button !== 2 || e.target !== canvas) {
+        return;
+      }
+      
+      // Don't move if clicking on UI elements
+      const clickedElement = document.elementFromPoint(e.clientX, e.clientY);
+      if (clickedElement && clickedElement !== canvas) {
+        const isUIElement = clickedElement.closest('button, input, textarea, select, [role="button"], a, [class*="modal"], [class*="HUD"], [class*="ChatBar"]');
+        if (isUIElement) {
+          return;
+        }
+      }
+      
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const rect = canvas.getBoundingClientRect();
+      
+      // Get click position relative to canvas (in actual canvas pixels)
+      const canvasX = e.clientX - rect.left;
+      const canvasY = e.clientY - rect.top;
+      
+      // Account for render scale - canvas might be scaled up to fill screen
+      const renderScale = canvasSize.width / CANVAS_WIDTH;
+      const scaledX = canvasX / renderScale;
+      const scaledY = canvasY / renderScale;
+      
+      // Convert screen coordinates to world coordinates
+      const camera = cameraRef.current;
+      const worldPos = screenToWorld(camera, scaledX, scaledY);
+      
+      // Cancel tree cutting if moving
+      if (cuttingTreeRef.current) {
+        const { treeId } = cuttingTreeRef.current;
+        console.log('Right clicked while cutting tree, canceling');
+        const playerId = useGameStore.getState().playerId;
+        if (playerId) {
+          setPlayerChopping(playerId, false);
+          cancelCuttingTree(treeId);
+        }
+        cuttingTreeRef.current = null;
+        setCuttingTree(null);
+        lastChopSoundSecondRef.current = -1;
+      }
+      
+      // Set movement target
       setClickTarget(worldPos.x, worldPos.y);
     };
     
-    canvas.addEventListener('click', handleClick, true); // Use capture phase
-    return () => canvas.removeEventListener('click', handleClick, true);
-  }, [canvasSize, setClickTarget, interactWithShrine, openShopWithFilter]);
+    canvas.addEventListener('click', handleClick, true); // Use capture phase - left click only
+    canvas.addEventListener('mousedown', handleRightClick, true); // Right click for movement
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Prevent right-click context menu
+    return () => {
+      canvas.removeEventListener('click', handleClick, true);
+      canvas.removeEventListener('mousedown', handleRightClick, true);
+      canvas.removeEventListener('contextmenu', (e) => e.preventDefault());
+    };
+  }, [canvasSize, setClickTarget, interactWithShrine, openShopWithFilter, cancelCuttingTree]);
   
   // Handle mouse move for shrine hover detection
   useEffect(() => {
@@ -507,7 +616,33 @@ export function GameCanvas() {
     
     // Handle tree cutting progress
     if (cuttingTreeRef.current) {
-      const { treeId, startTime, duration } = cuttingTreeRef.current;
+      const { treeId, startTime, duration, startX, startY } = cuttingTreeRef.current;
+      
+      // Check if player has moved - cancel cutting if they moved
+      const currentLocalPlayer = useGameStore.getState().localPlayer;
+      if (currentLocalPlayer) {
+        const dx = Math.abs(currentLocalPlayer.x - startX);
+        const dy = Math.abs(currentLocalPlayer.y - startY);
+        const MOVEMENT_THRESHOLD = 0.5; // Allow small movement for rounding errors
+        
+        if (dx > MOVEMENT_THRESHOLD || dy > MOVEMENT_THRESHOLD) {
+          // Player moved, cancel cutting
+          console.log('Player moved while cutting tree, canceling');
+          const playerId = useGameStore.getState().playerId;
+          if (playerId) {
+            setPlayerChopping(playerId, false);
+            // Cancel on server
+            cancelCuttingTree(treeId);
+          }
+          // Clear cutting state
+          cuttingTreeRef.current = null;
+          setCuttingTree(null);
+          lastChopSoundSecondRef.current = -1;
+          // Skip rest of cutting logic
+          return;
+        }
+      }
+      
       const elapsed = currentTime - startTime;
       const progress = Math.min(1, elapsed / duration);
       
@@ -607,6 +742,21 @@ export function GameCanvas() {
       
       // Clear click target if keyboard is pressed
       const anyKeyPressed = keys.up || keys.down || keys.left || keys.right;
+      
+      // Cancel tree cutting if player presses movement keys
+      if (anyKeyPressed && cuttingTreeRef.current) {
+        const { treeId } = cuttingTreeRef.current;
+        console.log('WASD pressed while cutting tree, canceling');
+        const playerId = useGameStore.getState().playerId;
+        if (playerId) {
+          setPlayerChopping(playerId, false);
+          cancelCuttingTree(treeId);
+        }
+        cuttingTreeRef.current = null;
+        setCuttingTree(null);
+        lastChopSoundSecondRef.current = -1;
+      }
+      
       if (anyKeyPressed && currentClickTarget) {
         setClickTarget(null, null);
         // Also clear pending shrine interaction if player moves manually
@@ -625,6 +775,10 @@ export function GameCanvas() {
         if (pendingLogDealerInteractionRef.current) {
           pendingLogDealerInteractionRef.current = false;
         }
+        // Also clear pending loot box dealer interaction if player moves manually
+        if (pendingLootBoxDealerInteractionRef.current) {
+          pendingLootBoxDealerInteractionRef.current = false;
+        }
       }
       
       // Lock player position if cutting a tree
@@ -632,6 +786,20 @@ export function GameCanvas() {
       let newY = currentLocalPlayer.y;
       let newDirection = currentLocalPlayer.direction;
       let moved = false;
+      
+      // Cancel tree cutting if WASD keys are pressed
+      if (cuttingTreeRef.current && (keys.up || keys.down || keys.left || keys.right)) {
+        const { treeId } = cuttingTreeRef.current;
+        console.log('WASD pressed while cutting tree, canceling');
+        const playerId = useGameStore.getState().playerId;
+        if (playerId) {
+          setPlayerChopping(playerId, false);
+          cancelCuttingTree(treeId);
+        }
+        cuttingTreeRef.current = null;
+        setCuttingTree(null);
+        lastChopSoundSecondRef.current = -1;
+      }
       
       if (!cuttingTreeRef.current) {
         // Normal movement
@@ -642,7 +810,8 @@ export function GameCanvas() {
           deltaTime,
           speedMultiplier,
           currentMapType,
-          anyKeyPressed ? null : currentClickTarget // Only use click target if no keys pressed
+          anyKeyPressed ? null : currentClickTarget, // Only use click target if no keys pressed
+          treeStates // Pass treeStates for collision detection (cut trees have no collision)
         );
         newX = movement.x;
         newY = movement.y;
@@ -687,6 +856,25 @@ export function GameCanvas() {
         }
       }
       
+      // Check if player reached pending loot box dealer interaction
+      if (pendingLootBoxDealerInteractionRef.current) {
+        const dealerPos = dealerPositions.get('loot_box_dealer');
+        if (dealerPos) {
+          const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+          const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+          const dx = dealerPos.x - playerCenterX;
+          const dy = dealerPos.y - playerCenterY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const INTERACTION_RANGE = 25 * SCALE;
+          
+          if (dist < INTERACTION_RANGE) {
+            // Player is now in range, open shop on lootboxes tab
+            openShopWithFilter('lootboxes');
+            pendingLootBoxDealerInteractionRef.current = false;
+          }
+        }
+      }
+      
       // Check if player is within range of pending tree interaction
       if (pendingTreeInteractionRef.current && !cuttingTreeRef.current) {
         const pendingTree = pendingTreeInteractionRef.current;
@@ -702,7 +890,9 @@ export function GameCanvas() {
           if (!treeState || (!treeState.isCut && treeState.cutBy === null)) {
             const duration = 3000 + Math.random() * 5000; // 3-8 seconds
             const startTime = Date.now();
-            cuttingTreeRef.current = { treeId, startTime, duration };
+            const startX = x;
+            const startY = y;
+            cuttingTreeRef.current = { treeId, startTime, duration, startX, startY };
             // Set progress bar state immediately
             setCuttingTree({ treeId, progress: 0 });
             // Clear player trail to prevent ghost image during chopping

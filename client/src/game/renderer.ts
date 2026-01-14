@@ -1241,11 +1241,27 @@ export function getForestTrees(): TreeData[] {
 }
 
 // Check if a position collides with any tree trunk
-export function checkTreeCollision(x: number, y: number, width: number, height: number): boolean {
+// treeStates: optional map of tree states to check if trees are cut (cut trees have no collision)
+export function checkTreeCollision(
+  x: number, 
+  y: number, 
+  width: number, 
+  height: number,
+  treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>
+): boolean {
   const p = SCALE;
   const padding = 2 * p; // Small padding around trunks
   
   for (const tree of forestTrees) {
+    // Skip collision check if tree is cut (stumps have no collision)
+    if (treeStates) {
+      const treeId = getTreeId(tree);
+      const treeState = treeStates.get(treeId);
+      if (treeState?.isCut) {
+        continue; // Skip cut trees (stumps have no collision)
+      }
+    }
+    
     // Check rectangular trunk collision
     if (x + width > tree.trunkX + padding &&
         x < tree.trunkX + tree.trunkW - padding &&
@@ -2573,9 +2589,7 @@ function drawForestBackground(ctx: CanvasRenderingContext2D): void {
         scale: s,
       });
       
-      // Draw only TRUNK (foliage is drawn after players)
-      ctx.fillStyle = FOREST_COLORS.treeTrunk;
-      ctx.fillRect(treeX + 16 * p, treeY + 40 * s * p, 16 * s * p, 30 * s * p);
+      // Don't draw trunk here - it's drawn in drawForestFoliage so it can be conditionally hidden when cut
     }
   }
   
@@ -4540,31 +4554,38 @@ const DEALER_TYPES: DealerType[] = [
     outfit: ['hat_cap_blue', 'shirt_formal', 'legs_jeans_blue'],
     messages: ['Looking to trade?', 'I buy and sell!', 'Fair prices!'],
   },
+  {
+    id: 'loot_box_dealer',
+    name: 'Loot Box Dealer',
+    outfit: ['hat_rainbow', 'robe_rainbow', 'legs_rainbow', 'cape_rainbow', 'acc_wings_rainbow', 'acc_aura_rainbow', 'acc_weapon_rainbow'],
+    messages: ['Loot boxes here!', 'Mystery boxes await!', 'Try your luck!', 'Prismatic treasures!'],
+  },
 ];
 
 // Update dealer speech bubbles (similar to NPC stalls)
 function updateDealerSpeechBubbles(time: number): void {
-  const dealerId = 'log_dealer';
+  // Update log dealer
+  const logDealerId = 'log_dealer';
   
   // Initialize random offset for this dealer (once, persists across calls)
-  if (!npcSpeechOffsets.has(dealerId)) {
+  if (!npcSpeechOffsets.has(logDealerId)) {
     // Dealer gets a random offset between 0 and 10 seconds to stagger speech
-    npcSpeechOffsets.set(dealerId, Math.random() * NPC_SPEECH_INTERVAL);
+    npcSpeechOffsets.set(logDealerId, Math.random() * NPC_SPEECH_INTERVAL);
   }
   
-  const offset = npcSpeechOffsets.get(dealerId)!;
-  const existingBubble = npcSpeechBubbles.get(dealerId);
+  const logOffset = npcSpeechOffsets.get(logDealerId)!;
+  const existingLogBubble = npcSpeechBubbles.get(logDealerId);
   
   // Check if bubble has expired
-  if (existingBubble && time - existingBubble.createdAt > GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
-    npcSpeechBubbles.delete(dealerId);
+  if (existingLogBubble && time - existingLogBubble.createdAt > GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
+    npcSpeechBubbles.delete(logDealerId);
   }
   
   // Use staggered time check - dealer checks at different times
-  const staggeredTime = (time + offset) % (NPC_SPEECH_INTERVAL * 2);
+  const logStaggeredTime = (time + logOffset) % (NPC_SPEECH_INTERVAL * 2);
   
   // Only check for new speech in a small window (prevents all NPCs from speaking at once)
-  if (staggeredTime < 500 && !existingBubble) {
+  if (logStaggeredTime < 500 && !existingLogBubble) {
     // Random chance to speak
     if (Math.random() < NPC_SPEECH_CHANCE) {
       const messages = [
@@ -4578,10 +4599,45 @@ function updateDealerSpeechBubbles(time: number): void {
         'Logs for orbs!',
       ];
       const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-      npcSpeechBubbles.set(dealerId, {
+      npcSpeechBubbles.set(logDealerId, {
         text: randomMessage,
         createdAt: time
       });
+    }
+  }
+  
+  // Update loot box dealer
+  const lootBoxDealerId = 'loot_box_dealer';
+  
+  // Initialize random offset for this dealer (once, persists across calls)
+  if (!npcSpeechOffsets.has(lootBoxDealerId)) {
+    // Dealer gets a random offset between 0 and 10 seconds to stagger speech
+    npcSpeechOffsets.set(lootBoxDealerId, Math.random() * NPC_SPEECH_INTERVAL);
+  }
+  
+  const lootBoxOffset = npcSpeechOffsets.get(lootBoxDealerId)!;
+  const existingLootBoxBubble = npcSpeechBubbles.get(lootBoxDealerId);
+  
+  // Check if bubble has expired
+  if (existingLootBoxBubble && time - existingLootBoxBubble.createdAt > GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
+    npcSpeechBubbles.delete(lootBoxDealerId);
+  }
+  
+  // Use staggered time check - dealer checks at different times
+  const lootBoxStaggeredTime = (time + lootBoxOffset) % (NPC_SPEECH_INTERVAL * 2);
+  
+  // Only check for new speech in a small window (prevents all NPCs from speaking at once)
+  if (lootBoxStaggeredTime < 500 && !existingLootBoxBubble) {
+    // Random chance to speak
+    if (Math.random() < NPC_SPEECH_CHANCE) {
+      const dealerType = DEALER_TYPES.find(d => d.id === lootBoxDealerId);
+      if (dealerType) {
+        const randomMessage = dealerType.messages[Math.floor(Math.random() * dealerType.messages.length)];
+        npcSpeechBubbles.set(lootBoxDealerId, {
+          text: randomMessage,
+          createdAt: time
+        });
+      }
     }
   }
 }
@@ -4599,22 +4655,39 @@ function drawDealers(ctx: CanvasRenderingContext2D, centerX: number, centerY: nu
   // Clear previous positions
   dealerPositions.clear();
   
-  // Only show log dealer for now
+  // Show log dealer
   const logDealerType = DEALER_TYPES.find(d => d.id === 'log_dealer');
-  if (!logDealerType) return;
+  if (logDealerType) {
+    // Find which position the log dealer should be at (first position for now)
+    const logDealerIndex = 0;
+    const angle = ((logDealerIndex + 0.5) / flagCount) * Math.PI * 2;
+    const dealerX = centerX + Math.cos(angle) * dealerRadius;
+    const dealerY = centerY + Math.sin(angle) * dealerRadius;
+    
+    // Store position for click detection
+    dealerPositions.set(logDealerType.id, { x: dealerX, y: dealerY });
+    
+    // Draw log dealer NPC (with hover effect)
+    const isHovered = hoveredDealerId === 'log_dealer';
+    drawSingleDealer(ctx, logDealerType, dealerX, dealerY, time, isHovered);
+  }
   
-  // Find which position the log dealer should be at (first position for now)
-  const logDealerIndex = 0;
-  const angle = ((logDealerIndex + 0.5) / flagCount) * Math.PI * 2;
-  const dealerX = centerX + Math.cos(angle) * dealerRadius;
-  const dealerY = centerY + Math.sin(angle) * dealerRadius;
-  
-  // Store position for click detection
-  dealerPositions.set(logDealerType.id, { x: dealerX, y: dealerY });
-  
-  // Draw log dealer NPC (with hover effect)
-  const isHovered = hoveredDealerId === 'log_dealer';
-  drawSingleDealer(ctx, logDealerType, dealerX, dealerY, time, isHovered);
+  // Show loot box dealer
+  const lootBoxDealerType = DEALER_TYPES.find(d => d.id === 'loot_box_dealer');
+  if (lootBoxDealerType) {
+    // Position loot box dealer at second position
+    const lootBoxDealerIndex = 1;
+    const angle = ((lootBoxDealerIndex + 0.5) / flagCount) * Math.PI * 2;
+    const dealerX = centerX + Math.cos(angle) * dealerRadius;
+    const dealerY = centerY + Math.sin(angle) * dealerRadius;
+    
+    // Store position for click detection
+    dealerPositions.set(lootBoxDealerType.id, { x: dealerX, y: dealerY });
+    
+    // Draw loot box dealer NPC (with hover effect)
+    const isHovered = hoveredDealerId === 'loot_box_dealer';
+    drawSingleDealer(ctx, lootBoxDealerType, dealerX, dealerY, time, isHovered);
+  }
 }
 
 // Draw a single dealer NPC
@@ -4834,10 +4907,10 @@ export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Ma
   for (const tree of forestTrees) {
     const treeId = getTreeId(tree);
     const treeState = treeStates?.get(treeId);
+    const s = tree.scale;
     
     // If tree is cut, draw stump instead of foliage and trunk
     if (treeState?.isCut) {
-      const s = tree.scale;
       const stumpX = tree.trunkX;
       const stumpY = tree.trunkY + tree.trunkH - 8 * s * p; // Stump at base of trunk
       const stumpW = tree.trunkW;
@@ -4851,10 +4924,12 @@ export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Ma
       ctx.fillStyle = '#4a3a2a';
       ctx.fillRect(stumpX, stumpY, stumpW, 2 * s * p);
       
-      continue; // Skip foliage for cut trees
+      continue; // Skip trunk and foliage for cut trees
     }
     
-    const s = tree.scale;
+    // Draw TRUNK (only if tree is not cut)
+    ctx.fillStyle = FOREST_COLORS.treeTrunk;
+    ctx.fillRect(tree.trunkX, tree.trunkY, tree.trunkW, tree.trunkH);
     
     // Calculate base position from stored canopy center
     const baseX = tree.canopyX - 24 * p;
@@ -9369,7 +9444,8 @@ export function drawChatBubble(ctx: CanvasRenderingContext2D, player: PlayerWith
   
   // Parse message into segments
   const segments: TextSegment[] = [];
-  const itemRegex = /\[ITEM:([^\]]+)\]([^\[]+)\[\/ITEM\]/g;
+  // Updated regex to handle [ITEM:rarity][itemName][/ITEM] format (with square brackets around item name)
+  const itemRegex = /\[ITEM:([^\]]+)\]\[([^\]]+)\]\[\/ITEM\]/g;
   let lastIndex = 0;
   let match;
   

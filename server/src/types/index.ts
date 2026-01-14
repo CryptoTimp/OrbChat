@@ -131,6 +131,7 @@ export interface ClientToServerEvents {
   shrine_interact: (data: { shrineId: string }) => void;
   start_cutting_tree: (data: { treeId: string }) => void;
   complete_cutting_tree: (data: { treeId: string }) => void;
+  cancel_cutting_tree: (data: { treeId: string }) => void;
   sell_logs: () => void;
 }
 
@@ -164,6 +165,7 @@ export interface ServerToClientEvents {
     orbsSpawned?: number;
   }) => void;
   tree_state_updated: (data: { treeStates: TreeState[] }) => void;
+  tree_cut_complete: (data: { treeId: string; logCount: number }) => void;
   logs_sold: (data: { playerId: string; logCount: number; orbsReceived: number; newBalance: number }) => void;
   error: (data: { message: string }) => void;
 }

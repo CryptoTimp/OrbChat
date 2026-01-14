@@ -1448,7 +1448,28 @@
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_rainbow.png",
       "rarity": "legendary"
+    },
+    "tool_axe": {
+      "id": "tool_axe",
+      "name": "Axe",
+      "price": 5000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/tool_axe.png",
+      "rarity": "common"
     }
   },
-  "inventory": []
+  "inventory": [
+    {
+      "player_id": "ZqlLG9gh1odb9nNy6QEpHuIJofd2",
+      "item_id": "log",
+      "equipped": false,
+      "purchased_at": "2026-01-14T15:08:32.274Z"
+    },
+    {
+      "player_id": "mCY7QgXzKwRJA8YRzP90qJppE1y2",
+      "item_id": "log",
+      "equipped": false,
+      "purchased_at": "2026-01-14T15:43:05.482Z"
+    }
+  ]
 }

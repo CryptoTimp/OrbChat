@@ -424,6 +424,38 @@ function attachListeners(sock: Socket) {
     state.updateTreeStates(treeStates);
   });
   
+  // Tree cut complete event (includes log count)
+  sock.on('tree_cut_complete', async ({ treeId, logCount }) => {
+    const state = useGameStore.getState();
+    const playerId = state.playerId;
+    
+    if (playerId) {
+      try {
+        // Server has already added logs to local DB, now add to Firebase
+        for (let i = 0; i < logCount; i++) {
+          await addToInventory(playerId, 'log');
+        }
+        
+        // Reload inventory from Firebase to get updated count
+        const profile = await getUserProfile(playerId);
+        if (profile) {
+          const inventoryItems: InventoryItem[] = (profile.inventory || []).map(itemId => ({
+            playerId,
+            itemId,
+            equipped: (profile.equippedItems || []).includes(itemId),
+          }));
+          
+          state.setInventory(inventoryItems, profile.orbs || 0);
+          
+          // Show notification with log count
+          addNotification(`You received ${logCount} log${logCount !== 1 ? 's' : ''}!`, 'success');
+        }
+      } catch (error) {
+        console.error('Failed to update Firebase inventory after cutting tree:', error);
+      }
+    }
+  });
+  
   // Logs sold event
   sock.on('logs_sold', async ({ playerId, logCount, orbsReceived, newBalance }) => {
     const state = useGameStore.getState();
@@ -989,29 +1021,15 @@ export function useSocket() {
     const sock = getOrCreateSocket();
     if (sock.connected) {
       sock.emit('complete_cutting_tree', { treeId });
-      
-      // Update Firebase inventory (server adds to local DB, but we need Firebase sync)
-      const state = useGameStore.getState();
-      const playerId = state.playerId;
-      if (playerId) {
-        try {
-          await addToInventory(playerId, 'log');
-          
-          // Reload inventory from Firebase to get updated count
-          const profile = await getUserProfile(playerId);
-          if (profile) {
-            const inventoryItems: InventoryItem[] = (profile.inventory || []).map(itemId => ({
-              playerId,
-              itemId,
-              equipped: (profile.equippedItems || []).includes(itemId),
-            }));
-            state.setInventory(inventoryItems, profile.orbs || 0);
-            addNotification('You received a log!', 'success');
-          }
-        } catch (error) {
-          console.error('Failed to update Firebase inventory after cutting tree:', error);
-        }
-      }
+      // Server will handle adding logs and emit 'tree_cut_complete' event
+      // Client will sync inventory and show notification in the event handler
+    }
+  }, []);
+  
+  const cancelCuttingTree = useCallback((treeId: string) => {
+    const sock = getOrCreateSocket();
+    if (sock.connected) {
+      sock.emit('cancel_cutting_tree', { treeId });
     }
   }, []);
   
@@ -1075,6 +1093,7 @@ export function useSocket() {
     interactWithShrine,
     startCuttingTree,
     completeCuttingTree,
+    cancelCuttingTree,
     sellLogs,
   };
 }

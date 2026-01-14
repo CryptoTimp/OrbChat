@@ -98,7 +98,7 @@ export function ChatBar() {
                 const parts: (string | { text: string; color: string; rarity?: ItemRarity })[] = [];
                 let lastIndex = 0;
                 // Updated regex to handle [ITEM:rarity][itemName][/ITEM] format (with square brackets around item name)
-                const itemRegex = /\[ITEM:([^\]]+)\]\[([^\]]+)\]\{\/ITEM\]/g;
+                const itemRegex = /\[ITEM:([^\]]+)\]\[([^\]]+)\]\[\/ITEM\]/g;
                 let match;
                 
                 while ((match = itemRegex.exec(text)) !== null) {

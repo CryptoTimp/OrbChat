@@ -36,6 +36,8 @@ export function ShopModal() {
     const boxes = categories.map(category => {
       // Get all items for this category (without filters for loot boxes)
       const categoryItems = shopItems.filter(item => {
+        // Exclude axe from all lootboxes
+        if (item.id === 'tool_axe') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';
@@ -947,6 +949,8 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
     const boxes = categories.map(category => {
       // Get all items for this category
       const categoryItems = shopItems.filter(item => {
+        // Exclude axe from all lootboxes
+        if (item.id === 'tool_axe') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';

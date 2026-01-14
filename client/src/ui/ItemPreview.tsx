@@ -45,7 +45,12 @@ export function ItemPreview({ item, size = 48 }: ItemPreviewProps) {
       } else if (item.spriteLayer === 'wings') {
         drawWingsPreview(ctx, item.id, centerX, centerY, p, currentTime);
       } else if (item.spriteLayer === 'accessory') {
-        drawAccessoryPreview(ctx, item.id, centerX, centerY, p, currentTime);
+        // Check if it's a tool (starts with 'tool_')
+        if (item.id.startsWith('tool_')) {
+          drawToolPreview(ctx, item.id, centerX, centerY, p, currentTime);
+        } else {
+          drawAccessoryPreview(ctx, item.id, centerX, centerY, p, currentTime);
+        }
       } else if (item.spriteLayer === 'boost') {
         drawBoostPreview(ctx, item.id, centerX, centerY, p, item.rarity, item, currentTime);
       } else if (item.spriteLayer === 'pet') {
@@ -1502,6 +1507,50 @@ function drawAccessoryPreview(ctx: CanvasRenderingContext2D, itemId: string, cx:
       
     default:
       // Generic accessory
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(cx - 6 * p, cy - 6 * p, 12 * p, 12 * p);
+  }
+}
+
+function drawToolPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: number, cy: number, p: number, time: number = 0): void {
+  switch (itemId) {
+    case 'tool_axe':
+      // Draw axe - handle and blade
+      // Handle (vertical brown stick)
+      ctx.fillStyle = '#8b4513'; // Brown handle
+      ctx.fillRect(cx - p, cy - 8 * p, 2 * p, 16 * p);
+      
+      // Blade (diagonal gray metal)
+      ctx.fillStyle = '#7f8c8d'; // Gray metal
+      // Main blade shape - triangle pointing down-right
+      ctx.beginPath();
+      ctx.moveTo(cx + p, cy - 6 * p);
+      ctx.lineTo(cx + 8 * p, cy - 2 * p);
+      ctx.lineTo(cx + 6 * p, cy + 2 * p);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Blade edge (lighter gray)
+      ctx.fillStyle = '#bdc3c7';
+      ctx.beginPath();
+      ctx.moveTo(cx + p, cy - 6 * p);
+      ctx.lineTo(cx + 7 * p, cy - 2 * p);
+      ctx.lineTo(cx + 5 * p, cy + p);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Blade tip (sharp edge)
+      ctx.fillStyle = '#ecf0f1';
+      ctx.fillRect(cx + 7 * p, cy - 2 * p, p, p);
+      
+      // Handle grip (darker brown bands)
+      ctx.fillStyle = '#654321';
+      ctx.fillRect(cx - p, cy + 4 * p, 2 * p, 2 * p);
+      ctx.fillRect(cx - p, cy + 8 * p, 2 * p, 2 * p);
+      break;
+      
+    default:
+      // Generic tool
       ctx.fillStyle = '#888888';
       ctx.fillRect(cx - 6 * p, cy - 6 * p, 12 * p, 12 * p);
   }

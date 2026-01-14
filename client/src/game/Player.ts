@@ -50,7 +50,8 @@ export function calculateMovement(
   deltaTime: number,
   speedMultiplier: number = 1.0,
   mapType: MapType = 'cafe',
-  clickTarget: { x: number; y: number } | null = null
+  clickTarget: { x: number; y: number } | null = null,
+  treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>
 ): { x: number; y: number; direction: Direction | null; moved: boolean } {
   let dx = 0;
   let dy = 0;
@@ -131,11 +132,11 @@ export function calculateMovement(
     const pixelW = PLAYER_WIDTH * SCALE;
     const pixelH = PLAYER_HEIGHT * SCALE;
     
-    if (checkTreeCollision(pixelX, pixelY, pixelW, pixelH)) {
+    if (checkTreeCollision(pixelX, pixelY, pixelW, pixelH, treeStates)) {
       // Try moving only in X
       const testX = currentX + dx;
       const testPixelX = testX * SCALE;
-      if (!checkTreeCollision(testPixelX, currentY * SCALE, pixelW, pixelH)) {
+      if (!checkTreeCollision(testPixelX, currentY * SCALE, pixelW, pixelH, treeStates)) {
         newX = Math.max(0, Math.min(testX, maxX));
         newY = currentY;
       }
@@ -143,7 +144,7 @@ export function calculateMovement(
       else {
         const testY = currentY + dy;
         const testPixelY = testY * SCALE;
-        if (!checkTreeCollision(currentX * SCALE, testPixelY, pixelW, pixelH)) {
+        if (!checkTreeCollision(currentX * SCALE, testPixelY, pixelW, pixelH, treeStates)) {
           newX = currentX;
           newY = Math.max(0, Math.min(testY, maxY));
         }

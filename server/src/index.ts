@@ -528,6 +528,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     io.to(roomId).emit('tree_state_updated', { treeStates });
   });
 
+  // Handle tree cutting - cancel cutting
+  socket.on('cancel_cutting_tree', ({ treeId }) => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+
+    const { playerId, roomId } = mapping;
+    rooms.cancelTreeCutting(roomId, treeId, playerId);
+
+    // Broadcast tree state update
+    const treeStates = rooms.getTreeStatesInRoom(roomId);
+    io.to(roomId).emit('tree_state_updated', { treeStates });
+  });
+
   // Handle tree cutting - complete cutting
   socket.on('complete_cutting_tree', async ({ treeId }) => {
     const mapping = socketToPlayer.get(socket.id);
@@ -547,15 +560,39 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     // Mark tree as cut
     rooms.setTreeCut(roomId, treeId, playerId);
 
-    // Add log to player inventory (client will handle Firebase update)
-    // We'll add it to the inventory via the players module
-    await players.addToInventory(playerId, 'log');
+    // Calculate log drop amount (2-8 logs, weighted towards lower amounts)
+    // Weighted distribution: 2=40%, 3=25%, 4=15%, 5=10%, 6=5%, 7=3%, 8=2%
+    const rand = Math.random();
+    let logCount: number;
+    if (rand < 0.40) {
+      logCount = 2;
+    } else if (rand < 0.65) {
+      logCount = 3;
+    } else if (rand < 0.80) {
+      logCount = 4;
+    } else if (rand < 0.90) {
+      logCount = 5;
+    } else if (rand < 0.95) {
+      logCount = 6;
+    } else if (rand < 0.98) {
+      logCount = 7;
+    } else {
+      logCount = 8;
+    }
 
-    // Broadcast tree state update
+    // Add logs to player inventory (client will handle Firebase update)
+    for (let i = 0; i < logCount; i++) {
+      await players.addToInventory(playerId, 'log');
+    }
+
+    // Broadcast tree state update with log count
     const treeStates = rooms.getTreeStatesInRoom(roomId);
     io.to(roomId).emit('tree_state_updated', { treeStates });
+    
+    // Notify the player about the logs received
+    socket.emit('tree_cut_complete', { treeId, logCount });
 
-    console.log(`Player ${player.name} cut down tree ${treeId} and received a log`);
+    console.log(`Player ${player.name} cut down tree ${treeId} and received ${logCount} log${logCount !== 1 ? 's' : ''}`);
   });
 
   // Handle selling logs

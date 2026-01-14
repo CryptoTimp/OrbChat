@@ -16,7 +16,7 @@ export function InventoryModal() {
   const localPlayer = useGameStore(state => state.localPlayer);
   const { equipItem } = useSocket();
   
-  const [activeTab, setActiveTab] = useState<'all' | 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'tools' | 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'>('all');
   const [rarityFilter, setRarityFilter] = useState<ItemRarity | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [previewItem, setPreviewItem] = useState<string | undefined>(undefined);
@@ -77,12 +77,14 @@ export function InventoryModal() {
   };
 
   // Group items by layer (with filters applied)
+  // Separate tools from accessories (tools have id starting with 'tool_')
+  const tools = sortByRarity(filterItems(ownedItems.filter(item => item.itemId.startsWith('tool_'))));
+  const accessories = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'accessory' && !item.itemId.startsWith('tool_'))));
   const hats = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'hat')));
   const shirts = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'shirt')));
   const legs = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'legs')));
   const capes = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'cape')));
   const wings = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'wings')));
-  const accessories = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'accessory')));
   const boosts = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'boost')));
   const pets = sortByRarity(filterItems(ownedItems.filter(item => item.details?.spriteLayer === 'pet')));
 
@@ -148,36 +150,38 @@ export function InventoryModal() {
           </p>
         )}
 
-        {/* Action buttons */}
-        <div className="flex gap-1 mt-1">
-          <button
-            onClick={() => handleEquip(item.itemId, item.equipped)}
-            className={`
-              flex-1 py-1.5 rounded font-pixel text-[10px] transition-colors
-              ${item.equipped 
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-              }
-            `}
-          >
-            {item.equipped ? '✓' : 'Equip'}
-          </button>
-          
-          {/* Preview button */}
-          <button
-            onClick={() => handlePreview(item.itemId)}
-            className={`
-              px-2 py-1.5 rounded font-pixel text-[10px] transition-colors
-              ${isPreviewing 
-                ? 'bg-amber-500 text-white' 
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white'
-              }
-            `}
-            title="Preview on character"
-          >
-            👁
-          </button>
-        </div>
+        {/* Action buttons - hide for tools */}
+        {!item.itemId.startsWith('tool_') && (
+          <div className="flex gap-1 mt-1">
+            <button
+              onClick={() => handleEquip(item.itemId, item.equipped)}
+              className={`
+                flex-1 py-1.5 rounded font-pixel text-[10px] transition-colors
+                ${item.equipped 
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }
+              `}
+            >
+              {item.equipped ? '✓' : 'Equip'}
+            </button>
+            
+            {/* Preview button */}
+            <button
+              onClick={() => handlePreview(item.itemId)}
+              className={`
+                px-2 py-1.5 rounded font-pixel text-[10px] transition-colors
+                ${isPreviewing 
+                  ? 'bg-amber-500 text-white' 
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white'
+                }
+              `}
+              title="Preview on character"
+            >
+              👁
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -193,7 +197,7 @@ export function InventoryModal() {
     switch (activeTab) {
       case 'all':
         // Combine all items from all categories and sort by rarity (common at top)
-        const allItems = sortByRarity([...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets]);
+        const allItems = sortByRarity([...tools, ...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets]);
         return (
           <div>
             {/* Logs section */}
@@ -214,6 +218,15 @@ export function InventoryModal() {
                       <p className="text-cyan-300 font-pixel text-xs">● {logCount * 100}</p>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+            {/* Tools section */}
+            {tools.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-gray-300 font-pixel text-sm mb-2">🪓 Tools</h3>
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
+                  {tools.map(renderItem)}
                 </div>
               </div>
             )}
@@ -295,6 +308,12 @@ export function InventoryModal() {
             ) : (
               renderEmptyState('pets')
             )}
+          </div>
+        );
+      case 'tools':
+        return (
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
+            {tools.length > 0 ? tools.map(renderItem) : renderEmptyState('tools')}
           </div>
         );
     }
@@ -384,8 +403,11 @@ export function InventoryModal() {
                   activeTab === 'all' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
-                📦 All ({[...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets].length})
+                📦 All ({[...tools, ...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets].length})
               </button>
+              
+              {/* Cosmetics Section */}
+              <p className="text-gray-500 font-pixel text-[10px] mb-1 mt-2">Cosmetics</p>
               <button
                 onClick={() => { playClickSound(); setActiveTab('hats'); }}
                 className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
@@ -435,20 +457,31 @@ export function InventoryModal() {
                 ✨ Accessories ({accessories.length})
               </button>
               <button
-                onClick={() => { playClickSound(); setActiveTab('boosts'); }}
-                className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
-                  activeTab === 'boosts' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}
-              >
-                ⚡ Boosts ({boosts.length})
-              </button>
-              <button
                 onClick={() => { playClickSound(); setActiveTab('pets'); }}
                 className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
                   activeTab === 'pets' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
                 🐾 Pets ({pets.length})
+              </button>
+              
+              {/* Utility Section */}
+              <p className="text-gray-500 font-pixel text-[10px] mb-1 mt-2">Utility</p>
+              <button
+                onClick={() => { playClickSound(); setActiveTab('tools'); }}
+                className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
+                  activeTab === 'tools' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                🪓 Tools ({tools.length})
+              </button>
+              <button
+                onClick={() => { playClickSound(); setActiveTab('boosts'); }}
+                className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
+                  activeTab === 'boosts' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                ⚡ Boosts ({boosts.length})
               </button>
             </div>
           </div>

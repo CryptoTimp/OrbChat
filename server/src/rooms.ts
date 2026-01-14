@@ -617,6 +617,23 @@ export function setTreeCut(roomId: string, treeId: string, playerId: string): vo
   });
 }
 
+export function cancelTreeCutting(roomId: string, treeId: string, playerId: string): void {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  
+  const treeState = room.treeStates.get(treeId);
+  // Only cancel if this player is cutting the tree
+  if (treeState && treeState.cutBy === playerId && !treeState.isCut) {
+    // Reset tree state to not being cut
+    room.treeStates.set(treeId, {
+      treeId,
+      isCut: false,
+      cutBy: null,
+      respawnAt: 0,
+    });
+  }
+}
+
 export function checkTreeRespawn(roomId: string): TreeState[] {
   const room = rooms.get(roomId);
   if (!room) return [];

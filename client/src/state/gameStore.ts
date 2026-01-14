@@ -35,7 +35,7 @@ interface GameState {
   
   // UI state
   shopOpen: boolean;
-  shopInitialTab?: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets';
+  shopInitialTab?: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | 'lootboxes';
   shopInitialRarity?: ItemRarity;
   inventoryOpen: boolean;
   settingsOpen: boolean;
@@ -81,7 +81,7 @@ interface GameState {
   setShopItems: (items: ShopItem[]) => void;
   setInventory: (items: InventoryItem[], orbs: number) => void;
   toggleShop: () => void;
-  openShopWithFilter: (tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets', rarity?: ItemRarity) => void;
+  openShopWithFilter: (tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | 'lootboxes', rarity?: ItemRarity) => void;
   toggleInventory: () => void;
   toggleSettings: () => void;
   toggleBuyOrbs: () => void;
