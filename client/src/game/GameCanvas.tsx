@@ -797,11 +797,38 @@ export function GameCanvas() {
       // Calculate speed multiplier from equipped boosts (always get fresh outfit from store)
       let speedMultiplier = 1.0;
       const equippedOutfit = freshLocalPlayer.sprite?.outfit || [];
+      
+      // Known speed boost multipliers (fallback if shop items not loaded)
+      const SPEED_BOOST_FALLBACK: Record<string, number> = {
+        'boost_swift': 1.15,      // 15% Speed
+        'boost_runner': 1.3,       // 30% Speed
+        'boost_dash': 1.45,       // 45% Speed
+        'boost_lightning': 1.6,   // 60% Speed
+        'boost_sonic': 2.0,       // 100% Speed
+        'boost_phantom': 2.5,     // 150% Speed
+      };
+      
       for (const itemId of equippedOutfit) {
+        if (!itemId.includes('boost')) continue;
+        
+        // Try to find item in shop items first
+        let itemSpeedMultiplier: number | undefined;
         const item = shopItems.find(s => s.id === itemId);
-        if (item?.speedMultiplier && isFinite(item.speedMultiplier)) {
+        
+        if (item?.speedMultiplier && isFinite(item.speedMultiplier) && item.speedMultiplier > 1) {
+          itemSpeedMultiplier = item.speedMultiplier;
+        } else if (SPEED_BOOST_FALLBACK[itemId]) {
+          // Fallback to known values if shop items not loaded or item missing
+          itemSpeedMultiplier = SPEED_BOOST_FALLBACK[itemId];
+          console.warn(`[Speed Boost] Using fallback multiplier for ${itemId}: ${itemSpeedMultiplier}x (shop item not found or missing speedMultiplier)`);
+        }
+        
+        if (itemSpeedMultiplier && itemSpeedMultiplier > 1) {
           // Use highest boost (don't stack), cap at reasonable maximum
-          speedMultiplier = Math.min(3.0, Math.max(speedMultiplier, item.speedMultiplier));
+          const newMultiplier = Math.min(3.0, Math.max(speedMultiplier, itemSpeedMultiplier));
+          if (newMultiplier !== speedMultiplier) {
+            speedMultiplier = newMultiplier;
+          }
         }
       }
       

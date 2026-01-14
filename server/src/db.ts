@@ -591,10 +591,10 @@ function seedShopItems(): void {
     { id: 'boost_lightning', name: 'Lightning Step', price: 40000, sprite_layer: 'boost', sprite_path: '/sprites/boost_lightning.png', rarity: 'epic', speed_multiplier: 1.6, trail_color: '#f59e0b' },
     
     // Legendary boost - 80000 orbs (~5 hours) - 200% price increase
-    { id: 'boost_sonic', name: 'Sonic Surge', price: 240000, sprite_layer: 'boost', sprite_path: '/sprites/boost_sonic.png', rarity: 'legendary', speed_multiplier: 1.75, trail_color: '#ef4444' },
+    { id: 'boost_sonic', name: 'Sonic Surge', price: 240000, sprite_layer: 'boost', sprite_path: '/sprites/boost_sonic.png', rarity: 'legendary', speed_multiplier: 2.0, trail_color: '#ef4444' },
     
     // Ultra Legendary - 200000 orbs (~13+ hours) - 200% price increase
-    { id: 'boost_phantom', name: 'Phantom Velocity', price: 600000, sprite_layer: 'boost', sprite_path: '/sprites/boost_phantom.png', rarity: 'legendary', speed_multiplier: 2.0, trail_color: '#ec4899' },
+    { id: 'boost_phantom', name: 'Phantom Velocity', price: 600000, sprite_layer: 'boost', sprite_path: '/sprites/boost_phantom.png', rarity: 'legendary', speed_multiplier: 2.5, trail_color: '#ec4899' },
     
     // === ORB BOOSTS === (Special)
     // Uncommon orb boost - 3000 orbs (~12 min)
