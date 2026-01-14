@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 interface Notification {
   id: string;
   message: string;
-  type: 'join' | 'leave' | 'error';
+  type: 'join' | 'leave' | 'error' | 'success';
   timestamp: number;
 }
 
@@ -12,7 +12,7 @@ let notificationListeners: ((notifications: Notification[]) => void)[] = [];
 let notifications: Notification[] = [];
 let recentMessages = new Set<string>(); // Deduplication
 
-export function addNotification(message: string, type: 'join' | 'leave' | 'error' = 'join') {
+export function addNotification(message: string, type: 'join' | 'leave' | 'error' | 'success' = 'join') {
   // Deduplicate: don't show same message within 2 seconds
   const dedupeKey = `${type}:${message}`;
   if (recentMessages.has(dedupeKey)) {
@@ -73,13 +73,15 @@ export function Notifications() {
               ? 'bg-emerald-900/80 border border-emerald-500/50 text-emerald-200' 
               : notification.type === 'error'
               ? 'bg-red-900/80 border border-red-500/50 text-red-200'
+              : notification.type === 'success'
+              ? 'bg-emerald-900/80 border border-emerald-500/50 text-emerald-200'
               : 'bg-slate-900/80 border border-slate-500/50 text-slate-200'
             }
           `}
         >
           <div className="flex items-center gap-2">
             <span className="text-lg">
-              {notification.type === 'join' ? '👋' : notification.type === 'error' ? '⚠️' : '🚪'}
+              {notification.type === 'join' ? '👋' : notification.type === 'error' ? '⚠️' : notification.type === 'success' ? '✅' : '🚪'}
             </span>
             <span className="text-sm font-pixel">
               {notification.message}
