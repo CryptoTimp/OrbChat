@@ -30,6 +30,7 @@ export function ChatBar() {
     const prices: Record<ItemRarity, number> = {
       common: Infinity,
       uncommon: Infinity,
+      godlike: Infinity,
       rare: Infinity,
       epic: Infinity,
       legendary: Infinity,

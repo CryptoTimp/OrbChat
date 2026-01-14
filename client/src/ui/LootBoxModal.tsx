@@ -30,7 +30,7 @@ function formatPrice(price: number): string {
 export interface LootBox {
   id: string;
   name: string;
-  category: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets';
+  category: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | `godlike_${string}`;
   price: number;
   items: Array<{
     item: ShopItem;
@@ -101,6 +101,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         rare: 26.31578947368421,      // 10/38 * 100
         epic: 6.578947368421053,       // 2.5/38 * 100
         legendary: 1.3157894736842105, // 0.5/38 * 100
+        godlike: 0,                    // Godlike items not in regular cases
       };
       
       let itemsWithChances;

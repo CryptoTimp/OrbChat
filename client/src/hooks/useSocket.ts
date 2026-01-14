@@ -784,7 +784,7 @@ export function useSocket() {
         const newOrbs = firebaseOrbs - lootBoxPrice;
         await updateUserOrbs(playerId, newOrbs);
         state.updatePlayerOrbs(playerId, newOrbs);
-        addNotification(`Case was empty. Better luck next time!`, 'info');
+        addNotification(`Case was empty. Better luck next time!`, 'error');
         
         // Notify server
         const sock = getOrCreateSocket();

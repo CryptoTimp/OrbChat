@@ -80,6 +80,7 @@ export function ShopModal() {
         rare: 26.31578947368421,      // 10/38 * 100
         epic: 6.578947368421053,       // 2.5/38 * 100
         legendary: 1.3157894736842105, // 0.5/38 * 100
+        godlike: 0,                    // Godlike items not in regular cases
       };
       
       // Create items with chances distributed evenly within each rarity
@@ -1017,6 +1018,7 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
         rare: 26.31578947368421,      // 10/38 * 100
         epic: 6.578947368421053,       // 2.5/38 * 100
         legendary: 1.3157894736842105, // 0.5/38 * 100
+        godlike: 0,                    // Godlike items not in regular cases
       };
       
       // Create items with chances distributed evenly within each rarity

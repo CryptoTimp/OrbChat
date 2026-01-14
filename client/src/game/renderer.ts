@@ -613,6 +613,7 @@ let cheapestPricesByRarity: Record<ItemRarity, number> = {
   rare: Infinity,
   epic: Infinity,
   legendary: Infinity,
+  godlike: Infinity,
 };
 
 // Update cheapest prices when shop items change
@@ -623,6 +624,7 @@ export function updateCheapestPrices(): void {
     rare: Infinity,
     epic: Infinity,
     legendary: Infinity,
+    godlike: Infinity,
   };
   
   for (const item of cachedShopItems) {
@@ -9873,6 +9875,7 @@ export function drawChatBubble(ctx: CanvasRenderingContext2D, player: PlayerWith
     rare: '#93c5fd',        // blue-300
     epic: '#c084fc',       // purple-300
     legendary: '#fcd34d',  // amber-300
+    godlike: '#9333ea',    // purple-600
   };
   
   interface TextSegment {
