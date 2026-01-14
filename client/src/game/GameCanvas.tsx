@@ -69,7 +69,7 @@ import {
   updateInterpolation,
   setTargetPosition 
 } from './Player';
-import { playShopBellSound, playOrbCollectionSound, playShrineRejectionSound, playClickSound, playLogReceivedSound, playChoppingSound } from '../utils/sounds';
+import { playShopBellSound, playOrbCollectionSound, playShrineRejectionSound, playClickSound, playLogReceivedSound, playChoppingSound, playBuyOrbsSound } from '../utils/sounds';
 import { addNotification } from '../ui/Notifications';
 import { 
   Camera, 
@@ -93,6 +93,7 @@ export function GameCanvas() {
   const { getKeys } = useKeyboard();
   const { move, collectOrb, interactWithShrine, startCuttingTree, completeCuttingTree, cancelCuttingTree } = useSocket();
   const toggleLogDealer = useGameStore(state => state.toggleLogDealer);
+  const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
   
   // Track container size for responsive canvas
   const [canvasSize, setCanvasSize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
@@ -141,6 +142,7 @@ export function GameCanvas() {
   const pendingTreeInteractionRef = useRef<TreeData | null>(null);
   const pendingLogDealerInteractionRef = useRef<boolean>(false);
   const pendingLootBoxDealerInteractionRef = useRef<boolean>(false);
+  const pendingOrbDealerInteractionRef = useRef<boolean>(false);
   
   // Hovered dealer state
   const [hoveredDealerId, setHoveredDealerId] = useState<string | null>(null);
@@ -374,7 +376,7 @@ export function GameCanvas() {
               const INTERACTION_RANGE = 25 * SCALE;
               if (dist < INTERACTION_RANGE) {
                 // Player is near loot box dealer, open shop on lootboxes tab
-                playClickSound();
+                playShopBellSound();
                 openShopWithFilter('lootboxes');
                 pendingLootBoxDealerInteractionRef.current = false; // Clear pending
               } else {
@@ -382,6 +384,38 @@ export function GameCanvas() {
                 // Convert dealer position to unscaled coordinates for click target
                 setClickTarget(dealerPos.x / SCALE, dealerPos.y / SCALE);
                 pendingLootBoxDealerInteractionRef.current = true; // Set pending interaction
+              }
+            }
+          }
+          return; // Don't move via normal click handling
+        }
+        
+        // Check if clicking on orb dealer
+        if (clickedDealerId === 'orb_dealer') {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer) {
+            // Get orb dealer position from dealerPositions map
+            const dealerPos = dealerPositions.get('orb_dealer');
+            if (dealerPos) {
+              // Player position is in unscaled coordinates, convert to scaled for comparison
+              const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+              const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+              const dx = dealerPos.x - playerCenterX;
+              const dy = dealerPos.y - playerCenterY;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              
+              // Use same range as NPC stalls (25 * SCALE)
+              const INTERACTION_RANGE = 25 * SCALE;
+              if (dist < INTERACTION_RANGE) {
+                // Player is near orb dealer, open buy orbs modal
+                playBuyOrbsSound();
+                toggleBuyOrbs();
+                pendingOrbDealerInteractionRef.current = false; // Clear pending
+              } else {
+                // Player is far away, walk to dealer first
+                // Convert dealer position to unscaled coordinates for click target
+                setClickTarget(dealerPos.x / SCALE, dealerPos.y / SCALE);
+                pendingOrbDealerInteractionRef.current = true; // Set pending interaction
               }
             }
           }
@@ -798,14 +832,14 @@ export function GameCanvas() {
       let speedMultiplier = 1.0;
       const equippedOutfit = freshLocalPlayer.sprite?.outfit || [];
       
-      // Known speed boost multipliers (fallback if shop items not loaded)
+      // Known speed boost multipliers (fallback if shop items not loaded) - scaled up 50% + 150%, then reduced 25%
       const SPEED_BOOST_FALLBACK: Record<string, number> = {
-        'boost_swift': 1.15,      // 15% Speed
-        'boost_runner': 1.3,       // 30% Speed
-        'boost_dash': 1.45,       // 45% Speed
-        'boost_lightning': 1.6,   // 60% Speed
-        'boost_sonic': 2.0,       // 100% Speed
-        'boost_phantom': 2.5,     // 150% Speed
+        'boost_swift': 3.234375,      // 223.4375% Speed
+        'boost_runner': 3.65625,       // 265.625% Speed
+        'boost_dash': 4.078125,       // 307.8125% Speed
+        'boost_lightning': 4.5,   // 350% Speed
+        'boost_sonic': 5.625,       // 462.5% Speed
+        'boost_phantom': 8.25,     // 725% Speed
       };
       
       for (const itemId of equippedOutfit) {
@@ -824,8 +858,8 @@ export function GameCanvas() {
         }
         
         if (itemSpeedMultiplier && itemSpeedMultiplier > 1) {
-          // Use highest boost (don't stack), cap at reasonable maximum
-          const newMultiplier = Math.min(3.0, Math.max(speedMultiplier, itemSpeedMultiplier));
+          // Use highest boost (don't stack)
+          const newMultiplier = Math.max(speedMultiplier, itemSpeedMultiplier);
           if (newMultiplier !== speedMultiplier) {
             speedMultiplier = newMultiplier;
           }
@@ -870,6 +904,9 @@ export function GameCanvas() {
         // Also clear pending loot box dealer interaction if player moves manually
         if (pendingLootBoxDealerInteractionRef.current) {
           pendingLootBoxDealerInteractionRef.current = false;
+        }
+        if (pendingOrbDealerInteractionRef.current) {
+          pendingOrbDealerInteractionRef.current = false;
         }
       }
       
@@ -962,8 +999,29 @@ export function GameCanvas() {
           
           if (dist < INTERACTION_RANGE) {
             // Player is now in range, open shop on lootboxes tab
+            playShopBellSound();
             openShopWithFilter('lootboxes');
             pendingLootBoxDealerInteractionRef.current = false;
+          }
+        }
+      }
+      
+      // Check if player reached pending orb dealer interaction
+      if (pendingOrbDealerInteractionRef.current) {
+        const dealerPos = dealerPositions.get('orb_dealer');
+        if (dealerPos) {
+          const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+          const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+          const dx = dealerPos.x - playerCenterX;
+          const dy = dealerPos.y - playerCenterY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const INTERACTION_RANGE = 25 * SCALE;
+          
+          if (dist < INTERACTION_RANGE) {
+            // Player is now in range, open buy orbs modal
+            playBuyOrbsSound();
+            toggleBuyOrbs();
+            pendingOrbDealerInteractionRef.current = false;
           }
         }
       }
@@ -1262,14 +1320,17 @@ export function GameCanvas() {
           console.log('Forest map but no shrines in store. Shrines array:', currentShrines);
         }
       }
+      
+      // Draw tree stumps BEFORE players (so players appear on top of stumps)
+      drawForestStumps(ctx, treeStates);
     }
     
-    // Helper to get trail color from equipped items
+    // Helper to get trail color from equipped boost items
     const getTrailColor = (outfit: string[]): string | undefined => {
       if (!outfit || !Array.isArray(outfit)) return undefined;
-      // Check all equipped items for trail colors (prioritize first found)
+      // Check equipped items for trail colors (only boost items have trail colors)
       for (const itemId of outfit) {
-        if (!itemId) continue;
+        if (!itemId || !itemId.includes('boost')) continue; // Only check boost items
         const shopItem = shopItems.find(s => s.id === itemId);
         if (shopItem?.trailColor && typeof shopItem.trailColor === 'string') {
           return shopItem.trailColor;
@@ -1420,11 +1481,6 @@ export function GameCanvas() {
     // This includes trader NPCs (bodies and speech bubbles)
     if (currentMapType === 'forest') {
       drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId);
-    }
-    
-    // Draw tree stumps BEFORE players (so players appear on top of stumps)
-    if (currentMapType === 'forest') {
-      drawForestStumps(ctx, treeStates);
     }
     
     // Draw forest foliage on TOP of players (so they walk behind full trees)

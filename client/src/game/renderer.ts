@@ -4562,6 +4562,12 @@ const DEALER_TYPES: DealerType[] = [
     outfit: ['hat_rainbow', 'robe_rainbow', 'legs_rainbow', 'cape_rainbow', 'acc_wings_rainbow', 'acc_aura_rainbow', 'acc_weapon_rainbow'],
     messages: ['Loot boxes here!', 'Mystery boxes await!', 'Try your luck!', 'Prismatic treasures!'],
   },
+  {
+    id: 'orb_dealer',
+    name: 'Orb Dealer',
+    outfit: ['hat_golden', 'armor_golden', 'legs_gold', 'acc_wings_golden', 'acc_aura_golden', 'acc_weapon_golden'],
+    messages: ['Buy orbs here!', 'Need more orbs?', 'Premium currency!', 'Golden deals!'],
+  },
 ];
 
 // Update dealer speech bubbles (similar to NPC stalls)
@@ -4689,6 +4695,23 @@ function drawDealers(ctx: CanvasRenderingContext2D, centerX: number, centerY: nu
     // Draw loot box dealer NPC (with hover effect)
     const isHovered = hoveredDealerId === 'loot_box_dealer';
     drawSingleDealer(ctx, lootBoxDealerType, dealerX, dealerY, time, isHovered);
+  }
+  
+  // Show orb dealer
+  const orbDealerType = DEALER_TYPES.find(d => d.id === 'orb_dealer');
+  if (orbDealerType) {
+    // Position orb dealer at third position
+    const orbDealerIndex = 2;
+    const angle = ((orbDealerIndex + 0.5) / flagCount) * Math.PI * 2;
+    const dealerX = centerX + Math.cos(angle) * dealerRadius;
+    const dealerY = centerY + Math.sin(angle) * dealerRadius;
+    
+    // Store position for click detection
+    dealerPositions.set(orbDealerType.id, { x: dealerX, y: dealerY });
+    
+    // Draw orb dealer NPC (with hover effect)
+    const isHovered = hoveredDealerId === 'orb_dealer';
+    drawSingleDealer(ctx, orbDealerType, dealerX, dealerY, time, isHovered);
   }
 }
 

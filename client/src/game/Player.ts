@@ -57,8 +57,15 @@ export function calculateMovement(
   let dy = 0;
   let direction: Direction | null = null;
   
-  // Apply speed multiplier (from boost items)
-  const adjustedSpeed = MOVEMENT_SPEED * speedMultiplier;
+  // Convert deltaTime from milliseconds to seconds for frame-rate independent movement
+  const deltaSeconds = deltaTime / 1000;
+  
+  // Base movement speed in pixels per second - reduced by 75% for slower base movement
+  // At 2.5x multiplier (Phantom Velocity), this gives 300 pixels/second = fast running speed
+  const BASE_SPEED_PPS = 120; // pixels per second (75% reduction from 480, keeping 25%)
+  
+  // Apply speed multiplier (from boost items) and make frame-rate independent
+  const adjustedSpeed = BASE_SPEED_PPS * speedMultiplier * deltaSeconds;
   
   // Check if any key is pressed (keyboard takes priority)
   const anyKeyPressed = keys.up || keys.down || keys.left || keys.right;

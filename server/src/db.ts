@@ -579,22 +579,22 @@ function seedShopItems(): void {
     
     // === SPEED BOOSTS === (Special)
     // Uncommon boost - 2000 orbs (~8 min)
-    { id: 'boost_swift', name: 'Swift Sneakers', price: 2000, sprite_layer: 'boost', sprite_path: '/sprites/boost_swift.png', rarity: 'uncommon', speed_multiplier: 1.15, trail_color: '#22c55e' },
+    { id: 'boost_swift', name: 'Swift Sneakers', price: 2000, sprite_layer: 'boost', sprite_path: '/sprites/boost_swift.png', rarity: 'uncommon', speed_multiplier: 3.234375, trail_color: '#22c55e' },
     
     // Rare boost - 8000 orbs (~30 min)
-    { id: 'boost_runner', name: 'Runner\'s Rush', price: 8000, sprite_layer: 'boost', sprite_path: '/sprites/boost_runner.png', rarity: 'rare', speed_multiplier: 1.3, trail_color: '#3b82f6' },
+    { id: 'boost_runner', name: 'Runner\'s Rush', price: 8000, sprite_layer: 'boost', sprite_path: '/sprites/boost_runner.png', rarity: 'rare', speed_multiplier: 3.65625, trail_color: '#3b82f6' },
     
     // Epic boost - 25000 orbs (~1.5 hours)
-    { id: 'boost_dash', name: 'Dash Master', price: 25000, sprite_layer: 'boost', sprite_path: '/sprites/boost_dash.png', rarity: 'epic', speed_multiplier: 1.45, trail_color: '#a855f7' },
+    { id: 'boost_dash', name: 'Dash Master', price: 25000, sprite_layer: 'boost', sprite_path: '/sprites/boost_dash.png', rarity: 'epic', speed_multiplier: 4.078125, trail_color: '#a855f7' },
     
     // Epic boost - 40000 orbs (~2.5 hours)
-    { id: 'boost_lightning', name: 'Lightning Step', price: 40000, sprite_layer: 'boost', sprite_path: '/sprites/boost_lightning.png', rarity: 'epic', speed_multiplier: 1.6, trail_color: '#f59e0b' },
+    { id: 'boost_lightning', name: 'Lightning Step', price: 40000, sprite_layer: 'boost', sprite_path: '/sprites/boost_lightning.png', rarity: 'epic', speed_multiplier: 4.5, trail_color: '#f59e0b' },
     
     // Legendary boost - 80000 orbs (~5 hours) - 200% price increase
-    { id: 'boost_sonic', name: 'Sonic Surge', price: 240000, sprite_layer: 'boost', sprite_path: '/sprites/boost_sonic.png', rarity: 'legendary', speed_multiplier: 2.0, trail_color: '#ef4444' },
+    { id: 'boost_sonic', name: 'Sonic Surge', price: 240000, sprite_layer: 'boost', sprite_path: '/sprites/boost_sonic.png', rarity: 'legendary', speed_multiplier: 5.625, trail_color: '#ef4444' },
     
     // Ultra Legendary - 200000 orbs (~13+ hours) - 200% price increase
-    { id: 'boost_phantom', name: 'Phantom Velocity', price: 600000, sprite_layer: 'boost', sprite_path: '/sprites/boost_phantom.png', rarity: 'legendary', speed_multiplier: 2.5, trail_color: '#ec4899' },
+    { id: 'boost_phantom', name: 'Phantom Velocity', price: 600000, sprite_layer: 'boost', sprite_path: '/sprites/boost_phantom.png', rarity: 'legendary', speed_multiplier: 8.25, trail_color: '#ec4899' },
     
     // === ORB BOOSTS === (Special)
     // Uncommon orb boost - 3000 orbs (~12 min)
