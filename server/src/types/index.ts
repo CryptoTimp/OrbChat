@@ -48,11 +48,19 @@ export interface Shrine {
   cooldownEndTime?: number;
 }
 
+export interface TreeState {
+  treeId: string;
+  isCut: boolean;
+  cutBy: string | null; // playerId currently cutting, or null
+  respawnAt: number; // timestamp when tree should respawn
+}
+
 export interface Room {
   id: string;
   players: Map<string, PlayerWithChat>;
   orbs: Orb[];
   shrines: Shrine[];
+  treeStates: Map<string, TreeState>;
   mapType: MapType;
   isPrivate?: boolean;
   passwordHash?: string;
@@ -121,6 +129,9 @@ export interface ClientToServerEvents {
     equippedItems?: string[];  // Client sends updated equipped items for sprite broadcast
   }) => void;
   shrine_interact: (data: { shrineId: string }) => void;
+  start_cutting_tree: (data: { treeId: string }) => void;
+  complete_cutting_tree: (data: { treeId: string }) => void;
+  sell_logs: () => void;
 }
 
 // Socket Events - Server to Client
@@ -131,6 +142,7 @@ export interface ServerToClientEvents {
     players: PlayerWithChat[];
     orbs: Orb[];
     shrines: Shrine[];
+    treeStates?: TreeState[];
     yourPlayerId?: string;
     mapType?: MapType;
   }) => void;
@@ -151,6 +163,8 @@ export interface ServerToClientEvents {
     blessed: boolean;
     orbsSpawned?: number;
   }) => void;
+  tree_state_updated: (data: { treeStates: TreeState[] }) => void;
+  logs_sold: (data: { playerId: string; logCount: number; orbsReceived: number; newBalance: number }) => void;
   error: (data: { message: string }) => void;
 }
 

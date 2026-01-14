@@ -3,6 +3,8 @@ import { io, Socket } from 'socket.io-client';
 import { useGameStore } from '../state/gameStore';
 import { Direction, InventoryItem } from '../types';
 import { updateUserOrbs, getUserProfile, updateEquippedItems, addToInventory } from '../firebase/auth';
+import { ref, set } from 'firebase/database';
+import { database } from '../firebase/config';
 import { addNotification } from '../ui/Notifications';
 import { playPickupSound, playShrineRejectionSound, playShrineRewardSound } from '../utils/sounds';
 import { setShrineSpeechBubble } from '../game/renderer';
@@ -15,6 +17,22 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ||
 let socket: Socket | null = null;
 let listenersAttached = false;
 let pendingRejoin = false;  // Prevent duplicate rejoins
+
+// Sync orb balance from Firebase (source of truth)
+async function syncOrbsFromFirebase(playerId: string): Promise<void> {
+  try {
+    const profile = await getUserProfile(playerId);
+    if (profile) {
+      const firebaseOrbs = profile.orbs || 0;
+      const state = useGameStore.getState();
+      
+      // Update game store with Firebase value
+      state.updatePlayerOrbs(playerId, firebaseOrbs);
+    }
+  } catch (error) {
+    console.error('Failed to sync orbs from Firebase:', error);
+  }
+}
 
 function getOrCreateSocket(): Socket {
   if (!socket) {
@@ -86,15 +104,21 @@ function attachListeners(sock: Socket) {
   });
   
   // Room state events
-  sock.on('room_state', ({ roomId, players, orbs, shrines, yourPlayerId, mapType }) => {
+  sock.on('room_state', async ({ roomId, players, orbs, shrines, treeStates, yourPlayerId, mapType }) => {
     console.log('Received room_state:', roomId, 'players:', players?.length || 0, 'yourPlayerId:', yourPlayerId, 'map:', mapType);
     console.log('Shrines received:', shrines?.length || 0, shrines);
+    console.log('Tree states received:', treeStates?.length || 0);
     console.log('Player list:', players?.map((p: any) => `${p.name} (${p.id})`) || 'NO PLAYERS');
     
     // Ensure players is an array
     if (!Array.isArray(players)) {
       console.error('Invalid players array received:', players);
       return;
+    }
+    
+    // Sync orb balance from Firebase (source of truth) when joining room
+    if (yourPlayerId) {
+      await syncOrbsFromFirebase(yourPlayerId);
     }
     
     const store = useGameStore.getState();
@@ -126,7 +150,7 @@ function attachListeners(sock: Socket) {
     const localPlayerToUse = yourPlayerId ? ourPlayer : (store.localPlayer || ourPlayer);
     
     // Set room state with explicit localPlayer - this should set ALL players
-    store.setRoomStateWithLocalPlayer(players, orbs, shrines || [], localPlayerToUse);
+    store.setRoomStateWithLocalPlayer(players, orbs, shrines || [], localPlayerToUse, treeStates);
     
     // Verify players were set
     const afterState = useGameStore.getState();
@@ -182,6 +206,10 @@ function attachListeners(sock: Socket) {
     // Only show notification for new players joining (not sprite updates)
     if (isNewPlayer && !isLocalPlayer) {
       addNotification(`${player.name} joined the room`, 'join');
+      
+      // Add chat message for player joining
+      const createdAt = Date.now();
+      state.addChatMessage(player.id, `${player.name} joined the room`, createdAt);
     }
   });
   
@@ -208,6 +236,10 @@ function attachListeners(sock: Socket) {
       
       useGameStore.getState().removePlayer(playerId);
       addNotification(`${playerName} left the room`, 'leave');
+      
+      // Add chat message for player leaving
+      const createdAt = Date.now();
+      useGameStore.getState().addChatMessage(playerId, `${playerName} left the room`, createdAt);
     } else {
       useGameStore.getState().removePlayer(playerId);
     }
@@ -290,6 +322,9 @@ function attachListeners(sock: Socket) {
           const newFirebaseOrbs = currentFirebaseOrbs + orbValue;
           await updateUserOrbs(playerId, newFirebaseOrbs);
           console.log('Updated Firebase orbs:', newFirebaseOrbs);
+          
+          // Update game store with Firebase value (source of truth)
+          state.updatePlayerOrbs(playerId, newFirebaseOrbs);
         } catch (error) {
           console.error('Failed to update Firebase orbs:', error);
         }
@@ -298,8 +333,16 @@ function attachListeners(sock: Socket) {
   });
   
   // Player orb balance updated (e.g. from purchases)
-  sock.on('player_orbs_updated', ({ playerId, orbs }) => {
-    useGameStore.getState().updatePlayerOrbs(playerId, orbs);
+  sock.on('player_orbs_updated', async ({ playerId, orbs }) => {
+    const state = useGameStore.getState();
+    
+    if (playerId === state.playerId) {
+      // For our own balance update, sync from Firebase (source of truth)
+      await syncOrbsFromFirebase(playerId);
+    } else {
+      // For other players, just update from server
+      state.updatePlayerOrbs(playerId, orbs);
+    }
   });
   
   // Shop events
@@ -310,7 +353,7 @@ function attachListeners(sock: Socket) {
   sock.on('inventory_updated', async ({ orbs }) => {
     const state = useGameStore.getState();
     
-    // Server just sends orbs hint; client loads actual inventory from Firebase
+    // Server just sends orbs hint; client loads actual inventory from Firebase (source of truth)
     if (state.playerId) {
       try {
         const profile = await getUserProfile(state.playerId);
@@ -322,8 +365,11 @@ function attachListeners(sock: Socket) {
             equipped: (profile.equippedItems || []).includes(itemId),
           }));
           
-          state.setInventory(inventoryItems, profile.orbs || orbs);
-          console.log('Loaded inventory from Firebase:', inventoryItems.length, 'items,', profile.orbs, 'orbs');
+          // Use Firebase orbs as source of truth
+          const firebaseOrbs = profile.orbs || 0;
+          state.setInventory(inventoryItems, firebaseOrbs);
+          state.updatePlayerOrbs(state.playerId, firebaseOrbs);
+          console.log('Loaded inventory from Firebase:', inventoryItems.length, 'items,', firebaseOrbs, 'orbs');
         }
       } catch (error) {
         console.error('Failed to load inventory from Firebase:', error);
@@ -355,7 +401,7 @@ function attachListeners(sock: Socket) {
   });
   
   // Shrine interaction events
-  sock.on('shrine_interacted', ({ shrineId, shrine, message, blessed }) => {
+  sock.on('shrine_interacted', ({ shrineId, shrine, message, blessed, orbsSpawned }) => {
     const state = useGameStore.getState();
     
     // Update shrine state
@@ -364,10 +410,31 @@ function attachListeners(sock: Socket) {
     // Show speech bubble
     setShrineSpeechBubble(shrineId, message);
     
-    if (blessed) {
+    // Only play reward sound if orbs were actually spawned
+    if (blessed && orbsSpawned && orbsSpawned > 0) {
       playShrineRewardSound();
     } else {
       playShrineRejectionSound();
+    }
+  });
+  
+  // Tree state events
+  sock.on('tree_state_updated', ({ treeStates }) => {
+    const state = useGameStore.getState();
+    state.updateTreeStates(treeStates);
+  });
+  
+  // Logs sold event
+  sock.on('logs_sold', async ({ playerId, logCount, orbsReceived, newBalance }) => {
+    const state = useGameStore.getState();
+    
+    if (playerId === state.playerId) {
+      // For our own sale, sync from Firebase (source of truth) since server updated it
+      await syncOrbsFromFirebase(playerId);
+      addNotification(`Sold ${logCount} log${logCount !== 1 ? 's' : ''} for ${orbsReceived.toLocaleString()} orbs!`, 'success');
+    } else {
+      // For other players, just update from server
+      state.updatePlayerOrbs(playerId, newBalance);
     }
   });
 }
@@ -557,6 +624,9 @@ export function useSocket() {
       }
       
       console.log('Purchase successful:', itemId, 'new orbs:', newOrbs);
+      
+      // Sync from Firebase to ensure consistency (source of truth)
+      await syncOrbsFromFirebase(playerId);
     } catch (error) {
       console.error('Purchase failed:', error);
     }
@@ -908,6 +978,89 @@ export function useSocket() {
     }
   }, []);
   
+  const startCuttingTree = useCallback((treeId: string) => {
+    const sock = getOrCreateSocket();
+    if (sock.connected) {
+      sock.emit('start_cutting_tree', { treeId });
+    }
+  }, []);
+  
+  const completeCuttingTree = useCallback(async (treeId: string) => {
+    const sock = getOrCreateSocket();
+    if (sock.connected) {
+      sock.emit('complete_cutting_tree', { treeId });
+      
+      // Update Firebase inventory (server adds to local DB, but we need Firebase sync)
+      const state = useGameStore.getState();
+      const playerId = state.playerId;
+      if (playerId) {
+        try {
+          await addToInventory(playerId, 'log');
+          
+          // Reload inventory from Firebase to get updated count
+          const profile = await getUserProfile(playerId);
+          if (profile) {
+            const inventoryItems: InventoryItem[] = (profile.inventory || []).map(itemId => ({
+              playerId,
+              itemId,
+              equipped: (profile.equippedItems || []).includes(itemId),
+            }));
+            state.setInventory(inventoryItems, profile.orbs || 0);
+            addNotification('You received a log!', 'success');
+          }
+        } catch (error) {
+          console.error('Failed to update Firebase inventory after cutting tree:', error);
+        }
+      }
+    }
+  }, []);
+  
+  const sellLogs = useCallback(async () => {
+    const sock = getOrCreateSocket();
+    if (sock.connected) {
+      const state = useGameStore.getState();
+      const playerId = state.playerId;
+      
+      if (playerId) {
+        // Get current inventory and count logs
+        const profile = await getUserProfile(playerId);
+        if (profile) {
+          const logs = (profile.inventory || []).filter((id: string) => id === 'log');
+          const logCount = logs.length;
+          
+          if (logCount > 0) {
+            // Calculate orbs to receive
+            const orbsPerLog = 100;
+            const orbsReceived = logCount * orbsPerLog;
+            const currentOrbs = profile.orbs || 0;
+            const newOrbs = currentOrbs + orbsReceived;
+            
+            // Remove all logs from Firebase inventory
+            const newInventory = (profile.inventory || []).filter((id: string) => id !== 'log');
+            
+            // Update Firebase
+            await Promise.all([
+              updateUserOrbs(playerId, newOrbs),
+              // Update inventory by removing all logs
+              set(ref(database, `users/${playerId}/inventory`), newInventory),
+            ]);
+            
+            // Update local state
+            const inventoryItems: InventoryItem[] = newInventory.map((itemId: string) => ({
+              playerId,
+              itemId,
+              equipped: (profile.equippedItems || []).includes(itemId),
+            }));
+            state.setInventory(inventoryItems, newOrbs);
+            state.updatePlayerOrbs(playerId, newOrbs);
+          }
+        }
+      }
+      
+      sock.emit('sell_logs');
+    }
+  }, []);
+  
   return {
     socket: getOrCreateSocket(),
     joinRoom,
@@ -920,6 +1073,9 @@ export function useSocket() {
     purchaseLootBox,
     equipItem,
     interactWithShrine,
+    startCuttingTree,
+    completeCuttingTree,
+    sellLogs,
   };
 }
 

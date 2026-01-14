@@ -125,3 +125,33 @@ export const playBuyOrbsSound = () => {
     sound.play().catch(() => {});
   }
 };
+
+// Play the log received sound (when cutting completes)
+export const playLogReceivedSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/knife-and-cutting-board-foley-3-184692.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch((err) => {
+      console.error('Failed to play log received sound:', err);
+    });
+    console.log('Playing log received sound, volume:', state.sfxVolume / 100, 'enabled:', state.sfxEnabled);
+  } else {
+    console.log('Log received sound disabled - sfxEnabled:', state.sfxEnabled);
+  }
+};
+
+// Play the chopping tree sound (every hit)
+export const playChoppingSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/chopping-tree-root-212654.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch((err) => {
+      console.error('Failed to play chopping sound:', err);
+    });
+    console.log('Playing chopping sound, volume:', state.sfxVolume / 100, 'enabled:', state.sfxEnabled);
+  } else {
+    console.log('Chopping sound disabled - sfxEnabled:', state.sfxEnabled);
+  }
+};

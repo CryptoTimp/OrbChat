@@ -6,6 +6,7 @@ import { HUD } from './ui/HUD';
 import { ShopModal } from './ui/ShopModal';
 import { InventoryModal } from './ui/InventoryModal';
 import { SettingsModal } from './ui/SettingsModal';
+import { LogDealerModal } from './ui/LogDealerModal';
 import { JoinScreen } from './ui/JoinScreen';
 import { AuthScreen } from './ui/AuthScreen';
 import { Notifications } from './ui/Notifications';
@@ -107,6 +108,9 @@ function App() {
       
       {/* Settings modal */}
       <SettingsModal />
+      
+      {/* Log dealer modal */}
+      <LogDealerModal />
       
       {/* Music manager */}
       <MusicManager />

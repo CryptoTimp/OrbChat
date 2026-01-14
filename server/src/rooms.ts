@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
-import { Room, PlayerWithChat, Orb, GAME_CONSTANTS, MapType, OrbType, RoomInfo, Shrine } from './types';
+import { Room, PlayerWithChat, Orb, GAME_CONSTANTS, MapType, OrbType, RoomInfo, Shrine, TreeState } from './types';
 
 // Global room IDs that persist even when empty
 export const GLOBAL_ROOM_IDS = ['eu-1', 'eu-2', 'eu-3'];
@@ -18,6 +18,7 @@ export function createRoom(roomId: string, mapType: MapType = 'cafe', isPrivate:
     players: new Map(),
     orbs: [],
     shrines: mapType === 'forest' ? generateShrinesForRoom(roomId, mapType) : [],
+    treeStates: new Map(),
     mapType,
     isPrivate,
     passwordHash,
@@ -408,11 +409,12 @@ export function spawnOrb(roomId: string): Orb | null {
 }
 
 // Spawn an orb at a specific position (for fountain spawning)
-export function createOrbAtPosition(roomId: string, x: number, y: number, value: number, orbType: OrbType): Orb | null {
+// bypassMaxOrbs: if true, ignores MAX_ORBS_PER_ROOM limit (for shrine rewards)
+export function createOrbAtPosition(roomId: string, x: number, y: number, value: number, orbType: OrbType, bypassMaxOrbs: boolean = false): Orb | null {
   const room = rooms.get(roomId);
   if (!room) return null;
 
-  if (room.orbs.length >= GAME_CONSTANTS.MAX_ORBS_PER_ROOM) {
+  if (!bypassMaxOrbs && room.orbs.length >= GAME_CONSTANTS.MAX_ORBS_PER_ROOM) {
     return null;
   }
 
@@ -575,6 +577,69 @@ export function getShrinesInRoom(roomId: string): Shrine[] {
   const room = rooms.get(roomId);
   if (!room) return [];
   return [...room.shrines];
+}
+
+// Tree state management
+export function getTreeState(roomId: string, treeId: string): TreeState | null {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  return room.treeStates.get(treeId) || null;
+}
+
+export function setTreeCutting(roomId: string, treeId: string, playerId: string): boolean {
+  const room = rooms.get(roomId);
+  if (!room) return false;
+  
+  const existingState = room.treeStates.get(treeId);
+  if (existingState && (existingState.isCut || existingState.cutBy !== null)) {
+    return false; // Tree is already cut or being cut
+  }
+  
+  room.treeStates.set(treeId, {
+    treeId,
+    isCut: false,
+    cutBy: playerId,
+    respawnAt: 0,
+  });
+  return true;
+}
+
+export function setTreeCut(roomId: string, treeId: string, playerId: string): void {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  
+  const RESPAWN_DELAY = 45000; // 45 seconds
+  room.treeStates.set(treeId, {
+    treeId,
+    isCut: true,
+    cutBy: null,
+    respawnAt: Date.now() + RESPAWN_DELAY,
+  });
+}
+
+export function checkTreeRespawn(roomId: string): TreeState[] {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  
+  const now = Date.now();
+  const updatedStates: TreeState[] = [];
+  
+  room.treeStates.forEach((state, treeId) => {
+    if (state.isCut && state.respawnAt > 0 && now >= state.respawnAt) {
+      // Respawn the tree
+      const newState: TreeState = { treeId, isCut: false, cutBy: null, respawnAt: 0 };
+      room.treeStates.set(treeId, newState);
+      updatedStates.push(newState);
+    }
+  });
+  
+  return updatedStates;
+}
+
+export function getTreeStatesInRoom(roomId: string): TreeState[] {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  return Array.from(room.treeStates.values());
 }
 
 export function getAllRooms(): string[] {

@@ -1231,6 +1231,11 @@ export interface TreeData {
 // Store forest trees for collision and foliage overlay
 let forestTrees: TreeData[] = [];
 
+// Reset forest trees (called when background is regenerated)
+export function resetForestTrees(): void {
+  forestTrees = [];
+}
+
 export function getForestTrees(): TreeData[] {
   return forestTrees;
 }
@@ -2514,7 +2519,8 @@ function drawForestBackground(ctx: CanvasRenderingContext2D): void {
   (window as unknown as { forestPathTiles: Set<string> }).forestPathTiles = pathTiles;
   
   // Build tree data and draw only TRUNKS (foliage drawn later on top of players)
-  forestTrees = []; // Clear and rebuild tree data
+  // Clear and rebuild tree data (trees are regenerated each time background is drawn)
+  forestTrees = [];
   
   // Helper to check if a position is on a path
   const isOnPath = (tx: number, ty: number): boolean => {
@@ -4049,7 +4055,7 @@ export function drawGuardTower(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.fill();
 }
 
-export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, deltaTime?: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null): void {
+export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, deltaTime?: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null, hoveredDealerId?: string | null): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
@@ -4352,6 +4358,9 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
   // Draw NPC stalls
   drawNPCStalls(ctx, centerX, centerY, plazaRadius, time, deltaTime || 16, hoveredStall);
   
+  // Draw dealers around the plaza (between flags)
+  drawDealers(ctx, centerX, centerY, plazaRadius, time, hoveredDealerId);
+  
   // Update NPC stall data for click detection
   updateNPCClickAreas(centerX, centerY, plazaRadius);
   
@@ -4471,14 +4480,380 @@ export function drawFlagBunting(ctx: CanvasRenderingContext2D, centerX: number, 
   }
 }
 
+// Dealer positions (exported for click detection)
+export const dealerPositions: Map<string, { x: number; y: number }> = new Map();
+
+// Dealer type definitions
+interface DealerType {
+  id: string;
+  name: string;
+  outfit: string[];
+  messages: string[];
+}
+
+const DEALER_TYPES: DealerType[] = [
+  {
+    id: 'log_dealer',
+    name: 'Log Dealer',
+    outfit: ['hat_beanie', 'vest_cowboy', 'legs_jeans_blue'],
+    messages: ['I buy logs!', 'Got any logs?', '100 orbs per log!', 'Bring me your logs!'],
+  },
+  {
+    id: 'resource_dealer_1',
+    name: 'Resource Dealer',
+    outfit: ['hat_cap_red', 'shirt_vest_brown', 'legs_jeans_blue'],
+    messages: ['Trading resources!', 'What do you have?', 'Fair prices!'],
+  },
+  {
+    id: 'resource_dealer_2',
+    name: 'Merchant',
+    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
+    messages: ['Buying and selling!', 'Best prices in town!', 'Come trade!'],
+  },
+  {
+    id: 'resource_dealer_3',
+    name: 'Trader',
+    outfit: ['hat_cap_blue', 'vest_denim', 'legs_jeans_blue'],
+    messages: ['Looking to trade?', 'I have what you need!', 'Fair deals!'],
+  },
+  {
+    id: 'resource_dealer_4',
+    name: 'Vendor',
+    outfit: ['hat_beanie', 'shirt_casual', 'legs_jeans_blue'],
+    messages: ['Trading goods!', 'What can I help with?', 'Good prices!'],
+  },
+  {
+    id: 'resource_dealer_5',
+    name: 'Merchant',
+    outfit: ['hat_cap_red', 'vest_cowboy', 'legs_jeans_blue'],
+    messages: ['Buying and selling!', 'Fair trades!', 'Come see me!'],
+  },
+  {
+    id: 'resource_dealer_6',
+    name: 'Trader',
+    outfit: ['hat_tophat', 'shirt_vest_brown', 'legs_slacks'],
+    messages: ['Trading resources!', 'Best deals!', 'What do you need?'],
+  },
+  {
+    id: 'resource_dealer_7',
+    name: 'Vendor',
+    outfit: ['hat_cap_blue', 'shirt_formal', 'legs_jeans_blue'],
+    messages: ['Looking to trade?', 'I buy and sell!', 'Fair prices!'],
+  },
+];
+
+// Update dealer speech bubbles (similar to NPC stalls)
+function updateDealerSpeechBubbles(time: number): void {
+  const dealerId = 'log_dealer';
+  
+  // Initialize random offset for this dealer (once, persists across calls)
+  if (!npcSpeechOffsets.has(dealerId)) {
+    // Dealer gets a random offset between 0 and 10 seconds to stagger speech
+    npcSpeechOffsets.set(dealerId, Math.random() * NPC_SPEECH_INTERVAL);
+  }
+  
+  const offset = npcSpeechOffsets.get(dealerId)!;
+  const existingBubble = npcSpeechBubbles.get(dealerId);
+  
+  // Check if bubble has expired
+  if (existingBubble && time - existingBubble.createdAt > GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
+    npcSpeechBubbles.delete(dealerId);
+  }
+  
+  // Use staggered time check - dealer checks at different times
+  const staggeredTime = (time + offset) % (NPC_SPEECH_INTERVAL * 2);
+  
+  // Only check for new speech in a small window (prevents all NPCs from speaking at once)
+  if (staggeredTime < 500 && !existingBubble) {
+    // Random chance to speak
+    if (Math.random() < NPC_SPEECH_CHANCE) {
+      const messages = [
+        'I buy logs for 100 orbs each!',
+        'Got any logs to sell?',
+        'Bring me your logs!',
+        '100 orbs per log!',
+        'Trading logs for orbs!',
+        'Sell your logs here!',
+        'I\'ll buy your logs!',
+        'Logs for orbs!',
+      ];
+      const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+      npcSpeechBubbles.set(dealerId, {
+        text: randomMessage,
+        createdAt: time
+      });
+    }
+  }
+}
+
+// Draw dealers around the plaza (between flags)
+function drawDealers(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, plazaRadius: number, time: number, hoveredDealerId?: string | null): void {
+  const p = SCALE;
+  const flagCount = 8;
+  // Move dealers closer inward (not right on the plaza wall)
+  const dealerRadius = plazaRadius * 0.85; // 85% of plaza radius (closer than flags)
+  
+  // Update dealer speech bubbles
+  updateDealerSpeechBubbles(time);
+  
+  // Clear previous positions
+  dealerPositions.clear();
+  
+  // Only show log dealer for now
+  const logDealerType = DEALER_TYPES.find(d => d.id === 'log_dealer');
+  if (!logDealerType) return;
+  
+  // Find which position the log dealer should be at (first position for now)
+  const logDealerIndex = 0;
+  const angle = ((logDealerIndex + 0.5) / flagCount) * Math.PI * 2;
+  const dealerX = centerX + Math.cos(angle) * dealerRadius;
+  const dealerY = centerY + Math.sin(angle) * dealerRadius;
+  
+  // Store position for click detection
+  dealerPositions.set(logDealerType.id, { x: dealerX, y: dealerY });
+  
+  // Draw log dealer NPC (with hover effect)
+  const isHovered = hoveredDealerId === 'log_dealer';
+  drawSingleDealer(ctx, logDealerType, dealerX, dealerY, time, isHovered);
+}
+
+// Draw a single dealer NPC
+function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType, dealerX: number, dealerY: number, time: number, isHovered: boolean = false): void {
+  const p = SCALE;
+  
+  // Draw yellow glow effect when hovered (before NPC, same as NPC stalls)
+  if (isHovered) {
+    ctx.save();
+    // Calculate NPC center position (where the glow should be)
+    const npcPlayerX = (dealerX / SCALE) - (PLAYER_WIDTH / 2);
+    const npcPlayerY = (dealerY / SCALE) - (PLAYER_HEIGHT / 2);
+    const npcCenterX = dealerX;
+    const npcCenterY = dealerY;
+    
+    // Draw bright yellow glow ring around dealer (same as NPC stalls)
+    ctx.globalAlpha = 0.6;
+    const gradient = ctx.createRadialGradient(npcCenterX, npcCenterY, 0, npcCenterX, npcCenterY, 30 * p);
+    gradient.addColorStop(0, 'rgba(255, 215, 0, 0.8)');
+    gradient.addColorStop(0.5, 'rgba(255, 215, 0, 0.4)');
+    gradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(npcCenterX, npcCenterY, 30 * p, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw outer glow ring
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.lineWidth = 4 * p;
+    ctx.beginPath();
+    ctx.arc(npcCenterX, npcCenterY, 25 * p, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    
+    // Set shadow for NPC drawing (will be applied to the NPC sprite)
+    ctx.shadowBlur = 30 * p;
+    ctx.shadowColor = 'rgba(255, 215, 0, 1.0)'; // Yellow glow for NPC elements
+  }
+  
+  // Draw simple NPC (similar to villager style)
+  const npcPlayerX = (dealerX / SCALE) - (PLAYER_WIDTH / 2);
+  const npcPlayerY = (dealerY / SCALE) - (PLAYER_HEIGHT / 2);
+  
+  const npcPlayer: PlayerWithChat = {
+    id: dealerType.id,
+    name: dealerType.name,
+    x: npcPlayerX,
+    y: npcPlayerY,
+    direction: 'down',
+    sprite: {
+      body: 'default',
+      outfit: dealerType.outfit,
+    },
+    orbs: 0,
+    roomId: '',
+  };
+  
+  // Skip nameplate in drawPlayer since we draw it explicitly with proper zoom
+  drawPlayer(ctx, npcPlayer, false, time, true);
+  
+  // Draw nameplate with proper zoom (get from context transform like other NPCs)
+  // Use Infinity to show purple infinity icon, and force white text color
+  const zoom = ctx.getTransform().a || 1;
+  const scaledX = npcPlayer.x * SCALE;
+  const scaledY = npcPlayer.y * SCALE;
+  const scaledWidth = PLAYER_WIDTH * SCALE;
+  drawNameTag(ctx, npcPlayer.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, npcPlayer.id);
+  
+  // Get speech bubble from npcSpeechBubbles map (updated by updateDealerSpeechBubbles)
+  const speechBubble = npcSpeechBubbles.get(dealerType.id);
+  if (speechBubble && time - speechBubble.createdAt < GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
+    npcPlayer.chatBubble = {
+      text: speechBubble.text,
+      createdAt: speechBubble.createdAt
+    };
+  }
+  
+  // Draw speech bubble if they have one (zoom is already applied to context)
+  if (npcPlayer.chatBubble) {
+    drawChatBubble(ctx, npcPlayer, time, zoom);
+  }
+  
+  // Clear shadow after drawing NPC (so it doesn't affect other elements)
+  if (isHovered) {
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+  }
+}
+
+// Check if mouse is hovering over a dealer (returns dealer ID if hovered, null otherwise)
+export function getHoveredDealer(worldX: number, worldY: number): string | null {
+  const p = SCALE;
+  const hoverRadius = 35 * p; // Hover detection radius (slightly larger than click)
+  
+  for (const [dealerId, position] of dealerPositions.entries()) {
+    const dx = worldX - position.x;
+    const dy = worldY - position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < hoverRadius) {
+      return dealerId;
+    }
+  }
+  
+  return null;
+}
+
+// Check if click is on any dealer (returns dealer ID if clicked, null otherwise)
+export function getClickedDealer(worldX: number, worldY: number): string | null {
+  const p = SCALE;
+  const clickRadius = 30 * p;
+  
+  for (const [dealerId, position] of dealerPositions.entries()) {
+    const dx = worldX - position.x;
+    const dy = worldY - position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < clickRadius) {
+      return dealerId;
+    }
+  }
+  
+  return null;
+}
+
+// Legacy function for backward compatibility (checks if log dealer is clicked)
+export function getClickedLogDealer(worldX: number, worldY: number): boolean {
+  return getClickedDealer(worldX, worldY) === 'log_dealer';
+}
+
+// Get tree ID from position (for tree state lookup)
+export function getTreeId(tree: TreeData): string {
+  return `tree_${tree.x}_${tree.y}`;
+}
+
+// Check if a click is on a tree (returns tree if clicked)
+export function getClickedTree(worldX: number, worldY: number): TreeData | null {
+  if (forestTrees.length === 0) {
+    return null;
+  }
+  
+  const p = SCALE;
+  const clickRadius = 40 * p; // Click detection radius
+  
+  let closestTree: TreeData | null = null;
+  let closestDist = Infinity;
+  
+  for (const tree of forestTrees) {
+    // Check if click is near tree trunk or canopy
+    const trunkCenterX = tree.trunkX + tree.trunkW / 2;
+    const trunkCenterY = tree.trunkY + tree.trunkH / 2;
+    
+    const dx = worldX - trunkCenterX;
+    const dy = worldY - trunkCenterY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist < clickRadius && dist < closestDist) {
+      closestTree = tree;
+      closestDist = dist;
+    }
+  }
+  
+  return closestTree;
+}
+
+// Check if mouse is hovering over a tree
+export function getHoveredTree(worldX: number, worldY: number): TreeData | null {
+  if (forestTrees.length === 0) {
+    return null;
+  }
+  
+  const p = SCALE;
+  const hoverRadius = 50 * p; // Hover detection radius (larger than click for better UX)
+  
+  let closestTree: TreeData | null = null;
+  let closestDist = Infinity;
+  
+  for (const tree of forestTrees) {
+    // Check if hover is near tree trunk or canopy
+    const trunkCenterX = tree.trunkX + tree.trunkW / 2;
+    const trunkCenterY = tree.trunkY + tree.trunkH / 2;
+    
+    const dx = worldX - trunkCenterX;
+    const dy = worldY - trunkCenterY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist < hoverRadius && dist < closestDist) {
+      closestTree = tree;
+      closestDist = dist;
+    }
+  }
+  
+  return closestTree;
+}
+
+// Check if player is within interaction range of a tree
+export function isPlayerInTreeRange(playerX: number, playerY: number, tree: TreeData): boolean {
+  const p = SCALE;
+  const treeCenterX = tree.trunkX + tree.trunkW / 2;
+  const treeCenterY = tree.trunkY + tree.trunkH / 2;
+  const playerCenterX = playerX * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+  const playerCenterY = playerY * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+  const dx = treeCenterX - playerCenterX;
+  const dy = treeCenterY - playerCenterY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  return dist < 50 * p;
+}
+
 // Draw forest tree foliage (called AFTER players to create depth effect)
 // Note: Camera transform is already applied to ctx, so we draw in world coordinates
-export function drawForestFoliage(ctx: CanvasRenderingContext2D): void {
+export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>): void {
   if (forestTrees.length === 0) return;
   
   const p = SCALE;
   
   for (const tree of forestTrees) {
+    const treeId = getTreeId(tree);
+    const treeState = treeStates?.get(treeId);
+    
+    // If tree is cut, draw stump instead of foliage and trunk
+    if (treeState?.isCut) {
+      const s = tree.scale;
+      const stumpX = tree.trunkX;
+      const stumpY = tree.trunkY + tree.trunkH - 8 * s * p; // Stump at base of trunk
+      const stumpW = tree.trunkW;
+      const stumpH = 8 * s * p; // Stump height
+      
+      // Draw stump (darker brown)
+      ctx.fillStyle = '#3a2a1a';
+      ctx.fillRect(stumpX, stumpY, stumpW, stumpH);
+      
+      // Draw stump top (lighter brown for wood grain effect)
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(stumpX, stumpY, stumpW, 2 * s * p);
+      
+      continue; // Skip foliage for cut trees
+    }
+    
     const s = tree.scale;
     
     // Calculate base position from stored canopy center
@@ -4505,6 +4880,72 @@ export function drawForestFoliage(ctx: CanvasRenderingContext2D): void {
     
     ctx.globalAlpha = 1;
   }
+}
+
+// Draw tree cutting progress bar
+export function drawTreeProgressBar(
+  ctx: CanvasRenderingContext2D,
+  tree: TreeData,
+  progress: number, // 0-1
+  time: number,
+  zoom: number = 1
+): void {
+  const p = SCALE;
+  // Scale dimensions inversely to zoom (bigger when zoomed out, smaller when zoomed in)
+  // This maintains consistent screen size like nameplates
+  const baseBarWidth = 20; // Reduced by 50% from 40
+  const baseBarHeight = 2; // Reduced by 50% from 4
+  const baseFontSize = 3; // Reduced by 50% from 6
+  const basePadding = 1; // Reduced by 50% from 2
+  const baseTextOffset = 6; // Reduced by 50% from 12
+  const baseLineWidth = 0.5; // Reduced by 50% from 1
+  const baseTextLineWidth = 0.75; // Reduced by 50% from 1.5
+  
+  const barWidth = (baseBarWidth * p) / zoom;
+  const barHeight = (baseBarHeight * p) / zoom;
+  const fontSize = (baseFontSize * p) / zoom;
+  const padding = (basePadding * p) / zoom;
+  const textOffset = (baseTextOffset * p) / zoom;
+  const lineWidth = (baseLineWidth * p) / zoom;
+  const textLineWidth = (baseTextLineWidth * p) / zoom;
+  
+  // Position above tree trunk center (more reliable than canopy)
+  const trunkCenterX = tree.trunkX + tree.trunkW / 2;
+  const trunkCenterY = tree.trunkY + tree.trunkH / 2;
+  const barX = trunkCenterX - barWidth / 2;
+  const barY = trunkCenterY - textOffset - barHeight - padding; // Above the trunk
+  
+  // Save context state
+  ctx.save();
+  
+  // Background (darker for visibility with padding)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+  ctx.fillRect(barX - padding, barY - padding, barWidth + padding * 2, barHeight + padding * 2);
+  
+  // Progress fill (green, bright)
+  ctx.fillStyle = '#22c55e'; // Brighter green
+  ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+  
+  // Border (white, thicker)
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(barX, barY, barWidth, barHeight);
+  
+  // Text "Cutting..." with strong outline for visibility
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${fontSize}px "Press Start 2P", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Draw thick outline first
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = textLineWidth;
+  const textY = barY - textOffset;
+  ctx.strokeText('Cutting...', trunkCenterX, textY);
+  // Then fill
+  ctx.fillText('Cutting...', trunkCenterX, textY);
+  
+  // Restore context
+  ctx.restore();
 }
 
 // === MAIN EXPORT FUNCTIONS ===
@@ -4569,6 +5010,7 @@ export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType)
           break;
         case 'forest':
           drawForestBackground(cacheCtx);
+          console.log(`Forest background drawn, forestTrees.length: ${forestTrees.length}`);
           break;
         case 'cafe':
         default:
@@ -4881,6 +5323,9 @@ interface PlayerAnimation {
   isMoving: boolean;
   idleTime: number; // Timestamp when player started being idle
   idleBobPhase: number; // Phase of idle bob animation (0-1)
+  isChopping: boolean; // True when player is chopping a tree
+  chopFrame: number; // Frame for chopping animation (0-3)
+  chopStartTime: number; // When chopping started
 }
 
 const playerAnimations: Map<string, PlayerAnimation> = new Map();
@@ -5793,6 +6238,21 @@ interface ExtendedPlayerAnimation extends PlayerAnimation {
 
 const extendedPlayerAnimations: Map<string, ExtendedPlayerAnimation> = new Map();
 
+// Track which players are chopping
+const choppingPlayers: Map<string, { startTime: number }> = new Map();
+
+export function setPlayerChopping(playerId: string, isChopping: boolean): void {
+  if (isChopping) {
+    choppingPlayers.set(playerId, { startTime: Date.now() });
+  } else {
+    choppingPlayers.delete(playerId);
+  }
+}
+
+export function isPlayerChopping(playerId: string): boolean {
+  return choppingPlayers.has(playerId);
+}
+
 function getPlayerAnimation(playerId: string, x: number, y: number, time: number): PlayerAnimation {
   let anim = extendedPlayerAnimations.get(playerId);
   
@@ -5805,10 +6265,48 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
       isMoving: false, 
       idleTime: time,
       idleBobPhase: 0,
-      distanceTraveled: 0
+      distanceTraveled: 0,
+      isChopping: false,
+      chopFrame: 0,
+      chopStartTime: 0
     };
     extendedPlayerAnimations.set(playerId, anim);
     return anim;
+  }
+  
+  // Check if player is chopping
+  const choppingState = choppingPlayers.get(playerId);
+  const isChopping = choppingState !== undefined;
+  
+  if (isChopping) {
+    // Chopping animation - cycle through frames
+    anim.isChopping = true;
+    anim.isMoving = false; // Can't move while chopping
+    anim.idleBobPhase = 0;
+    
+    // Calculate chop frame based on time (jump every 1000ms = 1 second)
+    const chopElapsed = time - choppingState.startTime;
+    // Jump animation: 0-200ms = up, 200-400ms = down, then wait until next second
+    const secondElapsed = chopElapsed % 1000; // Time within current second
+    if (secondElapsed < 200) {
+      anim.chopFrame = 0; // Jumping up
+    } else if (secondElapsed < 400) {
+      anim.chopFrame = 1; // Landing down
+    } else {
+      anim.chopFrame = 2; // Idle (waiting for next hit)
+    }
+    anim.chopStartTime = choppingState.startTime;
+    
+    // Update position tracking but don't change frame
+    anim.lastX = x;
+    anim.lastY = y;
+    anim.lastFrameTime = time;
+    
+    return anim;
+  } else {
+    anim.isChopping = false;
+    anim.chopFrame = 0;
+    anim.chopStartTime = 0;
   }
   
   // Validate position values
@@ -5958,7 +6456,30 @@ export function drawPlayer(
   
   // Calculate bounce offset when walking or idle bob
   let bounceY = 0;
-  if (anim.isMoving) {
+  if (anim.isChopping) {
+    // Chopping animation - jump every second
+    const choppingState = choppingPlayers.get(player.id);
+    if (choppingState) {
+      const chopElapsed = time - choppingState.startTime;
+      const secondElapsed = chopElapsed % 1000; // Time within current second (0-1000ms)
+      if (secondElapsed < 200) {
+        // Jump up animation (0-200ms)
+        const jumpProgress = secondElapsed / 200; // 0 to 1
+        // Smooth jump curve (sine wave)
+        const jumpHeight = Math.sin(jumpProgress * Math.PI) * -8 * p;
+        bounceY = jumpHeight;
+      } else if (secondElapsed < 400) {
+        // Landing down animation (200-400ms)
+        const landProgress = (secondElapsed - 200) / 200; // 0 to 1
+        // Quick bounce down then settle
+        const landBounce = Math.sin(landProgress * Math.PI) * 2 * p;
+        bounceY = landBounce;
+      } else {
+        // Idle between jumps (400-1000ms)
+        bounceY = 0;
+      }
+    }
+  } else if (anim.isMoving) {
     // Bounce on frames 0 and 2 (when legs are extended)
     bounceY = (anim.frame === 0 || anim.frame === 2) ? -p : 0;
   } else {
@@ -6017,11 +6538,11 @@ export function drawPlayer(
   const shirtColor = getShirtColor(player.sprite.outfit);
   const shirtStyle = getShirtStyle(player.sprite.outfit);
   
-  // Draw back accessories (capes) BEFORE body
-  drawBackAccessories(ctx, player, scaledX, scaledY, scaledWidth, p, anim.isMoving, time);
+  // Draw back accessories (capes) BEFORE body (scaledY already includes bounceY)
+  drawBackAccessories(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, anim.isMoving, time);
   
-  // Draw wings separately (they can be equipped alongside accessories)
-  drawWings(ctx, player, scaledX, scaledY, scaledWidth, p, time);
+  // Draw wings separately (they can be equipped alongside accessories) (scaledY already includes bounceY)
+  drawWings(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, time);
   
   // Spawn and draw legendary item particles BEHIND the player's face
   const playerCenterX = scaledX + scaledWidth / 2;
@@ -6032,8 +6553,10 @@ export function drawPlayer(
   ctx.fillStyle = PLAYER_COLORS.outline;
   ctx.fillRect(bodyX - p, bodyY, bodyW + 2 * p, bodyH + p);
   
-  // Draw shirt with style
+  // Draw shirt with style (draw first so chopping arms appear on top)
   drawShirt(ctx, player, bodyX, bodyY, bodyW, bodyH, p, shirtColor, shirtStyle, time);
+  
+  // No arms animation - just jumping animation handled in bounceY
   
   // Legs (animated when walking)
   const legW = 5 * p;
@@ -6044,7 +6567,27 @@ export function drawPlayer(
   let leftLegOffset = 0;
   let rightLegOffset = 0;
   
-  if (anim.isMoving) {
+  if (anim.isChopping) {
+    // Chopping animation - slight leg movement
+    switch (anim.chopFrame) {
+      case 0: // Arms up
+        leftLegOffset = -1 * p;
+        rightLegOffset = 1 * p;
+        break;
+      case 1: // Arms down (chop)
+        leftLegOffset = 0;
+        rightLegOffset = 0;
+        break;
+      case 2: // Arms up
+        leftLegOffset = 1 * p;
+        rightLegOffset = -1 * p;
+        break;
+      case 3: // Arms down (chop)
+        leftLegOffset = 0;
+        rightLegOffset = 0;
+        break;
+    }
+  } else if (anim.isMoving) {
     // Walk cycle: frame 0 = left forward, 1 = together, 2 = right forward, 3 = together
     switch (anim.frame) {
       case 0: // Left leg forward
@@ -6069,9 +6612,9 @@ export function drawPlayer(
   // Draw legs with cosmetics
   drawLegs(ctx, player, bodyX, bodyW, legY, legW, legH, p, leftLegOffset, rightLegOffset, time);
   
-  // Draw cape in FRONT when facing up (back to camera) - after body is drawn
+  // Draw cape in FRONT when facing up (back to camera) - after body is drawn (scaledY already includes bounceY)
   if (player.direction === 'up') {
-    drawCape(ctx, player, scaledX, scaledY, scaledWidth, p, anim.isMoving, time, 'front');
+    drawCape(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, anim.isMoving, time, 'front');
   }
   
   // Hat
@@ -6082,8 +6625,8 @@ export function drawPlayer(
   // Face accessories (glasses, eyepatch, etc)
   drawFaceAccessories(ctx, player, headX, headY, headW, p);
   
-  // Front accessories (sword, staff, etc)
-  drawFrontAccessories(ctx, player, scaledX, scaledY, scaledWidth, p, time);
+  // Front accessories (sword, staff, etc) (scaledY already includes bounceY)
+  drawFrontAccessories(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, time);
   
   // Sleepy Zs when idle
   if (!anim.isMoving) {
@@ -7320,7 +7863,7 @@ function drawCape(ctx: CanvasRenderingContext2D, player: PlayerWithChat, scaledX
     // Drawing behind body - skip if facing up (will draw later in front)
     if (direction === 'up') return;
     
-    // For 'down' direction, draw simplified cape behind legs
+    // For 'down' direction, draw simplified cape behind legs (scaledY already includes bounceY)
     if (direction === 'down') {
       drawCapeFromFront(ctx, player, scaledX, scaledY, scaledWidth, p, isMoving, time, colors, capeId);
       return;
@@ -7512,7 +8055,7 @@ function drawBackAccessories(ctx: CanvasRenderingContext2D, player: PlayerWithCh
   // Helper to apply glow for wings
   const applyWingGlow = (itemId: string) => applyRarityGlow(ctx, itemId);
   
-  // Draw capes first (they go behind everything)
+  // Draw capes first (they go behind everything) (scaledY already includes bounceY)
   drawCape(ctx, player, scaledX, scaledY, scaledWidth, p, isMoving, time);
   
   // Note: Wings are now drawn separately in drawWings() function

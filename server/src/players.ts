@@ -202,6 +202,18 @@ export function getPlayerInventory(playerId: string): db.InventoryData[] {
   return db.getPlayerInventory(playerId);
 }
 
+export async function addToInventory(playerId: string, itemId: string): Promise<void> {
+  db.addToInventory(playerId, itemId);
+}
+
+export async function removeFromInventory(playerId: string, itemId: string): Promise<void> {
+  db.removeFromInventory(playerId, itemId);
+}
+
+export async function updatePlayerOrbs(playerId: string, orbs: number): Promise<void> {
+  db.updatePlayerOrbs(playerId, orbs);
+}
+
 export function getShopItems(): db.ShopItemData[] {
   return db.getShopItems();
 }

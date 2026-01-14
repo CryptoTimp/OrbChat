@@ -231,6 +231,9 @@ export function HUD({ onLeaveRoom }: HUDProps) {
         if (state.settingsOpen) {
           state.toggleSettings();
         }
+        if (state.logDealerOpen) {
+          state.toggleLogDealer();
+        }
       }
     };
     
@@ -465,7 +468,8 @@ export function HUD({ onLeaveRoom }: HUDProps) {
             Bag
           </button>
           
-          <button
+          {/* Shop button hidden - players use vendors in plaza */}
+          {/* <button
             onClick={() => { playShopBellSound(); toggleShop(); }}
             className="bg-gradient-to-br from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 
                        text-white font-pixel text-sm px-6 py-3 rounded-lg 
@@ -476,7 +480,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
             Shop
-          </button>
+          </button> */}
           
           <button
             onClick={() => { playBuyOrbsSound(); toggleBuyOrbs(); }}

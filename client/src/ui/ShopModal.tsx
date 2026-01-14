@@ -150,6 +150,37 @@ export function ShopModal() {
     
     return filtered;
   };
+
+  // Filter lootboxes based on current filters
+  const filterLootBoxes = (boxes: LootBox[]) => {
+    let filtered = boxes;
+    
+    // Apply rarity filter - show lootboxes that contain items of the selected rarity
+    if (rarityFilter) {
+      filtered = filtered.filter(box => 
+        box.items.some(itemWithChance => (itemWithChance.item.rarity || 'common') === rarityFilter)
+      );
+    }
+    
+    // Apply search filter - match lootbox name
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(box => 
+        box.name.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  };
+
+  // Check if any filters are active (including "All Rarities" which means show all lootboxes)
+  const hasActiveFilters = rarityFilter !== null || searchQuery.trim() !== '';
+  const shouldShowLootBoxes = rarityFilter === null || hasActiveFilters; // Show all when "All Rarities", filtered when specific rarity
+  
+  // Get filtered lootboxes (or all lootboxes when "All Rarities" is selected)
+  const filteredLootBoxes = shouldShowLootBoxes 
+    ? (hasActiveFilters ? filterLootBoxes(lootBoxes) : lootBoxes)
+    : [];
   
   // Group items by layer (with filters applied)
   const hats = filterItems(shopItems.filter(item => item.spriteLayer === 'hat'));
@@ -293,6 +324,99 @@ export function ShopModal() {
     );
   };
 
+  // Render filtered lootboxes section (reusable component)
+  const renderFilteredLootBoxes = () => {
+    if (!shouldShowLootBoxes || filteredLootBoxes.length === 0) return null;
+    
+    return (
+      <div className="mb-6">
+        <h3 className="text-gray-300 font-pixel text-sm mb-3">📦 Filtered Loot Boxes</h3>
+        <div className="flex gap-4 overflow-x-auto pb-2 lootbox-scroll">
+          {filteredLootBoxes.map(lootBox => {
+            const canAfford = playerOrbs >= lootBox.price;
+            return (
+              <div
+                key={lootBox.id}
+                className={`
+                  bg-gray-800 rounded-lg p-4 border-2 transition-all cursor-pointer flex-shrink-0 w-52 h-72 flex flex-col
+                  ${canAfford 
+                    ? 'border-amber-500 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-500/30' 
+                    : 'border-gray-600 opacity-60'
+                  }
+                `}
+                onClick={() => {
+                  if (canAfford) {
+                    playClickSound();
+                    setSelectedLootBox(lootBox);
+                  }
+                }}
+              >
+                <div className="text-center mb-3 flex-shrink-0 h-[120px] flex flex-col justify-center px-2">
+                  <div className="text-4xl mb-2">📦</div>
+                  <h3 className="font-pixel text-sm text-amber-400 mb-1 line-clamp-2 min-h-[40px] flex items-center justify-center break-words">
+                    {lootBox.name}
+                  </h3>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-cyan-300 font-pixel">●</span>
+                    <span className="text-white font-pixel text-sm">{lootBox.price.toLocaleString()}</span>
+                  </div>
+                </div>
+                
+                {/* Rarity distribution preview - flex-grow to fill space */}
+                <div className="flex gap-1 justify-center items-center flex-wrap mb-3 flex-grow min-h-[40px]">
+                  {RARITY_ORDER.map(rarity => {
+                    const count = lootBox.items.filter(i => i.item.rarity === rarity).length;
+                    if (count === 0) return null;
+                    const color = RARITY_COLORS[rarity];
+                    return (
+                      <div
+                        key={rarity}
+                        className={`px-2 py-1 rounded text-[8px] font-pixel ${color.bg} ${color.text}`}
+                        title={`${count} ${rarity} items`}
+                      >
+                        {count}
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {canAfford ? (
+                  <button
+                    className="w-full py-2 rounded font-pixel text-xs transition-all flex-shrink-0 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white"
+                  >
+                    Open Case
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent opening the loot box modal
+                      playBuyOrbsSound();
+                      toggleShop();
+                      useGameStore.getState().toggleBuyOrbs();
+                    }}
+                    className="relative overflow-hidden w-full py-2 rounded font-pixel text-xs transition-all flex-shrink-0
+                               bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 
+                               text-white shadow-lg shadow-amber-500/40 hover:shadow-amber-500/60
+                               transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    {/* Small particle effects */}
+                    <span className="absolute w-1 h-1 bg-yellow-300 rounded-full animate-btn-particle-1 opacity-60" />
+                    <span className="absolute w-0.5 h-0.5 bg-amber-200 rounded-full animate-btn-particle-2 opacity-50" />
+                    <span className="absolute w-1 h-1 bg-orange-300 rounded-full animate-btn-particle-3 opacity-60" />
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="relative z-10">Buy Orbs</span>
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'all':
@@ -395,25 +519,35 @@ export function ShopModal() {
         );
       case 'hats':
         return (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
-            {sortByRarity(hats).map(renderItem)}
+          <div>
+            {renderFilteredLootBoxes()}
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
+              {sortByRarity(hats).map(renderItem)}
+            </div>
           </div>
         );
       case 'shirts':
         return (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
-            {sortByRarity(shirts).map(renderItem)}
+          <div>
+            {renderFilteredLootBoxes()}
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
+              {sortByRarity(shirts).map(renderItem)}
+            </div>
           </div>
         );
       case 'legs':
         return (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
-            {sortByRarity(legs).map(renderItem)}
+          <div>
+            {renderFilteredLootBoxes()}
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
+              {sortByRarity(legs).map(renderItem)}
+            </div>
           </div>
         );
       case 'capes':
         return (
           <div>
+            {renderFilteredLootBoxes()}
             <p className="text-gray-400 font-pixel text-xs mb-4">
               🦸 Capes flow in the wind as you move!
             </p>
@@ -425,6 +559,7 @@ export function ShopModal() {
       case 'wings':
         return (
           <div>
+            {renderFilteredLootBoxes()}
             <p className="text-gray-400 font-pixel text-xs mb-4">
               🦅 Wings can be equipped alongside accessories!
             </p>
@@ -435,13 +570,17 @@ export function ShopModal() {
         );
       case 'accessories':
         return (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
-            {sortByRarity(accessories).map(renderItem)}
+          <div>
+            {renderFilteredLootBoxes()}
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
+              {sortByRarity(accessories).map(renderItem)}
+            </div>
           </div>
         );
       case 'boosts':
         return (
           <div>
+            {renderFilteredLootBoxes()}
             <p className="text-gray-400 font-pixel text-xs mb-4">
               ⚡ Boosts enhance your gameplay! Speed boosts increase movement speed, orb boosts increase orb rewards!
             </p>
@@ -453,6 +592,7 @@ export function ShopModal() {
       case 'pets':
         return (
           <div>
+            {renderFilteredLootBoxes()}
             <p className="text-gray-400 font-pixel text-xs mb-4">
               🐾 Legendary pets follow you around! They're purely cosmetic and visible to all players.
             </p>

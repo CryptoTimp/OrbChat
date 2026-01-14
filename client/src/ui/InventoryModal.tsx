@@ -33,8 +33,13 @@ export function InventoryModal() {
 
   const equippedItems = inventory.filter(inv => inv.equipped).map(inv => inv.itemId);
 
-  // Get owned items with their shop details
-  const ownedItems = inventory.map(inv => {
+  // Separate logs from cosmetic items
+  const logs = inventory.filter(inv => inv.itemId === 'log');
+  const logCount = logs.length;
+  const cosmeticItems = inventory.filter(inv => inv.itemId !== 'log');
+
+  // Get owned items with their shop details (excluding logs)
+  const ownedItems = cosmeticItems.map(inv => {
     const shopItem = shopItems.find(item => item.id === inv.itemId);
     return {
       ...inv,
@@ -190,13 +195,36 @@ export function InventoryModal() {
         // Combine all items from all categories and sort by rarity (common at top)
         const allItems = sortByRarity([...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets]);
         return (
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
-            {allItems.length > 0 ? allItems.map(renderItem) : (
-              <div className="col-span-full py-8 text-center">
-                <p className="text-gray-500 font-pixel text-[10px]">No items found</p>
-                <p className="text-gray-600 font-pixel text-[10px] mt-1">Visit the shop to buy some!</p>
+          <div>
+            {/* Logs section */}
+            {logCount > 0 && (
+              <div className="mb-4">
+                <h3 className="text-gray-300 font-pixel text-sm mb-2">🪵 Resources</h3>
+                <div className="bg-gray-800 rounded-lg p-4 border-2 border-amber-500">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="text-4xl">🪵</div>
+                      <div>
+                        <p className="text-white font-pixel text-sm">Logs</p>
+                        <p className="text-gray-400 font-pixel text-xs">Sell to log dealer for 100 orbs each</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-amber-300 font-pixel text-lg">{logCount}</p>
+                      <p className="text-cyan-300 font-pixel text-xs">● {logCount * 100}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-2">
+              {allItems.length > 0 ? allItems.map(renderItem) : (
+                <div className="col-span-full py-8 text-center">
+                  <p className="text-gray-500 font-pixel text-[10px]">No items found</p>
+                  <p className="text-gray-600 font-pixel text-[10px] mt-1">Visit the shop to buy some!</p>
+                </div>
+              )}
+            </div>
           </div>
         );
       case 'hats':

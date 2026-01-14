@@ -804,3 +804,13 @@ export function hasItem(playerId: string, itemId: string): boolean {
     inv => inv.player_id === playerId && inv.item_id === itemId
   );
 }
+
+export function removeFromInventory(playerId: string, itemId: string): void {
+  const index = data.inventory.findIndex(
+    inv => inv.player_id === playerId && inv.item_id === itemId
+  );
+  if (index !== -1) {
+    data.inventory.splice(index, 1);
+    saveData();
+  }
+}

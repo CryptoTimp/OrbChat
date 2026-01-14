@@ -206,6 +206,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       players: allPlayers,
       orbs: rooms.getOrbsInRoom(roomId),
       shrines: rooms.getShrinesInRoom(roomId),
+      treeStates: rooms.getTreeStatesInRoom(roomId),
       yourPlayerId: player.id,
       mapType: roomMapType,
     });
@@ -453,16 +454,8 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       return;
     }
 
-    // Broadcast shrine interaction to all players in room
-    io.to(roomId).emit('shrine_interacted', {
-      shrineId,
-      shrine,
-      message: result.message,
-      blessed: result.blessed,
-      orbsSpawned: result.orbCount,
-    });
-
     // If blessed, spawn red shrine orbs around the shrine base
+    let actualOrbsSpawned = 0;
     if (result.blessed && result.orbCount && result.totalValue) {
       const TILE_SIZE = 16;
       const SCALE = 3;
@@ -491,9 +484,10 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Calculate orb value (distribute total evenly, add remainder to first orb)
         const orbValue = valuePerOrb + (i === 0 ? remainder : 0);
 
-        // Create red shrine orb
-        const orb = rooms.createOrbAtPosition(roomId, orbX, orbY, orbValue, 'shrine');
+        // Create red shrine orb (bypass max orbs limit for shrine rewards)
+        const orb = rooms.createOrbAtPosition(roomId, orbX, orbY, orbValue, 'shrine', true);
         if (orb) {
+          actualOrbsSpawned++;
           // Mark orb as coming from shrine for client animation
           orb.fromShrine = {
             shrineId: shrine.id,
@@ -504,6 +498,104 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         }
       }
     }
+
+    // Broadcast shrine interaction to all players in room (after spawning orbs to get accurate count)
+    // Since we bypass max orbs for shrine rewards, orbs should always spawn if blessed
+    io.to(roomId).emit('shrine_interacted', {
+      shrineId,
+      shrine,
+      message: result.message,
+      blessed: result.blessed && actualOrbsSpawned === result.orbCount, // Blessed if all orbs spawned successfully
+      orbsSpawned: actualOrbsSpawned,
+    });
+  });
+
+  // Handle tree cutting - start cutting
+  socket.on('start_cutting_tree', ({ treeId }) => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+
+    const { playerId, roomId } = mapping;
+    const success = rooms.setTreeCutting(roomId, treeId, playerId);
+    
+    if (!success) {
+      socket.emit('error', { message: 'Tree is already cut or being cut by another player' });
+      return;
+    }
+
+    // Broadcast tree state update
+    const treeStates = rooms.getTreeStatesInRoom(roomId);
+    io.to(roomId).emit('tree_state_updated', { treeStates });
+  });
+
+  // Handle tree cutting - complete cutting
+  socket.on('complete_cutting_tree', async ({ treeId }) => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+
+    const { playerId, roomId } = mapping;
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    if (!player) return;
+
+    // Check if player is actually cutting this tree
+    const treeState = rooms.getTreeState(roomId, treeId);
+    if (!treeState || treeState.cutBy !== playerId) {
+      socket.emit('error', { message: 'You are not cutting this tree' });
+      return;
+    }
+
+    // Mark tree as cut
+    rooms.setTreeCut(roomId, treeId, playerId);
+
+    // Add log to player inventory (client will handle Firebase update)
+    // We'll add it to the inventory via the players module
+    await players.addToInventory(playerId, 'log');
+
+    // Broadcast tree state update
+    const treeStates = rooms.getTreeStatesInRoom(roomId);
+    io.to(roomId).emit('tree_state_updated', { treeStates });
+
+    console.log(`Player ${player.name} cut down tree ${treeId} and received a log`);
+  });
+
+  // Handle selling logs
+  socket.on('sell_logs', async () => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+
+    const { playerId, roomId } = mapping;
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    if (!player) return;
+
+    // Get player inventory and count logs
+    const inventory = await players.getPlayerInventory(playerId);
+    const logs = inventory.filter(item => item.item_id === 'log');
+    const logCount = logs.length;
+
+    if (logCount === 0) {
+      socket.emit('error', { message: 'You have no logs to sell' });
+      return;
+    }
+
+    // Calculate orbs to receive (100 per log)
+    const orbsPerLog = 100;
+    const orbsReceived = logCount * orbsPerLog;
+
+    // Remove all logs from inventory and add orbs
+    for (const log of logs) {
+      await players.removeFromInventory(playerId, 'log');
+    }
+
+    // Update player orbs
+    const newBalance = player.orbs + orbsReceived;
+    await players.updatePlayerOrbs(playerId, newBalance);
+    player.orbs = newBalance;
+
+    // Broadcast updates
+    io.to(roomId).emit('logs_sold', { playerId, logCount, orbsReceived, newBalance });
+    io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newBalance });
+
+    console.log(`Player ${player.name} sold ${logCount} logs for ${orbsReceived} orbs, new balance: ${newBalance}`);
   });
 
   // Handle disconnection
@@ -543,6 +635,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     console.log(`Client disconnected: ${socket.id}`);
   });
 });
+
+// Periodic tree respawn check (every 5 seconds)
+setInterval(() => {
+  const allRooms = rooms.getAllRooms();
+  for (const roomId of allRooms) {
+    const respawnedStates = rooms.checkTreeRespawn(roomId);
+    if (respawnedStates.length > 0) {
+      // Broadcast updated tree states
+      const treeStates = rooms.getTreeStatesInRoom(roomId);
+      io.to(roomId).emit('tree_state_updated', { treeStates });
+    }
+  }
+}, 5000);
 
 // Health check endpoint
 app.get('/health', (_req, res) => {

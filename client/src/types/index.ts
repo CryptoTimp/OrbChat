@@ -48,6 +48,13 @@ export interface Shrine {
   cooldownEndTime?: number;
 }
 
+export interface TreeState {
+  treeId: string;
+  isCut: boolean;
+  cutBy: string | null; // playerId currently cutting, or null
+  respawnAt: number; // timestamp when tree should respawn
+}
+
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface ShopItem {
