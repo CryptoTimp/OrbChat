@@ -6,7 +6,7 @@ import { ItemPreview } from './ItemPreview';
 import { CharacterPreview } from './CharacterPreview';
 import { playClickSound, playCloseSound, playEquipSound } from '../utils/sounds';
 
-const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike'];
 
 export function InventoryModal() {
   const inventoryOpen = useGameStore(state => state.inventoryOpen);

@@ -778,6 +778,22 @@ export function useSocket() {
         return;
       }
       
+      // Handle "nothing" result (empty itemId for exclusive cases)
+      if (!selectedItemId || selectedItemId === '') {
+        // Exclusive case gave nothing - just deduct orbs
+        const newOrbs = firebaseOrbs - lootBoxPrice;
+        await updateUserOrbs(playerId, newOrbs);
+        state.updatePlayerOrbs(playerId, newOrbs);
+        addNotification(`Case was empty. Better luck next time!`, 'info');
+        
+        // Notify server
+        const sock = getOrCreateSocket();
+        if (sock.connected) {
+          sock.emit('purchase_lootbox', { lootBoxId, itemId: '', newOrbs, newInventory: profile.inventory || [], alreadyOwned: false });
+        }
+        return;
+      }
+      
       // Check if already owned
       const firebaseInventory = profile.inventory || [];
       const alreadyOwned = firebaseInventory.includes(selectedItemId);
@@ -846,7 +862,7 @@ export function useSocket() {
         const lootBoxName = lootBoxCategory.charAt(0).toUpperCase() + lootBoxCategory.slice(1) + ' Case';
         
           // Format message with item name wrapped in special markers for coloring and square brackets
-          const message = `opened a ${lootBoxName} and received[ITEM:${item.rarity || 'common'}][${item.name}][/ITEM] !`;
+          const message = `opened a ${lootBoxName} and received [ITEM:${item.rarity || 'common'}][${item.name}][/ITEM] !`;
         console.log('Sending loot box chat message:', message);
         sendChat(message);
       } else {

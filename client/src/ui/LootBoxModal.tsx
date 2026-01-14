@@ -5,7 +5,7 @@ import { ShopItem, RARITY_COLORS, ItemRarity } from '../types';
 import { ItemPreview } from './ItemPreview';
 import { playClickSound, playCloseSound, playPurchaseSound, playBuyOrbsSound, playLevelUpSound } from '../utils/sounds';
 
-const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike'];
 
 // Map rarity to actual border color values (hex)
 const RARITY_BORDER_COLORS: Record<ItemRarity, string> = {
@@ -14,6 +14,7 @@ const RARITY_BORDER_COLORS: Record<ItemRarity, string> = {
   rare: '#3b82f6',         // blue-500
   epic: '#a855f7',         // purple-500
   legendary: '#fbbf24',    // amber-400
+  godlike: '#ef4444',      // red-500
 };
 
 // Format price with K or M suffix
@@ -62,6 +63,8 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         if (item.id === 'tool_axe') return false;
         // Exclude common items from all cases
         if ((item.rarity || 'common') === 'common') return false;
+        // Exclude godlike items from regular cases (only available in godlike cases)
+        if ((item.rarity || 'common') === 'godlike') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';
@@ -81,6 +84,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         rare: [],
         epic: [],
         legendary: [],
+        godlike: [],
       };
       
       categoryItems.forEach(item => {
@@ -138,7 +142,42 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       } as LootBox;
     }).filter((box): box is LootBox => box !== null);
     
-    return boxes.sort((a, b) => b.price - a.price);
+    // Generate Godlike Cases for each cosmetic type
+    const godlikeCategories = ['hats', 'shirts', 'legs', 'capes', 'wings', 'accessories', 'boosts', 'pets'];
+    const godlikeBoxes = godlikeCategories.map(category => {
+      const categoryItems = shopItems.filter(item => {
+        if (item.id === 'tool_axe') return false;
+        // Only include godlike items
+        if ((item.rarity || 'common') !== 'godlike') return false;
+        if (category === 'hats') return item.spriteLayer === 'hat';
+        if (category === 'shirts') return item.spriteLayer === 'shirt';
+        if (category === 'legs') return item.spriteLayer === 'legs';
+        if (category === 'capes') return item.spriteLayer === 'cape';
+        if (category === 'wings') return item.spriteLayer === 'wings';
+        if (category === 'accessories') return item.spriteLayer === 'accessory';
+        if (category === 'boosts') return item.spriteLayer === 'boost';
+        if (category === 'pets') return item.spriteLayer === 'pet';
+        return false;
+      });
+      
+      if (categoryItems.length === 0) return null;
+      
+      // Each of the 3 godlike items gets 0.05% chance
+      const itemsWithChances = categoryItems.map(item => ({
+        item,
+        chance: 0.05
+      }));
+      
+      return {
+        id: `lootbox_godlike_${category}`,
+        name: `Godlike ${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
+        category: `godlike_${category}`,
+        price: 10000,
+        items: itemsWithChances,
+      } as LootBox;
+    }).filter((box): box is LootBox => box !== null);
+    
+    return [...boxes, ...godlikeBoxes].sort((a, b) => b.price - a.price);
   }, [shopItems]);
   
   // Close shop when loot box modal opens
@@ -219,10 +258,24 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   // Calculate normalized chances (memoized to prevent recalculation on every render)
   // Must be defined before any useEffect that uses it
   // Note: Chances from ShopModal should already sum to 100%, but we normalize to ensure accuracy
+  // EXCEPTION: Godlike cases keep their original 0.05% chances (not normalized to 100%)
   const normalizedItems = useMemo(() => {
     if (!lootBox) return [];
+    
+    // Check if this is a godlike case (only contains godlike items)
+    const isGodlikeCase = lootBox.category?.startsWith('godlike_') || 
+      lootBox.items.every(item => (item.item.rarity || 'common') === 'godlike');
+    
+    // For godlike cases, keep original chances (0.05% each, not normalized)
+    if (isGodlikeCase) {
+      return lootBox.items.map(item => ({
+        ...item,
+        normalizedChance: item.chance, // Keep original 0.05% chance
+      }));
+    }
+    
+    // Regular cases: normalize to ensure they sum to exactly 100 (handles floating point errors)
     const totalChance = lootBox.items.reduce((sum, i) => sum + i.chance, 0);
-    // Normalize to ensure they sum to exactly 100 (handles floating point errors)
     return lootBox.items.map(item => ({
       ...item,
       normalizedChance: totalChance > 0 ? (item.chance / totalChance) * 100 : 0,
@@ -300,13 +353,36 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   }, [normalizedItems]);
   
   // Weighted random selection (uses original order, not sorted)
-  const selectRandomItem = useCallback((): ShopItem => {
+  // Returns null for exclusive cases when nothing is won (99.85% chance)
+  const selectRandomItem = useCallback((): ShopItem | null => {
     if (!lootBox || normalizedItems.length === 0) {
       throw new Error('No items in loot box');
     }
     
+    // Check if this is a godlike case (only contains godlike items)
+    const isGodlikeCase = lootBox.category?.startsWith('godlike_') || 
+      normalizedItems.every(item => (item.item.rarity || 'common') === 'godlike');
+    
     // Generate a fresh random number each time (0 to 100)
     const random = Math.random() * 100;
+    
+    // For godlike cases, handle the 99.85% "nothing" chance
+    if (isGodlikeCase) {
+      let cumulative = 0;
+      // Select item based on weighted random (0.05% each = 0.15% total)
+      for (const { item, normalizedChance } of normalizedItems) {
+        cumulative += normalizedChance;
+        if (random < cumulative) {
+          console.log('Selected godlike item:', item.name, 'rarity:', item.rarity, 'chance:', normalizedChance.toFixed(2) + '%', 'random:', random.toFixed(2));
+          return item;
+        }
+      }
+      // 99.85% chance: return null (nothing)
+      console.log('Godlike case: Nothing won - random:', random.toFixed(2));
+      return null;
+    }
+    
+    // Regular cases: normal weighted random selection
     let cumulative = 0;
     
     // Verify chances sum correctly
@@ -368,10 +444,6 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     // Select the item first (server-side would do this, but for now client-side)
     const item = selectRandomItem();
     
-    // Check if item is already owned immediately (before purchase)
-    // Store this in a ref so it persists through the animation
-    itemAlreadyOwnedRef.current = inventory.some(inv => inv.itemId === item.id);
-    
     // Update orb balance optimistically - decrease immediately when clicking unlock
     const state = useGameStore.getState();
     const currentOrbs = state.localPlayer?.orbs || 0;
@@ -381,12 +453,50 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       state.localPlayer.orbs = optimisticOrbs;
     }
     
+    // Check if item is already owned (only if we got an item, not nothing)
+    if (item !== null) {
+      itemAlreadyOwnedRef.current = inventory.some(inv => inv.itemId === item.id);
+    } else {
+      itemAlreadyOwnedRef.current = false;
+    }
+    
     // Start scrolling animation
-    const itemIndex = normalizedItems.findIndex(i => i.item.id === item.id);
-    // Calculate target position - we start at 2 sets in, so find the item in one of the sets
-    // We'll scroll to the item in the 3rd set (index 2) to ensure it's visible
-    const initialOffset = normalizedItems.length * itemWidth * 2;
-    const targetPosition = initialOffset + (itemIndex * itemWidth);
+    // For "nothing" result, scroll to an empty position after all items
+    let itemIndex: number | undefined;
+    let targetPosition: number;
+    
+    if (item === null) {
+      // For "nothing", scroll to an empty tile position
+      // Empty tiles are added after each set of items in godlike cases
+      // Scroll to the empty tile after the 4th set (setIndex 3) so there are more items visible after it
+      // Structure: Set 0: [items 0..n-1], [empty]
+      //            Set 1: [items 0..n-1], [empty]
+      //            Set 2: [items 0..n-1], [empty]
+      //            Set 3: [items 0..n-1], [empty] <- target this empty tile
+      //            Set 4: [items 0..n-1], [empty] <- more items after target
+      const itemsPerSet = normalizedItems.length + 1; // +1 for empty tile
+      // The 4th set (setIndex 3) starts after 3 complete sets
+      // Set 3 start = (itemsPerSet * 3) * itemWidth
+      const set3Start = itemsPerSet * itemWidth * 3;
+      // Empty tile is the last item in set 3, after all normal items in that set
+      // Position = start of set 3 + (normalizedItems.length items * itemWidth)
+      targetPosition = set3Start + (normalizedItems.length * itemWidth);
+      console.log('Empty tile target calculation:', { 
+        itemsPerSet, 
+        set3Start, 
+        targetPosition, 
+        normalizedItemsLength: normalizedItems.length,
+        itemWidth 
+      });
+      itemIndex = undefined; // No item index for "nothing"
+    } else {
+      // Normal item - find its index and scroll to it
+      itemIndex = normalizedItems.findIndex(i => i.item.id === item.id);
+      // Calculate target position - we start at 2 sets in, so find the item in one of the sets
+      // We'll scroll to the item in the 3rd set (index 2) to ensure it's visible
+      const initialOffset = normalizedItems.length * itemWidth * 2;
+      targetPosition = initialOffset + (itemIndex * itemWidth);
+    }
     
     // Animate scrolling - use requestAnimationFrame to ensure we have the latest scroll position
     // This is important because state updates are async and we might be using a stale value
@@ -397,16 +507,30 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       const currentScrollPos = scrollPosition;
       const startPosition = currentScrollPos; // Start from current scroll position
       // Calculate extra scroll to go through items multiple times before landing
-      const extraScroll = normalizedItems.length * itemWidth * 2; // Scroll through 2 more sets
+      // For empty tiles (godlike cases), account for the extra empty tile per set
+      const itemsPerSetForScroll = item === null ? normalizedItems.length + 1 : normalizedItems.length;
+      const extraScroll = itemsPerSetForScroll * itemWidth * 2; // Scroll through 2 more sets
       
-      console.log('Animation setup:', { startPosition, targetPosition, extraScroll, itemIndex, itemName: item.name, scrollDistance: targetPosition + extraScroll - startPosition });
+      // Store the frame ID in a local variable to track if animation is active
+      let animationFrameId: number | null = null;
+      
+      console.log('Animation setup:', { 
+        startPosition, 
+        targetPosition, 
+        extraScroll, 
+        itemIndex, 
+        itemName: item?.name || 'Nothing', 
+        scrollDistance: targetPosition + extraScroll - startPosition,
+        itemsPerSet: item === null ? normalizedItems.length + 1 : normalizedItems.length,
+        isNull: item === null
+      });
       
       const animate = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         
         // Safety check: if animation was cancelled, stop
-        if (!animationRef.current) {
+        if (animationFrameId === null || animationRef.current === null) {
           console.log('Animation cancelled, stopping');
           return;
         }
@@ -460,10 +584,12 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         
         if (progress < 1) {
           // Animation still running - keep isOpening true
-          animationRef.current = requestAnimationFrame(animate);
+          animationFrameId = requestAnimationFrame(animate);
+          animationRef.current = animationFrameId;
         } else {
           // Animation complete - set final position
           setScrollPosition(targetPosition);
+          animationFrameId = null;
           animationRef.current = null;
           
           // Stop all active tick sounds when animation completes
@@ -475,20 +601,31 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           
           // Use requestAnimationFrame to ensure scroll position is set and rendered before showing result
           requestAnimationFrame(() => {
-            // Always set the selected item so it displays, even if already owned
-            console.log('Setting selected item:', item.name, 'already owned:', itemAlreadyOwnedRef.current);
-            // Store in ref first to ensure it persists
-            pendingSelectedItemRef.current = item;
-            setSelectedItem(item);
-            
-            // Play level-up sound for rare, epic, or legendary items
-            const rarity = item.rarity || 'common';
-            if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary') {
-              playLevelUpSound();
+            if (item === null) {
+              // "Nothing" result - show empty result
+              console.log('Setting selected item: Nothing');
+              pendingSelectedItemRef.current = null;
+              setSelectedItem(null);
+              
+              // Purchase the loot box after animation completes (will sync with Firebase)
+              purchaseLootBox(lootBox.id, '', lootBox.price);
+            } else {
+              // Normal item result
+              // Always set the selected item so it displays, even if already owned
+              console.log('Setting selected item:', item.name, 'already owned:', itemAlreadyOwnedRef.current);
+              // Store in ref first to ensure it persists
+              pendingSelectedItemRef.current = item;
+              setSelectedItem(item);
+              
+              // Play level-up sound for rare, epic, legendary, or godlike items
+              const rarity = item.rarity || 'common';
+              if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike') {
+                playLevelUpSound();
+              }
+              
+              // Purchase the loot box after animation completes (will sync with Firebase)
+              purchaseLootBox(lootBox.id, item.id, lootBox.price);
             }
-            
-            // Purchase the loot box after animation completes (will sync with Firebase)
-            purchaseLootBox(lootBox.id, item.id, lootBox.price);
             
             // NOW that animation is done and item is shown, allow opening again
             setIsOpening(false);
@@ -499,7 +636,8 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       
       // Start animation immediately
       console.log('Starting animation frame, startPosition:', startPosition, 'targetPosition:', targetPosition, 'extraScroll:', extraScroll);
-      animationRef.current = requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
+      animationRef.current = animationFrameId;
     });
   }, [lootBox, canAfford, isOpening, normalizedItems, scrollPosition, selectRandomItem, inventory, purchaseLootBox]);
   
@@ -759,7 +897,36 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             <div className="mb-4 shrink-0 min-h-[280px] flex items-center justify-center gap-4">
               {(selectedItem || pendingSelectedItemRef.current) ? (() => {
                 const displayItem = selectedItem || pendingSelectedItemRef.current;
-                if (!displayItem) return null;
+                // Handle "nothing" result for exclusive cases
+                if (!displayItem) {
+                  return (
+                    // Show "Nothing" result for godlike cases
+                    <>
+                      <div 
+                        className="bg-gray-800 rounded-lg p-6 border-2 w-[280px] h-[280px] flex items-center justify-center"
+                        style={{ borderColor: '#6b7280' }}
+                      >
+                        <div className="text-8xl opacity-50">❌</div>
+                      </div>
+                      <div className="bg-gray-800 rounded-lg p-6 border-2 w-[280px] h-[280px] flex flex-col justify-center overflow-hidden" style={{ borderColor: '#6b7280' }}>
+                        <h3 className="font-pixel text-xl mb-1 text-center break-words line-clamp-2 text-gray-400">
+                          Nothing
+                        </h3>
+                        <p className="font-pixel text-sm mb-2 text-center text-gray-500">
+                          [Empty]
+                        </p>
+                        <div className="mb-2 text-center">
+                          <p className="text-gray-300 font-pixel text-xs">
+                            Better luck next time!
+                          </p>
+                        </div>
+                        <p className="text-gray-400 font-pixel text-xs mt-2 text-center">
+                          The case was empty. Try again!
+                        </p>
+                      </div>
+                    </>
+                  );
+                }
                 return (
                   // Show reward when item is selected - same size box as crate, with info box on the right
                   <>
@@ -806,7 +973,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             </div>
             
             {/* Buttons below crate/reward box */}
-            {selectedItem && (
+            {(selectedItem !== null || pendingSelectedItemRef.current !== null) && (
               <div className="flex gap-3 justify-center mb-4">
                   <button
                     onClick={() => {
@@ -944,19 +1111,64 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                 }}
               >
               {/* Duplicate items multiple times for seamless scrolling - need extra at start for left visibility */}
-              {[...normalizedItems, ...normalizedItems, ...normalizedItems, ...normalizedItems, ...normalizedItems].map(({ item }, index) => {
-                const baseIndex = index % normalizedItems.length;
-                const originalIndex = normalizedItems.findIndex(i => i.item.id === item.id);
-                const rarityColor = RARITY_COLORS[item.rarity || 'common'];
-                const isSelected = selectedItem?.id === item.id && baseIndex === originalIndex;
-                const rarity = item.rarity || 'common';
-                const isHighRarity = rarity === 'epic' || rarity === 'legendary';
-                const glowColor = rarityColor.glow;
-                const borderColor = RARITY_BORDER_COLORS[rarity];
+              {/* Also add empty tiles for "nothing" results in godlike cases */}
+              {(() => {
+                const isGodlikeCase = lootBox?.category?.startsWith('godlike_');
+                const itemsToRender: Array<{ item: ShopItem | null; setIndex: number; itemIndex: number }> = [];
+                
+                // Create 7 sets of items (more sets for godlike cases so empty tile doesn't appear at the end)
+                const numSets = isGodlikeCase ? 7 : 5;
+                for (let setIndex = 0; setIndex < numSets; setIndex++) {
+                  normalizedItems.forEach((entry, itemIndex) => {
+                    itemsToRender.push({ item: entry.item, setIndex, itemIndex });
+                  });
+                  // Add empty tile after each set for godlike cases
+                  if (isGodlikeCase) {
+                    itemsToRender.push({ item: null, setIndex, itemIndex: normalizedItems.length });
+                  }
+                }
+                
+                return itemsToRender.map((entry, index) => {
+                  // Handle empty tile entries
+                  if (entry.item === null) {
+                    const isEmptySelected = selectedItem === null && entry.setIndex === 3; // Select empty tile in 4th set
+                    return (
+                      <div
+                        key={`empty-${entry.setIndex}-${entry.itemIndex}`}
+                        className={`
+                          flex-shrink-0 w-32 h-32 rounded-lg p-2 relative transition-all
+                          ${isEmptySelected 
+                            ? 'border-4 border-gray-500 scale-110 shadow-2xl z-20' 
+                            : 'border-2 border-gray-700 opacity-60'
+                          }
+                        `}
+                        style={{
+                          borderColor: isEmptySelected ? '#6b7280' : '#374151',
+                          backgroundColor: isEmptySelected ? 'rgba(107, 114, 128, 0.1)' : 'rgba(17, 24, 39, 0.8)',
+                          overflow: 'visible',
+                          zIndex: isEmptySelected ? 20 : 1,
+                        }}
+                      >
+                        <div className="w-full h-full bg-gray-900 rounded flex items-center justify-center relative" style={{ overflow: 'visible' }}>
+                          <div className="text-4xl opacity-50">❌</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  const item = entry.item;
+                  const baseIndex = entry.itemIndex;
+                  const originalIndex = normalizedItems.findIndex(i => i.item.id === item.id);
+                  const rarityColor = RARITY_COLORS[item.rarity || 'common'];
+                  const isSelected = selectedItem?.id === item.id && entry.setIndex === 2 && baseIndex === originalIndex;
+                  const rarity = item.rarity || 'common';
+                  const isHighRarity = rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike';
+                  const glowColor = rarityColor.glow;
+                  const borderColor = RARITY_BORDER_COLORS[rarity];
                 
                 return (
                   <div
-                    key={`${item.id}-${index}`}
+                    key={`${item.id}-${entry.setIndex}-${entry.itemIndex}`}
                     className={`
                       flex-shrink-0 w-32 h-32 rounded-lg p-2 relative transition-all
                       ${isSelected 
@@ -1004,7 +1216,8 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                     )}
                   </div>
                 );
-              })}
+                })
+              })()}
               </div>
               </div>
             </div>
@@ -1058,6 +1271,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                 {allLootBoxes.map(box => {
                   const isSelected = lootBox?.id === box.id;
                   const canAffordBox = playerOrbs >= box.price;
+                  const isGodlikeCase = box.category?.startsWith('godlike_');
                   return (
                     <button
                       key={box.id}
@@ -1070,7 +1284,13 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                       className={`
                         flex-shrink-0 px-4 py-2 rounded-lg border-2 font-pixel text-xs transition-all
                         ${isSelected
-                          ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                          ? isGodlikeCase
+                            ? 'bg-red-500/20 border-red-500 text-red-400'
+                            : 'bg-amber-500/20 border-amber-500 text-amber-400'
+                          : isGodlikeCase
+                          ? canAffordBox
+                            ? 'bg-red-900/30 border-red-600 text-red-300 hover:bg-red-900/40 hover:border-red-500'
+                            : 'bg-red-900/20 border-red-700 text-red-500 opacity-60'
                           : canAffordBox
                           ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-700 hover:border-gray-500'
                           : 'bg-gray-800/50 border-gray-700 text-gray-500 opacity-60'
@@ -1078,7 +1298,14 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                       `}
                     >
                       <div className="text-center">
-                        <div className="text-lg mb-1">📦</div>
+                        {/* Show first item preview if available */}
+                        {box.items.length > 0 && box.items[0].item ? (
+                          <div className="w-12 h-12 mx-auto mb-1 bg-gray-900 rounded border border-gray-700 flex items-center justify-center">
+                            <ItemPreview item={box.items[0].item} size={32} animate={false} />
+                          </div>
+                        ) : (
+                          <div className="text-lg mb-1">📦</div>
+                        )}
                         <div className="font-bold truncate max-w-[100px]">{box.name}</div>
                         <div className={`text-[10px] ${canAffordBox ? 'text-cyan-300' : 'text-gray-500'}`}>
                           {box.price.toLocaleString()}

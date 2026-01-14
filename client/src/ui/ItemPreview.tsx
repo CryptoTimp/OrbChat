@@ -577,6 +577,91 @@ function drawHatPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: numbe
       }
       break;
       
+    // === GODLIKE HATS ===
+    case 'hat_godlike_void':
+      // Void crown with intense void energy
+      const voidCrownPulse = Math.sin(time * 0.005) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(0, 0, 0, ${voidCrownPulse})`;
+      ctx.fillRect(cx - 10 * p, cy, 20 * p, 4 * p);
+      ctx.fillRect(cx - 6 * p, cy - 6 * p, 3 * p, 6 * p);
+      ctx.fillRect(cx - 2 * p, cy - 10 * p, 4 * p, 10 * p);
+      ctx.fillRect(cx + 4 * p, cy - 6 * p, 3 * p, 6 * p);
+      // Swirling void tendrils
+      for (let i = 0; i < 3; i++) {
+        const tendrilPhase = (time * 0.004 + i * 2) % (Math.PI * 2);
+        const tendrilX = cx + Math.sin(tendrilPhase) * 6 * p;
+        const tendrilY = cy - 8 * p + Math.cos(tendrilPhase) * 4 * p;
+        ctx.fillStyle = `rgba(75, 0, 130, ${voidCrownPulse})`;
+        ctx.beginPath();
+        ctx.arc(tendrilX, tendrilY, 2 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Pulsing void orbs
+      const voidOrb1 = Math.sin(time * 0.006) * 0.5 + 0.5;
+      const voidOrb2 = Math.sin(time * 0.007 + 1) * 0.5 + 0.5;
+      const voidOrb3 = Math.sin(time * 0.008 + 2) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(148, 0, 211, ${voidOrb1})`;
+      ctx.fillRect(cx - 6 * p, cy + p, 3 * p, 2 * p);
+      ctx.fillStyle = `rgba(75, 0, 130, ${voidOrb2})`;
+      ctx.fillRect(cx - p, cy - 8 * p, 2 * p, 2 * p);
+      ctx.fillStyle = `rgba(128, 0, 128, ${voidOrb3})`;
+      ctx.fillRect(cx + 4 * p, cy + p, 3 * p, 2 * p);
+      break;
+      
+    case 'hat_godlike_chaos':
+      // Chaos diadem with chaotic energy
+      const chaosPulse = Math.sin(time * 0.006) * 0.4 + 0.6;
+      const chaosSwirl = time * 0.005;
+      ctx.fillStyle = `rgba(139, 0, 0, ${chaosPulse})`;
+      ctx.fillRect(cx - 8 * p, cy, 16 * p, 3 * p);
+      ctx.fillStyle = `rgba(75, 0, 130, ${chaosPulse})`;
+      ctx.fillRect(cx - 8 * p, cy - 5 * p, 16 * p, 3 * p);
+      ctx.fillStyle = `rgba(0, 0, 0, ${chaosPulse})`;
+      ctx.fillRect(cx - 4 * p, cy - 9 * p, 8 * p, 7 * p);
+      // Chaotic energy swirls
+      for (let i = 0; i < 5; i++) {
+        const swirlPhase = chaosSwirl + i * 1.2;
+        const swirlX = cx - 8 * p + (i + 1) * 3 * p + Math.sin(swirlPhase) * 3 * p;
+        const swirlY = cy - 4 * p + Math.cos(swirlPhase * 1.5) * 3 * p;
+        const swirlColor = i % 2 === 0 ? '#8b0000' : '#4b0082';
+        ctx.fillStyle = `rgba(${swirlColor === '#8b0000' ? '139, 0, 0' : '75, 0, 130'}, ${chaosPulse})`;
+        ctx.beginPath();
+        ctx.arc(swirlX, swirlY, 2 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+      
+    case 'hat_godlike_abyss':
+      // Abyssal helm with deep void energy
+      const abyssPulse = Math.sin(time * 0.004) * 0.3 + 0.7;
+      const abyssDepth = time * 0.003;
+      ctx.fillStyle = `rgba(0, 0, 0, ${abyssPulse})`;
+      ctx.fillRect(cx - 10 * p, cy, 20 * p, 5 * p);
+      ctx.fillRect(cx - 6 * p, cy - 7 * p, 3 * p, 3 * p);
+      ctx.fillRect(cx - 6 * p, cy - 12 * p, 12 * p, 8 * p);
+      ctx.fillRect(cx + 4 * p, cy - 7 * p, 3 * p, 3 * p);
+      // Deep abyssal portal layers
+      for (let i = 0; i < 4; i++) {
+        const ringPhase = abyssDepth + i * 0.5;
+        const ringSize = 4 * p + i * 2 * p + Math.sin(ringPhase) * p;
+        ctx.strokeStyle = `rgba(75, 0, 130, ${abyssPulse * (1 - i * 0.2)})`;
+        ctx.lineWidth = 2 * p;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 8 * p, ringSize, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Abyssal energy tendrils
+      for (let i = 0; i < 4; i++) {
+        const tendrilPhase = abyssDepth + i * 1.5;
+        const tendrilX = cx + Math.sin(tendrilPhase) * 8 * p;
+        const tendrilY = cy - 10 * p + Math.cos(tendrilPhase * 0.8) * 6 * p;
+        ctx.fillStyle = `rgba(128, 0, 128, ${abyssPulse * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(tendrilX, tendrilY, 3 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+      
     default:
       // Generic hat
       ctx.fillStyle = '#888888';
@@ -829,6 +914,80 @@ function drawShirtPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: num
         const colorIndex = Math.floor((i + rainbowOffset2 * 4) % 4);
         ctx.fillStyle = rainbowColors[colorIndex];
         ctx.fillRect(x, y + (2 + i * 2) * p, shirtW, 2 * p);
+      }
+      break;
+      
+    // === GODLIKE SHIRTS ===
+    case 'shirt_godlike_void':
+      // Void vestments with intense void energy
+      const voidVestPulse = Math.sin(time * 0.005) * 0.3 + 0.7;
+      const voidVestSwirl = time * 0.004;
+      ctx.fillStyle = `rgba(0, 0, 0, ${voidVestPulse})`;
+      ctx.fillRect(x - 2 * p, y, shirtW + 4 * p, shirtH);
+      // Swirling void energy
+      for (let i = 0; i < 5; i++) {
+        const swirlPhase = voidVestSwirl + i * 1.2;
+        const swirlX = x + (i + 1) * shirtW / 6 + Math.sin(swirlPhase) * 3 * p;
+        const swirlY = y + shirtH / 2 + Math.cos(swirlPhase * 0.8) * 3 * p;
+        ctx.fillStyle = `rgba(75, 0, 130, ${voidVestPulse})`;
+        ctx.beginPath();
+        ctx.arc(swirlX, swirlY, 3 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Void portal center
+      const portalPhase = voidVestSwirl;
+      ctx.strokeStyle = `rgba(148, 0, 211, ${voidVestPulse})`;
+      ctx.lineWidth = 2 * p;
+      ctx.beginPath();
+      ctx.arc(x + shirtW / 2, y + shirtH / 2, 5 * p + Math.sin(portalPhase) * p, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+      
+    case 'shirt_godlike_chaos':
+      // Chaos robes with chaotic energy
+      const chaosRobePulse = Math.sin(time * 0.006) * 0.4 + 0.6;
+      const chaosRobeSwirl = time * 0.005;
+      ctx.fillStyle = `rgba(139, 0, 0, ${chaosRobePulse})`;
+      ctx.fillRect(x - 2 * p, y, shirtW + 4 * p, shirtH);
+      ctx.fillRect(x - 2 * p, y + shirtH - p, shirtW + 4 * p, 3 * p);
+      // Chaotic energy swirls
+      for (let i = 0; i < 6; i++) {
+        const swirlPhase = chaosRobeSwirl + i * 1;
+        const swirlX = x + (i % 3) * shirtW / 3 + Math.sin(swirlPhase) * 4 * p;
+        const swirlY = y + Math.floor(i / 3) * shirtH / 2 + Math.cos(swirlPhase * 1.3) * 3 * p;
+        const swirlColor = i % 2 === 0 ? '#8b0000' : '#4b0082';
+        ctx.fillStyle = `rgba(${swirlColor === '#8b0000' ? '139, 0, 0' : '75, 0, 130'}, ${chaosRobePulse})`;
+        ctx.beginPath();
+        ctx.arc(swirlX, swirlY, 3 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+      
+    case 'shirt_godlike_abyss':
+      // Abyssal armor with deep void energy
+      const abyssArmorPulse = Math.sin(time * 0.004) * 0.3 + 0.7;
+      const abyssArmorDepth = time * 0.003;
+      ctx.fillStyle = `rgba(0, 0, 0, ${abyssArmorPulse})`;
+      ctx.fillRect(x - 3 * p, y, shirtW + 6 * p, shirtH);
+      // Deep abyssal portal layers
+      for (let i = 0; i < 3; i++) {
+        const ringPhase = abyssArmorDepth + i * 0.5;
+        const ringSize = 4 * p + i * 3 * p + Math.sin(ringPhase) * p;
+        ctx.strokeStyle = `rgba(75, 0, 130, ${abyssArmorPulse * (1 - i * 0.25)})`;
+        ctx.lineWidth = 2 * p;
+        ctx.beginPath();
+        ctx.arc(x + shirtW / 2, y + shirtH / 2, ringSize, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Abyssal energy tendrils
+      for (let i = 0; i < 4; i++) {
+        const tendrilPhase = abyssArmorDepth + i * 1.5;
+        const tendrilX = x + shirtW / 2 + Math.sin(tendrilPhase) * 6 * p;
+        const tendrilY = y + shirtH / 2 + Math.cos(tendrilPhase * 0.7) * 5 * p;
+        ctx.fillStyle = `rgba(128, 0, 128, ${abyssArmorPulse * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(tendrilX, tendrilY, 3 * p, 0, Math.PI * 2);
+        ctx.fill();
       }
       break;
   }
@@ -1773,6 +1932,73 @@ function drawLegsPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: numb
         ctx.fillRect(rightX, legY + (1 + i * 2) * p, legW, p);
       }
       break;
+      
+    // === GODLIKE LEGS ===
+    case 'legs_godlike_void':
+      // Void leggings with intense void energy
+      const voidLegPulse = Math.sin(time * 0.005) * 0.3 + 0.7;
+      const voidLegSwirl = time * 0.004;
+      color = `rgba(0, 0, 0, ${voidLegPulse})`;
+      detail = 'void_godlike';
+      // Swirling void energy bands
+      for (let i = 0; i < 3; i++) {
+        const bandPhase = voidLegSwirl + i * 1.5;
+        const bandY = (Math.sin(bandPhase) + 1) * 0.5 * (legH - 2 * p);
+        ctx.fillStyle = `rgba(75, 0, 130, ${voidLegPulse})`;
+        ctx.fillRect(leftX, legY + bandY, legW, 2 * p);
+        ctx.fillRect(rightX, legY + bandY, legW, 2 * p);
+      }
+      break;
+      
+    case 'legs_godlike_chaos':
+      // Chaos greaves with chaotic energy
+      const chaosLegPulse = Math.sin(time * 0.006) * 0.4 + 0.6;
+      const chaosLegSwirl = time * 0.005;
+      color = `rgba(139, 0, 0, ${chaosLegPulse})`;
+      detail = 'chaos_godlike';
+      // Chaotic energy swirls
+      for (let i = 0; i < 5; i++) {
+        const swirlPhase = chaosLegSwirl + i * 1;
+        const swirlY = (Math.sin(swirlPhase) + 1) * 0.5 * legH;
+        const swirlColor = i % 2 === 0 ? '#8b0000' : '#4b0082';
+        ctx.fillStyle = `rgba(${swirlColor === '#8b0000' ? '139, 0, 0' : '75, 0, 130'}, ${chaosLegPulse})`;
+        ctx.fillRect(leftX, legY + swirlY, legW, p);
+        ctx.fillRect(rightX, legY + swirlY, legW, p);
+      }
+      break;
+      
+    case 'legs_godlike_abyss':
+      // Abyssal pants with deep void energy
+      const abyssLegPulse = Math.sin(time * 0.004) * 0.3 + 0.7;
+      const abyssLegDepth = time * 0.003;
+      color = `rgba(0, 0, 0, ${abyssLegPulse})`;
+      detail = 'abyss_godlike';
+      // Deep abyssal portal layers on legs
+      for (let i = 0; i < 2; i++) {
+        const ringPhase = abyssLegDepth + i * 0.5;
+        const ringSize = 3 * p + i * 2 * p + Math.sin(ringPhase) * p;
+        ctx.strokeStyle = `rgba(75, 0, 130, ${abyssLegPulse * (1 - i * 0.3)})`;
+        ctx.lineWidth = 2 * p;
+        ctx.beginPath();
+        ctx.arc(leftX + legW / 2, legY + legH / 2, ringSize, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(rightX + legW / 2, legY + legH / 2, ringSize, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+  }
+  
+  // Draw base leg color (if not already drawn by special cases)
+  if (detail !== 'robe' && !itemId.includes('godlike')) {
+    ctx.fillStyle = color;
+    ctx.fillRect(leftX, legY, legW, legH);
+    ctx.fillRect(rightX, legY, legW, legH);
+  } else if (itemId.includes('godlike')) {
+    // Draw base for godlike items
+    ctx.fillStyle = color;
+    ctx.fillRect(leftX, legY, legW, legH);
+    ctx.fillRect(rightX, legY, legW, legH);
   }
   
   // Draw shoes
@@ -1812,6 +2038,11 @@ function drawBoostPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: num
       primaryColor = '#d68910';
       secondaryColor = '#f39c12';
       glowColor = 'rgba(243, 156, 18, 0.5)';
+      break;
+    case 'godlike':
+      primaryColor = '#ef4444';
+      secondaryColor = '#dc2626';
+      glowColor = 'rgba(239, 68, 68, 1.2)';
       break;
   }
   
@@ -1955,6 +2186,9 @@ function drawCapePreview(ctx: CanvasRenderingContext2D, itemId: string, cx: numb
     'cape_celestial': { main: '#1a1a4e', accent: '#ffd700', pattern: 'stars' },
     'cape_rainbow': { main: '#ff0000', accent: '#ff00ff', pattern: 'rainbow' },
     'cape_galaxy': { main: '#0a0020', accent: '#4a0080', pattern: 'galaxy' },
+    'cape_godlike_void': { main: '#000000', accent: '#4b0082', pattern: 'void_godlike' },
+    'cape_godlike_chaos': { main: '#1a0000', accent: '#8b0000', pattern: 'chaos_godlike' },
+    'cape_godlike_abyss': { main: '#000000', accent: '#800080', pattern: 'abyss_godlike' },
   };
   
   const colors = CAPE_COLORS[itemId] || { main: '#666666', accent: '#888888' };
@@ -1997,6 +2231,31 @@ function drawCapePreview(ctx: CanvasRenderingContext2D, itemId: string, cx: numb
     gradient.addColorStop(0, '#4a0080');
     gradient.addColorStop(0.5, '#1a0040');
     gradient.addColorStop(1, colors.main);
+    ctx.fillStyle = gradient;
+  } else if (colors.pattern === 'void_godlike') {
+    // Godlike void cape with intense void energy
+    const voidCapePulse = Math.sin(time * 0.005) * 0.3 + 0.7;
+    const voidCapeSwirl = time * 0.004;
+    const gradient = ctx.createLinearGradient(x, y, x, y + capeH);
+    gradient.addColorStop(0, `rgba(75, 0, 130, ${voidCapePulse})`);
+    gradient.addColorStop(0.5, `rgba(0, 0, 0, ${voidCapePulse})`);
+    gradient.addColorStop(1, `rgba(148, 0, 211, ${voidCapePulse})`);
+    ctx.fillStyle = gradient;
+  } else if (colors.pattern === 'chaos_godlike') {
+    // Godlike chaos cape with chaotic energy
+    const chaosCapePulse = Math.sin(time * 0.006) * 0.4 + 0.6;
+    const gradient = ctx.createLinearGradient(x, y, x, y + capeH);
+    gradient.addColorStop(0, `rgba(139, 0, 0, ${chaosCapePulse})`);
+    gradient.addColorStop(0.5, `rgba(75, 0, 130, ${chaosCapePulse})`);
+    gradient.addColorStop(1, `rgba(0, 0, 0, ${chaosCapePulse})`);
+    ctx.fillStyle = gradient;
+  } else if (colors.pattern === 'abyss_godlike') {
+    // Godlike abyssal cape with deep void energy
+    const abyssCapePulse = Math.sin(time * 0.004) * 0.3 + 0.7;
+    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, capeH);
+    gradient.addColorStop(0, `rgba(128, 0, 128, ${abyssCapePulse})`);
+    gradient.addColorStop(0.5, `rgba(75, 0, 130, ${abyssCapePulse * 0.7})`);
+    gradient.addColorStop(1, `rgba(0, 0, 0, ${abyssCapePulse})`);
     ctx.fillStyle = gradient;
   } else {
     const gradient = ctx.createLinearGradient(x, y, x, y + capeH);
@@ -2334,6 +2593,118 @@ function drawWingsPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: num
       ctx.lineTo(cx + 12 * p, cy + 6 * p);
       ctx.closePath();
       ctx.fill();
+      break;
+      
+    // === GODLIKE WINGS ===
+    case 'acc_wings_godlike_void': {
+      // Void wings with intense void energy
+      const voidWingPulse = Math.sin(time * 0.005) * 0.3 + 0.7;
+      const voidWingSwirl = time * 0.004;
+      ctx.fillStyle = `rgba(0, 0, 0, ${voidWingPulse})`;
+      // Left wing
+      ctx.beginPath();
+      ctx.moveTo(cx - 2 * p, cy);
+      ctx.lineTo(cx - 8 * p, cy - 10 * p);
+      ctx.lineTo(cx - 14 * p, cy - 4 * p);
+      ctx.lineTo(cx - 12 * p, cy + 6 * p);
+      ctx.closePath();
+      ctx.fill();
+      // Right wing
+      ctx.beginPath();
+      ctx.moveTo(cx + 2 * p, cy);
+      ctx.lineTo(cx + 8 * p, cy - 10 * p);
+      ctx.lineTo(cx + 14 * p, cy - 4 * p);
+      ctx.lineTo(cx + 12 * p, cy + 6 * p);
+      ctx.closePath();
+      ctx.fill();
+      // Swirling void energy
+      for (let i = 0; i < 6; i++) {
+        const swirlPhase = voidWingSwirl + i * 1;
+        const swirlX = cx + Math.cos(swirlPhase) * 8 * p;
+        const swirlY = cy + Math.sin(swirlPhase) * 6 * p;
+        ctx.fillStyle = `rgba(75, 0, 130, ${voidWingPulse})`;
+        ctx.beginPath();
+        ctx.arc(swirlX, swirlY, 2.5 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+      
+    case 'acc_wings_godlike_chaos':
+      // Chaos wings with chaotic energy
+      const chaosWingPulse = Math.sin(time * 0.006) * 0.4 + 0.6;
+      const chaosWingSwirl = time * 0.005;
+      ctx.fillStyle = `rgba(139, 0, 0, ${chaosWingPulse})`;
+      // Left wing
+      ctx.beginPath();
+      ctx.moveTo(cx - 2 * p, cy);
+      ctx.lineTo(cx - 8 * p, cy - 10 * p);
+      ctx.lineTo(cx - 14 * p, cy - 4 * p);
+      ctx.lineTo(cx - 12 * p, cy + 6 * p);
+      ctx.closePath();
+      ctx.fill();
+      // Right wing
+      ctx.beginPath();
+      ctx.moveTo(cx + 2 * p, cy);
+      ctx.lineTo(cx + 8 * p, cy - 10 * p);
+      ctx.lineTo(cx + 14 * p, cy - 4 * p);
+      ctx.lineTo(cx + 12 * p, cy + 6 * p);
+      ctx.closePath();
+      ctx.fill();
+      // Chaotic energy swirls
+      for (let i = 0; i < 8; i++) {
+        const swirlPhase = chaosWingSwirl + i * 0.8;
+        const swirlX = cx + Math.cos(swirlPhase) * 7 * p;
+        const swirlY = cy + Math.sin(swirlPhase) * 5 * p;
+        const swirlColor = i % 2 === 0 ? '#8b0000' : '#4b0082';
+        ctx.fillStyle = `rgba(${swirlColor === '#8b0000' ? '139, 0, 0' : '75, 0, 130'}, ${chaosWingPulse})`;
+        ctx.beginPath();
+        ctx.arc(swirlX, swirlY, 2.5 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+      
+    case 'acc_wings_godlike_abyss':
+      // Abyssal wings with deep void energy
+      const abyssWingPulse = Math.sin(time * 0.004) * 0.3 + 0.7;
+      const abyssWingDepth = time * 0.003;
+      ctx.fillStyle = `rgba(0, 0, 0, ${abyssWingPulse})`;
+      // Left wing
+      ctx.beginPath();
+      ctx.moveTo(cx - 2 * p, cy);
+      ctx.lineTo(cx - 8 * p, cy - 10 * p);
+      ctx.lineTo(cx - 14 * p, cy - 4 * p);
+      ctx.lineTo(cx - 12 * p, cy + 6 * p);
+      ctx.closePath();
+      ctx.fill();
+      // Right wing
+      ctx.beginPath();
+      ctx.moveTo(cx + 2 * p, cy);
+      ctx.lineTo(cx + 8 * p, cy - 10 * p);
+      ctx.lineTo(cx + 14 * p, cy - 4 * p);
+      ctx.lineTo(cx + 12 * p, cy + 6 * p);
+      ctx.closePath();
+      ctx.fill();
+      // Deep abyssal portal layers
+      for (let i = 0; i < 3; i++) {
+        const ringPhase = abyssWingDepth + i * 0.5;
+        const ringSize = 4 * p + i * 2 * p + Math.sin(ringPhase) * p;
+        ctx.strokeStyle = `rgba(75, 0, 130, ${abyssWingPulse * (1 - i * 0.25)})`;
+        ctx.lineWidth = 2 * p;
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringSize, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Abyssal energy tendrils
+      for (let i = 0; i < 4; i++) {
+        const tendrilPhase = abyssWingDepth + i * 1.5;
+        const tendrilX = cx + Math.sin(tendrilPhase) * 8 * p;
+        const tendrilY = cy + Math.cos(tendrilPhase * 0.7) * 6 * p;
+        ctx.fillStyle = `rgba(128, 0, 128, ${abyssWingPulse * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(tendrilX, tendrilY, 3 * p, 0, Math.PI * 2);
+        ctx.fill();
+      }
       break;
   }
 }

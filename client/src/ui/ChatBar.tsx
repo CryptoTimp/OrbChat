@@ -126,6 +126,7 @@ export function ChatBar() {
                     rare: '#93c5fd',        // blue-300
                     epic: '#c084fc',       // purple-300
                     legendary: '#fcd34d',  // amber-300
+                    godlike: '#fca5a5',     // red-300
                   };
                   parts.push({ text: itemName, color: colorMap[rarity] || colorMap.common, rarity });
                   

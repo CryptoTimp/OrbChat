@@ -7,7 +7,7 @@ import { CharacterPreview } from './CharacterPreview';
 import { LootBoxModal, LootBox } from './LootBoxModal';
 import { playClickSound, playCloseSound, playPurchaseSound, playEquipSound, playBuyOrbsSound } from '../utils/sounds';
 
-const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike'];
 
 export function ShopModal() {
   const shopOpen = useGameStore(state => state.shopOpen);
@@ -41,6 +41,8 @@ export function ShopModal() {
         if (item.id === 'tool_axe') return false;
         // Exclude common items from all cases
         if ((item.rarity || 'common') === 'common') return false;
+        // Exclude godlike items from regular cases (only available in godlike cases)
+        if ((item.rarity || 'common') === 'godlike') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';
@@ -61,6 +63,7 @@ export function ShopModal() {
         rare: [],
         epic: [],
         legendary: [],
+        godlike: [],
       };
       
       categoryItems.forEach(item => {
@@ -975,6 +978,8 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
         if (item.id === 'tool_axe') return false;
         // Exclude common items from all cases
         if ((item.rarity || 'common') === 'common') return false;
+        // Exclude godlike items from regular cases (only available in godlike cases)
+        if ((item.rarity || 'common') === 'godlike') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';
@@ -995,6 +1000,7 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
         rare: [],
         epic: [],
         legendary: [],
+        godlike: [],
       };
       
       categoryItems.forEach(item => {

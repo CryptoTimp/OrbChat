@@ -14,7 +14,7 @@ export interface PlayerData {
   last_seen: string;
 }
 
-export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'godlike';
 
 export interface ShopItemData {
   id: string;
@@ -156,8 +156,8 @@ function migrateAddLegendarySetItems(): void {
     { id: 'pet_celestial', name: 'Celestial Star', price: 1050000, sprite_layer: 'pet', sprite_path: '/sprites/pet_celestial.png', rarity: 'legendary' },
     { id: 'pet_galaxy', name: 'Galactic Nebula', price: 1200000, sprite_layer: 'pet', sprite_path: '/sprites/pet_galaxy.png', rarity: 'legendary' },
     { id: 'pet_rainbow', name: 'Prismatic Spirit', price: 1140000, sprite_layer: 'pet', sprite_path: '/sprites/pet_rainbow.png', rarity: 'legendary' },
-    // Epic Pet - Mini Me
-    { id: 'pet_mini_me', name: 'Mini Me', price: 20000, sprite_layer: 'pet', sprite_path: '/sprites/pet_mini_me.png', rarity: 'epic' },
+    // Legendary Pet - Mini Me
+    { id: 'pet_mini_me', name: 'Mini Me', price: 5000000, sprite_layer: 'pet', sprite_path: '/sprites/pet_mini_me.png', rarity: 'legendary' },
   ];
   
   let addedCount = 0;
@@ -622,8 +622,8 @@ function seedShopItems(): void {
     { id: 'pet_celestial', name: 'Celestial Star', price: 1050000, sprite_layer: 'pet', sprite_path: '/sprites/pet_celestial.png', rarity: 'legendary' },
     { id: 'pet_galaxy', name: 'Galactic Nebula', price: 1200000, sprite_layer: 'pet', sprite_path: '/sprites/pet_galaxy.png', rarity: 'legendary' },
     { id: 'pet_rainbow', name: 'Prismatic Spirit', price: 1140000, sprite_layer: 'pet', sprite_path: '/sprites/pet_rainbow.png', rarity: 'legendary' },
-    // Epic Pet - Mini Me
-    { id: 'pet_mini_me', name: 'Mini Me', price: 20000, sprite_layer: 'pet', sprite_path: '/sprites/pet_mini_me.png', rarity: 'epic' },
+    // Legendary Pet - Mini Me
+    { id: 'pet_mini_me', name: 'Mini Me', price: 5000000, sprite_layer: 'pet', sprite_path: '/sprites/pet_mini_me.png', rarity: 'legendary' },
   ];
 
   for (const item of items) {

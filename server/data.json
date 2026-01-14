@@ -1439,10 +1439,10 @@
     "pet_mini_me": {
       "id": "pet_mini_me",
       "name": "Mini Me",
-      "price": 20000,
+      "price": 5000000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_mini_me.png",
-      "rarity": "epic"
+      "rarity": "legendary"
     },
     "tool_axe": {
       "id": "tool_axe",
@@ -1451,6 +1451,204 @@
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/tool_axe.png",
       "rarity": "common"
+    },
+    "hat_godlike_void": {
+      "id": "hat_godlike_void",
+      "name": "Void Crown",
+      "price": 2000000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_godlike_void.png",
+      "rarity": "godlike"
+    },
+    "hat_godlike_chaos": {
+      "id": "hat_godlike_chaos",
+      "name": "Chaos Diadem",
+      "price": 2000000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_godlike_chaos.png",
+      "rarity": "godlike"
+    },
+    "hat_godlike_abyss": {
+      "id": "hat_godlike_abyss",
+      "name": "Abyssal Helm",
+      "price": 2000000,
+      "sprite_layer": "hat",
+      "sprite_path": "/sprites/hat_godlike_abyss.png",
+      "rarity": "godlike"
+    },
+    "shirt_godlike_void": {
+      "id": "shirt_godlike_void",
+      "name": "Void Vestments",
+      "price": 2000000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_godlike_void.png",
+      "rarity": "godlike"
+    },
+    "shirt_godlike_chaos": {
+      "id": "shirt_godlike_chaos",
+      "name": "Chaos Robes",
+      "price": 2000000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_godlike_chaos.png",
+      "rarity": "godlike"
+    },
+    "shirt_godlike_abyss": {
+      "id": "shirt_godlike_abyss",
+      "name": "Abyssal Armor",
+      "price": 2000000,
+      "sprite_layer": "shirt",
+      "sprite_path": "/sprites/shirt_godlike_abyss.png",
+      "rarity": "godlike"
+    },
+    "legs_godlike_void": {
+      "id": "legs_godlike_void",
+      "name": "Void Leggings",
+      "price": 2000000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_godlike_void.png",
+      "rarity": "godlike"
+    },
+    "legs_godlike_chaos": {
+      "id": "legs_godlike_chaos",
+      "name": "Chaos Greaves",
+      "price": 2000000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_godlike_chaos.png",
+      "rarity": "godlike"
+    },
+    "legs_godlike_abyss": {
+      "id": "legs_godlike_abyss",
+      "name": "Abyssal Pants",
+      "price": 2000000,
+      "sprite_layer": "legs",
+      "sprite_path": "/sprites/legs_godlike_abyss.png",
+      "rarity": "godlike"
+    },
+    "cape_godlike_void": {
+      "id": "cape_godlike_void",
+      "name": "Void Shroud",
+      "price": 2000000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_godlike_void.png",
+      "rarity": "godlike"
+    },
+    "cape_godlike_chaos": {
+      "id": "cape_godlike_chaos",
+      "name": "Chaos Mantle",
+      "price": 2000000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_godlike_chaos.png",
+      "rarity": "godlike"
+    },
+    "cape_godlike_abyss": {
+      "id": "cape_godlike_abyss",
+      "name": "Abyssal Cloak",
+      "price": 2000000,
+      "sprite_layer": "cape",
+      "sprite_path": "/sprites/cape_godlike_abyss.png",
+      "rarity": "godlike"
+    },
+    "acc_wings_godlike_void": {
+      "id": "acc_wings_godlike_void",
+      "name": "Void Wings",
+      "price": 2000000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_godlike_void.png",
+      "rarity": "godlike"
+    },
+    "acc_wings_godlike_chaos": {
+      "id": "acc_wings_godlike_chaos",
+      "name": "Chaos Wings",
+      "price": 2000000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_godlike_chaos.png",
+      "rarity": "godlike"
+    },
+    "acc_wings_godlike_abyss": {
+      "id": "acc_wings_godlike_abyss",
+      "name": "Abyssal Wings",
+      "price": 2000000,
+      "sprite_layer": "wings",
+      "sprite_path": "/sprites/acc_wings_godlike_abyss.png",
+      "rarity": "godlike"
+    },
+    "acc_godlike_void": {
+      "id": "acc_godlike_void",
+      "name": "Void Artifact",
+      "price": 2000000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_godlike_void.png",
+      "rarity": "godlike"
+    },
+    "acc_godlike_chaos": {
+      "id": "acc_godlike_chaos",
+      "name": "Chaos Relic",
+      "price": 2000000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_godlike_chaos.png",
+      "rarity": "godlike"
+    },
+    "acc_godlike_abyss": {
+      "id": "acc_godlike_abyss",
+      "name": "Abyssal Artifact",
+      "price": 2000000,
+      "sprite_layer": "accessory",
+      "sprite_path": "/sprites/acc_godlike_abyss.png",
+      "rarity": "godlike"
+    },
+    "boost_godlike_void": {
+      "id": "boost_godlike_void",
+      "name": "Void Surge",
+      "price": 2000000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_godlike_void.png",
+      "rarity": "godlike",
+      "speed_multiplier": 10.0,
+      "trail_color": "#4b0082"
+    },
+    "boost_godlike_chaos": {
+      "id": "boost_godlike_chaos",
+      "name": "Chaos Rush",
+      "price": 2000000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_godlike_void.png",
+      "rarity": "godlike",
+      "speed_multiplier": 10.0,
+      "trail_color": "#800080"
+    },
+    "boost_godlike_abyss": {
+      "id": "boost_godlike_abyss",
+      "name": "Abyssal Velocity",
+      "price": 2000000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_godlike_abyss.png",
+      "rarity": "godlike",
+      "speed_multiplier": 10.0,
+      "trail_color": "#9400d3"
+    },
+    "pet_godlike_void": {
+      "id": "pet_godlike_void",
+      "name": "Void Familiar",
+      "price": 2000000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_godlike_void.png",
+      "rarity": "godlike"
+    },
+    "pet_godlike_chaos": {
+      "id": "pet_godlike_chaos",
+      "name": "Chaos Companion",
+      "price": 2000000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_godlike_chaos.png",
+      "rarity": "godlike"
+    },
+    "pet_godlike_abyss": {
+      "id": "pet_godlike_abyss",
+      "name": "Abyssal Guardian",
+      "price": 2000000,
+      "sprite_layer": "pet",
+      "sprite_path": "/sprites/pet_godlike_abyss.png",
+      "rarity": "godlike"
     }
   },
   "inventory": [

@@ -78,6 +78,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
         rare: [],
         epic: [],
         legendary: [],
+        godlike: [],
       };
       
       categoryItems.forEach(item => {

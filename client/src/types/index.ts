@@ -56,7 +56,7 @@ export interface TreeState {
   respawnAt: number; // timestamp when tree should respawn
 }
 
-export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'godlike';
 
 export interface ShopItem {
   id: string;
@@ -77,6 +77,7 @@ export const RARITY_COLORS: Record<ItemRarity, { bg: string; border: string; tex
   rare: { bg: 'bg-blue-600', border: 'border-blue-500', text: 'text-blue-300', glow: 'rgba(59, 130, 246, 0.5)' },
   epic: { bg: 'bg-purple-600', border: 'border-purple-500', text: 'text-purple-300', glow: 'rgba(168, 85, 247, 0.5)' },
   legendary: { bg: 'bg-amber-500', border: 'border-amber-400', text: 'text-amber-300', glow: 'rgba(245, 158, 11, 0.7)' },
+  godlike: { bg: 'bg-red-600', border: 'border-red-500', text: 'text-red-300', glow: 'rgba(239, 68, 68, 0.9)' },
 };
 
 export interface RoomInfo {
