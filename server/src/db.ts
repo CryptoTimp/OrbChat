@@ -149,9 +149,6 @@ function migrateAddLegendarySetItems(): void {
     { id: 'acc_weapon_galaxy', name: 'Galactic Dual Blades', price: 600000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_galaxy.png', rarity: 'legendary' },
     { id: 'acc_weapon_rainbow', name: 'Prismatic Dual Prisms', price: 540000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_rainbow.png', rarity: 'legendary' },
     
-    // Tools
-    { id: 'tool_axe', name: 'Axe', price: 1000, sprite_layer: 'accessory', sprite_path: '/sprites/tool_axe.png', rarity: 'common' },
-    
     // Legendary Pets (matching each legendary set) - 200% price increase
     { id: 'pet_golden', name: 'Golden Dragon', price: 750000, sprite_layer: 'pet', sprite_path: '/sprites/pet_golden.png', rarity: 'legendary' },
     { id: 'pet_phoenix', name: 'Phoenix Companion', price: 840000, sprite_layer: 'pet', sprite_path: '/sprites/pet_phoenix.png', rarity: 'legendary' },

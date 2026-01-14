@@ -50,6 +50,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   // Animated orb count
   const currentOrbs = localPlayer?.orbs || 0;
   const [displayedOrbs, setDisplayedOrbs] = useState(currentOrbs);
+  const displayedOrbsRef = useRef(currentOrbs); // Track displayed value for animation start point
   const animationRef = useRef<number | null>(null);
   const previousOrbsRef = useRef(currentOrbs);
   const orbBalanceRef = useRef<HTMLDivElement>(null);
@@ -136,76 +137,106 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   }); // Run on every render to check if we need to start animation
   
   useEffect(() => {
+    // Update displayedOrbsRef whenever displayedOrbs changes
+    displayedOrbsRef.current = displayedOrbs;
+  }, [displayedOrbs]);
+  
+  // Sync displayedOrbs with currentOrbs if they're out of sync (e.g., from external updates)
+  useEffect(() => {
+    if (currentOrbs !== displayedOrbs && !animationRef.current) {
+      // If there's no animation running and values are different, sync immediately
+      setDisplayedOrbs(currentOrbs);
+      displayedOrbsRef.current = currentOrbs;
+    }
+  }, [currentOrbs, displayedOrbs]);
+  
+  useEffect(() => {
+    // Update previousOrbsRef at the start to track the change
+    const previousOrbs = previousOrbsRef.current;
+    
     // Only animate if orbs increased
-    if (currentOrbs > previousOrbsRef.current) {
-      const startValue = previousOrbsRef.current;
+    if (currentOrbs > previousOrbs) {
+      // Start from the current displayed value (not the previous stored value)
+      // This ensures smooth animation even if multiple updates happen quickly
+      const startValue = displayedOrbsRef.current;
       const endValue = currentOrbs;
       const difference = endValue - startValue;
-      const duration = Math.min(800, Math.max(300, difference * 2)); // 300-800ms based on amount
-      const startTime = Date.now();
       
-      // Spawn +X animation from orb balance (canvas-style, ref-based)
-      // Use the last orb value from store if available, otherwise use the difference
-      // This prevents showing red for normal orbs after shrine rewards
-      const displayValue = lastOrbValue !== undefined ? lastOrbValue : difference;
-      
-      if (orbBalanceRef.current && difference > 0) {
-        const newFloatingText: FloatingText = {
-          id: `ft_${Date.now()}_${Math.random()}`,
-          value: displayValue, // Use the actual orb value, not the total difference
-          createdAt: Date.now(),
-          progress: 0,
-        };
-        floatingTextsRef.current.push(newFloatingText);
+      // Only animate if there's actually a difference to animate
+      if (difference > 0) {
+        const duration = Math.min(800, Math.max(300, difference * 2)); // 300-800ms based on amount
+        const startTime = Date.now();
         
-        // Trigger animation loop start if not already running
-        forceUpdate(prev => prev + 1);
-      }
-      
-      // Cancel any existing animation
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
+        // Spawn +X animation from orb balance (canvas-style, ref-based)
+        // Use the last orb value from store if available, otherwise use the difference
+        // This prevents showing red for normal orbs after shrine rewards
+        const displayValue = lastOrbValue !== undefined ? lastOrbValue : difference;
         
-        // Ease out cubic for smooth deceleration
-        const easeOutCubic = 1 - Math.pow(1 - progress, 3);
-        const currentValue = Math.floor(startValue + difference * easeOutCubic);
-        
-        setDisplayedOrbs(currentValue);
-        
-        if (progress < 1) {
-          animationRef.current = requestAnimationFrame(animate);
-        } else {
-          // Set final value and clean up
-          setDisplayedOrbs(endValue);
-          animationRef.current = null;
+        // Clear lastOrbValue immediately after using it to prevent reuse
+        // This ensures each orb collection only triggers one floating text with the correct value
+        if (lastOrbValue !== undefined) {
+          useGameStore.setState({ lastOrbValue: undefined });
         }
-      };
-      
-      animationRef.current = requestAnimationFrame(animate);
-    } else if (currentOrbs < previousOrbsRef.current) {
+        
+        if (orbBalanceRef.current) {
+          const newFloatingText: FloatingText = {
+            id: `ft_${Date.now()}_${Math.random()}`,
+            value: displayValue, // Use the actual orb value, not the total difference
+            createdAt: Date.now(),
+            progress: 0,
+          };
+          floatingTextsRef.current.push(newFloatingText);
+          
+          // Trigger animation loop start if not already running
+          forceUpdate(prev => prev + 1);
+        }
+        
+        // Cancel any existing animation
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+        }
+        
+        const animate = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          
+          // Ease out cubic for smooth deceleration
+          const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+          const currentValue = Math.floor(startValue + difference * easeOutCubic);
+          
+          setDisplayedOrbs(currentValue);
+          
+          if (progress < 1) {
+            animationRef.current = requestAnimationFrame(animate);
+          } else {
+            // Set final value and clean up
+            setDisplayedOrbs(endValue);
+            animationRef.current = null;
+          }
+        };
+        
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        // No difference to animate, just update immediately
+        setDisplayedOrbs(endValue);
+      }
+    } else if (currentOrbs < previousOrbs) {
       // If orbs decreased (e.g., purchase), update immediately
       setDisplayedOrbs(currentOrbs);
+      displayedOrbsRef.current = currentOrbs;
       // Cancel any running animation
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
-    } else if (currentOrbs !== previousOrbsRef.current && !animationRef.current) {
+    } else if (currentOrbs !== previousOrbs && !animationRef.current) {
       // If orbs changed but no animation is running (e.g., from external update), sync immediately
       setDisplayedOrbs(currentOrbs);
+      displayedOrbsRef.current = currentOrbs;
     }
     
+    // Update previousOrbsRef at the end
     previousOrbsRef.current = currentOrbs;
-    
-    // Clear lastOrbValue after use to prevent stale values
-    if (lastOrbValue !== undefined) {
-      useGameStore.setState({ lastOrbValue: undefined });
-    }
     
     return () => {
       if (animationRef.current) {

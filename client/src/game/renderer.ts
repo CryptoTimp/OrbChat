@@ -6727,8 +6727,8 @@ export function drawPlayer(
   }
   
   // Draw nameplate above the player (above arrow position)
-  // Skip nameplate for centurions - they're drawn separately on top of everything
-  if (!player.id.startsWith('centurion_')) {
+  // Skip nameplate if explicitly requested, or for centurions (they're drawn separately on top of everything)
+  if (!skipNameplate && !player.id.startsWith('centurion_')) {
     // For game NPCs (merchants), use Infinity as orb count to show infinity icon in nameplate
     // For background NPCs (walking around), use their actual orb balance
     // Get zoom from context transform (inverse of scale applied)
@@ -6741,7 +6741,9 @@ export function drawPlayer(
     if (isGameNPC) {
       drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, player.id, time);
     } else {
-      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, player.orbs || 0, zoom, player.id, time);
+      // For real players, use their actual orb balance (default to 0 if not set)
+      const orbCount = typeof player.orbs === 'number' ? player.orbs : 0;
+      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, orbCount, zoom, player.id, time);
     }
   }
   
@@ -9395,7 +9397,7 @@ export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: numb
     ctx.shadowBlur = 0;
     
     // Draw orb count with rarity color
-    contentX += orbIconSize + 3;
+    contentX += orbIconSize + 3 / zoom;
     
     // Add glow to text for rare+ - scale inversely to zoom
     if (orbColorInfo.glow) {
@@ -9405,6 +9407,7 @@ export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: numb
     
     ctx.fillStyle = orbColorInfo.color;
     ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom'; // Ensure baseline is set correctly
     ctx.fillText(orbText, contentX, contentY);
     
     ctx.shadowBlur = 0;

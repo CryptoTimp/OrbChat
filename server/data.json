@@ -1458,5 +1458,12 @@
       "rarity": "common"
     }
   },
-  "inventory": []
+  "inventory": [
+    {
+      "player_id": "ZqlLG9gh1odb9nNy6QEpHuIJofd2",
+      "item_id": "log",
+      "equipped": false,
+      "purchased_at": "2026-01-14T17:11:49.390Z"
+    }
+  ]
 }

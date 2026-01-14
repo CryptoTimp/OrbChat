@@ -65,13 +65,13 @@ export function ShopModal() {
         itemsByRarity[rarity].push(item);
       });
       
-      // CS2 case odds (total percentages per rarity)
+      // Improved lootbox odds - much more obtainable items
       const rarityTotals: Record<ItemRarity, number> = {
-        common: 79.92,      // Mil-Spec (Blue)
-        uncommon: 15.98,    // Restricted (Purple)
-        rare: 3.2,          // Classified (Pink)
-        epic: 0.64,         // Covert (Red)
-        legendary: 0.26,    // Exceedingly Rare (Gold)
+        common: 62.0,       // Common items - still most common but reduced
+        uncommon: 25.0,     // Uncommon items - significantly increased
+        rare: 10.0,         // Rare items - much more obtainable
+        epic: 2.5,          // Epic items - much more obtainable
+        legendary: 0.5,     // Legendary items - slightly increased from 0.26%
       };
       
       // Create items with chances distributed evenly within each rarity
@@ -997,13 +997,13 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
         itemsByRarity[rarity].push(item);
       });
       
-      // CS2 case odds (total percentages per rarity)
+      // Improved lootbox odds - much more obtainable items
       const rarityTotals: Record<ItemRarity, number> = {
-        common: 79.92,      // Mil-Spec (Blue)
-        uncommon: 15.98,    // Restricted (Purple)
-        rare: 3.2,          // Classified (Pink)
-        epic: 0.64,         // Covert (Red)
-        legendary: 0.26,    // Exceedingly Rare (Gold)
+        common: 62.0,       // Common items - still most common but reduced
+        uncommon: 25.0,     // Uncommon items - significantly increased
+        rare: 10.0,         // Rare items - much more obtainable
+        epic: 2.5,          // Epic items - much more obtainable
+        legendary: 0.5,     // Legendary items - slightly increased from 0.26%
       };
       
       // Create items with chances distributed evenly within each rarity

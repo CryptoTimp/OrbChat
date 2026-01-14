@@ -26,8 +26,12 @@ async function syncOrbsFromFirebase(playerId: string): Promise<void> {
       const firebaseOrbs = profile.orbs || 0;
       const state = useGameStore.getState();
       
-      // Update game store with Firebase value
-      state.updatePlayerOrbs(playerId, firebaseOrbs);
+      // Only update if the value is different to avoid triggering floating text unnecessarily
+      const currentOrbs = state.localPlayer?.orbs || 0;
+      if (firebaseOrbs !== currentOrbs) {
+        // Update game store with Firebase value (without lastOrbValue to avoid floating text)
+        state.updatePlayerOrbs(playerId, firebaseOrbs);
+      }
     }
   } catch (error) {
     console.error('Failed to sync orbs from Firebase:', error);
@@ -303,38 +307,40 @@ function attachListeners(sock: Socket) {
     
     state.removeOrb(orbId);
     
-    // If this is our orb collection, update store immediately (optimistic update), then sync Firebase in background
+    // If this is our orb collection, poll Firebase, add orb value, and update
     if (playerId === state.playerId) {
       // Record session stats
       state.recordOrbCollection(orbType, orbValue || 0);
       // Play pickup sound effect (disabled for now)
       // playPickupSound();
       
-      // Update local state immediately with server's newBalance (optimistic update for instant UI feedback)
-      // Pass the orb value so HUD can use it for floating text color
-      state.updatePlayerOrbs(playerId, newBalance, orbValue);
-      
-      // Sync with Firebase in the background (non-blocking)
       if (orbValue && orbValue > 0) {
-        // Fire and forget - don't wait for Firebase, just sync in background
-        (async () => {
-          try {
-            // Get current orbs from Firebase and add the multiplied value (server already applied multiplier)
-            const profile = await getUserProfile(playerId);
-            const currentFirebaseOrbs = profile?.orbs || 0;
-            const newFirebaseOrbs = currentFirebaseOrbs + orbValue;
-            await updateUserOrbs(playerId, newFirebaseOrbs);
-            console.log('Synced Firebase orbs:', newFirebaseOrbs);
-            
-            // Only update if Firebase value differs (shouldn't happen, but just in case)
-            if (newFirebaseOrbs !== newBalance) {
-              console.warn(`Firebase orb balance (${newFirebaseOrbs}) differs from server (${newBalance}), using server value`);
-            }
-          } catch (error) {
-            console.error('Failed to sync Firebase orbs (non-critical):', error);
-            // Don't update UI on Firebase error - server value is authoritative
-          }
-        })();
+        try {
+          // Poll Firebase for current balance (source of truth)
+          const profile = await getUserProfile(playerId);
+          const currentFirebaseOrbs = profile?.orbs || 0;
+          
+          // Add the orb value to the Firebase balance
+          const newFirebaseOrbs = currentFirebaseOrbs + orbValue;
+          
+          // Update game store immediately with new balance (for instant UI feedback)
+          // Pass the orb value for floating text color
+          state.updatePlayerOrbs(playerId, newFirebaseOrbs, orbValue);
+          
+          // Update Firebase in the background (non-blocking)
+          updateUserOrbs(playerId, newFirebaseOrbs).catch(error => {
+            console.error('Failed to update Firebase orbs:', error);
+          });
+          
+          console.log('Orb collected: +' + orbValue + ', new balance: ' + newFirebaseOrbs);
+        } catch (error) {
+          console.error('Failed to get Firebase profile:', error);
+          // Fallback to server's newBalance if Firebase read fails
+          state.updatePlayerOrbs(playerId, newBalance, orbValue);
+        }
+      } else {
+        // If no orbValue, just use server's newBalance
+        state.updatePlayerOrbs(playerId, newBalance, 0);
       }
     } else {
       // For other players, just use server's newBalance
@@ -347,6 +353,13 @@ function attachListeners(sock: Socket) {
     const state = useGameStore.getState();
     
     if (playerId === state.playerId) {
+      // For our own balance update, check if the value matches what we already have
+      // If it matches, skip the sync to avoid triggering floating text with total difference
+      const currentOrbs = state.localPlayer?.orbs || 0;
+      if (orbs === currentOrbs) {
+        // Value already matches, no need to sync
+        return;
+      }
       // For our own balance update, sync from Firebase (source of truth)
       await syncOrbsFromFirebase(playerId);
     } else {
@@ -406,6 +419,9 @@ function attachListeners(sock: Socket) {
       'Not enough',
       'no logs',
       'no stones',
+      'not cutting',
+      'not mining',
+      'You are not',
     ];
     
     if (nonCriticalErrors.some(keyword => message.includes(keyword))) {

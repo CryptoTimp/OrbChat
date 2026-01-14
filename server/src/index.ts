@@ -204,8 +204,22 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     }
     
     // Get all players in room (including the one we just added)
-    const allPlayers = rooms.getPlayersInRoom(roomId);
-    console.log(`Room ${roomId} (${roomMapType}) now has ${allPlayers.length} players:`, allPlayers.map(p => `${p.name} (${p.id})`));
+    let allPlayers = rooms.getPlayersInRoom(roomId);
+    
+    // Refresh orb values from database for all players (to ensure accurate balances)
+    for (const p of allPlayers) {
+      const dbOrbs = players.getPlayerOrbs(p.id);
+      if (dbOrbs !== undefined && dbOrbs !== p.orbs) {
+        p.orbs = dbOrbs;
+        // Update in room as well
+        const roomPlayer = rooms.getPlayerInRoom(roomId, p.id);
+        if (roomPlayer) {
+          roomPlayer.orbs = dbOrbs;
+        }
+      }
+    }
+    
+    console.log(`Room ${roomId} (${roomMapType}) now has ${allPlayers.length} players:`, allPlayers.map(p => `${p.name} (${p.id}) - ${p.orbs} orbs`));
     
     // Send room state to joining player (include their player ID and map type)
     socket.emit('room_state', {
@@ -232,12 +246,26 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     // Emit player_joined event to notify others
     io.to(roomId).emit('player_joined', player);
     
+    // Refresh orb values from database for all players before broadcasting
+    for (const p of allPlayers) {
+      const dbOrbs = players.getPlayerOrbs(p.id);
+      if (dbOrbs !== undefined && dbOrbs !== p.orbs) {
+        p.orbs = dbOrbs;
+        // Update in room as well
+        const roomPlayer = rooms.getPlayerInRoom(roomId, p.id);
+        if (roomPlayer) {
+          roomPlayer.orbs = dbOrbs;
+        }
+      }
+    }
+    
     // Broadcast updated room_state to ALL players so everyone has the latest player list
     io.to(roomId).emit('room_state', {
       roomId,
       players: allPlayers,
       orbs: rooms.getOrbsInRoom(roomId),
       shrines: rooms.getShrinesInRoom(roomId),
+      treeStates: rooms.getTreeStatesInRoom(roomId),
       mapType: room.mapType, // Include map type in broadcast
       // Don't send yourPlayerId here since this is a broadcast update
     });
@@ -542,18 +570,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle tree cutting - start cutting
-  socket.on('start_cutting_tree', async ({ treeId }) => {
+  socket.on('start_cutting_tree', ({ treeId }) => {
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
 
     const { playerId, roomId } = mapping;
-    
-    // Check if player owns an axe
-    const hasAxe = db.hasItem(playerId, 'tool_axe');
-    if (!hasAxe) {
-      socket.emit('error', { message: 'You need an axe to cut trees. Buy one from the shop!' });
-      return;
-    }
     
     const success = rooms.setTreeCutting(roomId, treeId, playerId);
     

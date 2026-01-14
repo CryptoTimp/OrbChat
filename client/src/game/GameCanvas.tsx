@@ -412,14 +412,6 @@ export function GameCanvas() {
             
             // Check if player is near tree
             if (isPlayerInTreeRange(localPlayer.x, localPlayer.y, clickedTree)) {
-              // Check if player owns an axe
-              const inventory = useGameStore.getState().inventory;
-              const hasAxe = inventory.some(item => item.itemId === 'tool_axe');
-              if (!hasAxe) {
-                addNotification('You need an axe to cut trees. Buy one from the shop!', 'error');
-                return;
-              }
-              
               // Player is near tree, start cutting immediately
               const playerId = useGameStore.getState().playerId;
               const duration = 5000; // 5 seconds
@@ -777,6 +769,8 @@ export function GameCanvas() {
         cuttingTreeRef.current = null;
         setCuttingTree(null);
         lastChopSoundSecondRef.current = -1; // Reset sound tracking
+        // Clear pending tree interaction to prevent trying to cut again
+        pendingTreeInteractionRef.current = null;
       }
     } else {
       setCuttingTree(null);
@@ -953,15 +947,11 @@ export function GameCanvas() {
           const treeStates = useGameStore.getState().treeStates;
           const treeState = treeStates.get(treeId);
           
-          // Check if tree is still available
+          // Check if tree is still available (not cut and not being cut by someone else)
           if (!treeState || (!treeState.isCut && treeState.cutBy === null)) {
-            // Check if player owns an axe
-            const inventory = useGameStore.getState().inventory;
-            const hasAxe = inventory.some(item => item.itemId === 'tool_axe');
-            if (!hasAxe) {
-              addNotification('You need an axe to cut trees. Buy one from the shop!', 'error');
-              pendingTreeInteractionRef.current = null;
-              setClickTarget(null, null);
+            // Double-check: if we're already cutting this tree, don't start again
+            if (cuttingTreeRef.current?.treeId === treeId) {
+              // Already cutting this tree, don't start again
               return;
             }
             
