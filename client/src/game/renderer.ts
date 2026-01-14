@@ -1,4 +1,5 @@
 import { PlayerWithChat, Orb, GAME_CONSTANTS, CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, MapType, ShopItem, ItemRarity, Direction, Shrine } from '../types';
+import { Camera, worldToScreen, isVisible } from './Camera';
 
 const { TILE_SIZE, SCALE, MAP_WIDTH, MAP_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ORB_SIZE } = GAME_CONSTANTS;
 
@@ -3101,7 +3102,7 @@ const LEGENDARY_ITEMS_BY_CATEGORY: Record<string, string[]> = {
   wings: ['acc_wings_golden', 'acc_wings_phoenix', 'acc_wings_void', 'acc_wings_celestial', 'acc_wings_galaxy', 'acc_wings_rainbow'],
   accessories: ['acc_aura_golden', 'acc_aura_phoenix', 'acc_aura_void', 'acc_aura_celestial', 'acc_aura_galaxy', 'acc_aura_rainbow', 'acc_weapon_golden', 'acc_weapon_phoenix', 'acc_weapon_void', 'acc_weapon_celestial', 'acc_weapon_galaxy', 'acc_weapon_rainbow'],
   boosts: ['boost_sonic', 'boost_phantom', 'boost_orb_platinum', 'boost_orb_divine'],
-  pets: ['pet_golden', 'pet_phoenix', 'pet_void', 'pet_celestial', 'pet_galaxy', 'pet_rainbow'],
+  pets: ['pet_golden', 'pet_phoenix', 'pet_void', 'pet_celestial', 'pet_galaxy', 'pet_rainbow', 'pet_mini_me'],
 };
 
 // NPC rotation state - tracks starting offset for each NPC (for variety)
@@ -10144,7 +10145,8 @@ export function drawPet(
   playerX: number,
   playerY: number,
   playerDirection: Direction,
-  time: number
+  time: number,
+  player?: PlayerWithChat // Optional player object for mini me pet
 ): void {
   const p = SCALE;
   let petState = petStates.get(playerId);
@@ -10159,8 +10161,14 @@ export function drawPet(
     petStates.set(playerId, petState);
   }
   
+  // Check if player has wings equipped - if so, offset pet further left
+  const hasWings = player && player.sprite.outfit.some(itemId => 
+    itemId.startsWith('acc_wings_') || itemId.includes('wings')
+  );
+  const wingOffset = hasWings ? -10 : 0; // Additional offset when wings are equipped
+  
   // Simply position pet to the left of player (smoothly follow)
-  const targetX = playerX + PET_OFFSET_X;
+  const targetX = playerX + PET_OFFSET_X + wingOffset;
   const targetY = playerY + PET_OFFSET_Y;
   
   // Smoothly move pet to target position
@@ -10200,6 +10208,10 @@ export function drawPet(
     drawGalaxyPet(ctx, petScaledX, finalY, p, time);
   } else if (petItemId === 'pet_rainbow') {
     drawRainbowPet(ctx, petScaledX, finalY, p, time);
+  } else if (petItemId === 'pet_mini_me') {
+    if (player) {
+      drawMiniMePet(ctx, petScaledX, finalY, p, time, player, playerDirection);
+    }
   }
 }
 
@@ -10407,6 +10419,183 @@ export function drawRainbowPet(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.fillRect(centerX + size * 0.1, centerY - size * 0.2, 2 * p, 2 * p);
 }
 
+// Draw player direction arrows at screen edges (for off-screen players)
+export function drawPlayerDirectionArrows(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  players: Map<string, PlayerWithChat>,
+  localPlayerId: string | null,
+  canvasWidth: number,
+  canvasHeight: number
+): void {
+  if (!localPlayerId) return;
+  
+  const localPlayer = players.get(localPlayerId);
+  if (!localPlayer) return;
+  
+  const arrowSize = 16;
+  const edgePadding = 25; // Distance from edge
+  const opacity = 0.5; // 50% opacity
+  
+  // Local player position in screen coordinates (center of screen)
+  const centerX = canvasWidth / 2;
+  const centerY = canvasHeight / 2;
+  
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  
+  for (const [playerId, player] of players.entries()) {
+    if (playerId === localPlayerId) continue;
+    if (typeof player.x !== 'number' || typeof player.y !== 'number') continue;
+    
+    // Convert player world position to screen coordinates
+    const playerScreenPos = worldToScreen(camera, player.x, player.y);
+    
+    // Check if player is off-screen (with some margin)
+    const margin = 50;
+    const isOnScreen = playerScreenPos.x >= -margin && playerScreenPos.x <= canvasWidth + margin &&
+                       playerScreenPos.y >= -margin && playerScreenPos.y <= canvasHeight + margin;
+    
+    if (isOnScreen) continue; // Skip players that are visible
+    
+    // Calculate direction from center (local player) to other player in screen space
+    const dx = playerScreenPos.x - centerX;
+    const dy = playerScreenPos.y - centerY;
+    const angle = Math.atan2(dy, dx);
+    
+    // Calculate arrow position at screen edge
+    let arrowX = centerX;
+    let arrowY = centerY;
+    
+    // Find intersection with screen edge
+    const halfWidth = canvasWidth / 2 - edgePadding;
+    const halfHeight = canvasHeight / 2 - edgePadding;
+    
+    // Calculate which edge the arrow should be on
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    
+    if (absDx / halfWidth > absDy / halfHeight) {
+      // Closer to left/right edge
+      arrowX = dx > 0 ? canvasWidth - edgePadding : edgePadding;
+      arrowY = centerY + dy * (halfWidth / absDx);
+      arrowY = Math.max(edgePadding, Math.min(canvasHeight - edgePadding, arrowY));
+    } else {
+      // Closer to top/bottom edge
+      arrowY = dy > 0 ? canvasHeight - edgePadding : edgePadding;
+      arrowX = centerX + dx * (halfHeight / absDy);
+      arrowX = Math.max(edgePadding, Math.min(canvasWidth - edgePadding, arrowX));
+    }
+    
+    // Draw arrow
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    
+    ctx.save();
+    ctx.translate(arrowX, arrowY);
+    ctx.rotate(angle);
+    
+    // Draw arrow shape (pointing right, will be rotated)
+    ctx.beginPath();
+    ctx.moveTo(arrowSize, 0);
+    ctx.lineTo(-arrowSize * 0.6, -arrowSize * 0.4);
+    ctx.lineTo(-arrowSize * 0.3, 0);
+    ctx.lineTo(-arrowSize * 0.6, arrowSize * 0.4);
+    ctx.closePath();
+    
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  ctx.restore();
+}
+
+// Draw mini me pet - a scaled-down copy of the player
+export function drawMiniMePet(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  p: number,
+  time: number,
+  player: PlayerWithChat,
+  direction: Direction
+): void {
+  // Mini me scale factor (0.5 = half size)
+  const MINI_SCALE = 0.5;
+  
+  // Save context state
+  ctx.save();
+  
+  // x and y are already in scaled coordinates (petScaledX, finalY)
+  // Convert to unscaled world coordinates for drawPlayer
+  const unscaledX = x / SCALE;
+  const unscaledY = y / SCALE;
+  
+  // Create a mini player object with the same outfit (excluding the pet itself)
+  // Use a unique ID for the mini me pet to avoid animation state conflicts
+  const miniPlayer: PlayerWithChat = {
+    ...player,
+    id: `${player.id}_mini_me`, // Unique ID to prevent animation state conflicts
+    x: unscaledX,
+    y: unscaledY,
+    direction: direction,
+    sprite: {
+      ...player.sprite,
+      outfit: player.sprite.outfit.filter(itemId => !itemId.startsWith('pet_')) // Remove pet items
+    }
+  };
+  
+  // Apply scale transform to make the player half size
+  // The key insight: drawPlayer expects unscaled coordinates and scales them internally
+  // So we pass unscaled coordinates, drawPlayer scales them to (x, y)
+  // Then we apply a 0.5x scale transform to make everything half size
+  // We need to scale around the top-left corner (x, y) so the player stays in the right position
+  
+  // Scale around the pet position (top-left corner)
+  ctx.translate(x, y);
+  ctx.scale(MINI_SCALE, MINI_SCALE);
+  ctx.translate(-x, -y);
+  
+  // Draw the mini player (skip nameplate)
+  // drawPlayer will scale unscaledX/unscaledY by SCALE to get back to (x, y)
+  // Then our transform will scale it by 0.5, making it half size at the correct position
+  drawPlayer(ctx, miniPlayer, false, time, true);
+  
+  // Restore context state
+  ctx.restore();
+}
+
+// Draw mini me pet preview for shop/inventory
+export function drawMiniMePetPreview(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  p: number,
+  time: number
+): void {
+  // Draw a simple placeholder - a small generic character
+  const MINI_SCALE = 0.5;
+  const size = 8 * p * MINI_SCALE;
+  const centerX = cx;
+  const centerY = cy;
+  
+  // Simple body
+  ctx.fillStyle = '#8B4513'; // Brown
+  ctx.fillRect(centerX - size / 2, centerY - size / 2, size, size);
+  
+  // Simple head
+  ctx.fillStyle = '#FFDBAC'; // Skin color
+  ctx.fillRect(centerX - size / 3, centerY - size, size * 2 / 3, size * 2 / 3);
+  
+  // Eyes
+  ctx.fillStyle = '#2c2c2c';
+  ctx.fillRect(centerX - size / 4, centerY - size * 0.7, 1 * p, 1 * p);
+  ctx.fillRect(centerX + size / 4 - 1 * p, centerY - size * 0.7, 1 * p, 1 * p);
+}
+
 // Draw pet preview for shop/inventory icons
 export function drawPetPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: number, cy: number, p: number, time: number = 0): void {
   // Add bobbing animation for preview
@@ -10426,5 +10615,8 @@ export function drawPetPreview(ctx: CanvasRenderingContext2D, itemId: string, cx
     drawGalaxyPet(ctx, cx, previewY, p, time);
   } else if (itemId === 'pet_rainbow') {
     drawRainbowPet(ctx, cx, previewY, p, time);
+  } else if (itemId === 'pet_mini_me') {
+    // For preview, draw a simple placeholder (mini me needs player data)
+    drawMiniMePetPreview(ctx, cx, previewY, p, time);
   }
 }

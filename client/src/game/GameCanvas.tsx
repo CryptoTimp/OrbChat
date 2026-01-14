@@ -58,7 +58,8 @@ import {
   updateCenturionPlayers,
   getClickedNPC,
   handleNPCClick,
-  drawNameTag
+  drawNameTag,
+  drawPlayerDirectionArrows
 } from './renderer';
 import { 
   calculateMovement, 
@@ -788,12 +789,14 @@ export function GameCanvas() {
     }
     
     // Handle local player movement
-    if (currentLocalPlayer) {
+    // Get fresh localPlayer from store each frame to ensure equipped items are up-to-date
+    const freshLocalPlayer = useGameStore.getState().localPlayer;
+    if (freshLocalPlayer) {
       const keys = getKeys();
       
-      // Calculate speed multiplier from equipped boosts
+      // Calculate speed multiplier from equipped boosts (always get fresh outfit from store)
       let speedMultiplier = 1.0;
-      const equippedOutfit = currentLocalPlayer.sprite?.outfit || [];
+      const equippedOutfit = freshLocalPlayer.sprite?.outfit || [];
       for (const itemId of equippedOutfit) {
         const item = shopItems.find(s => s.id === itemId);
         if (item?.speedMultiplier && isFinite(item.speedMultiplier)) {
@@ -844,9 +847,10 @@ export function GameCanvas() {
       }
       
       // Lock player position if cutting a tree
-      let newX = currentLocalPlayer.x;
-      let newY = currentLocalPlayer.y;
-      let newDirection = currentLocalPlayer.direction;
+      // Use freshLocalPlayer to ensure we have the latest equipped items for speed calculation
+      let newX = freshLocalPlayer.x;
+      let newY = freshLocalPlayer.y;
+      let newDirection = freshLocalPlayer.direction;
       let moved = false;
       
       // Cancel tree cutting if WASD keys are pressed
@@ -864,10 +868,10 @@ export function GameCanvas() {
       }
       
       if (!cuttingTreeRef.current) {
-        // Normal movement
+        // Normal movement - use freshLocalPlayer to get latest position and equipped items
         const movement = calculateMovement(
-          currentLocalPlayer.x,
-          currentLocalPlayer.y,
+          freshLocalPlayer.x,
+          freshLocalPlayer.y,
           keys,
           deltaTime,
           speedMultiplier,
@@ -881,7 +885,7 @@ export function GameCanvas() {
         moved = movement.moved;
       } else {
         // Player is cutting, lock position and set animation to 'chop'
-        newDirection = currentLocalPlayer.direction; // Keep facing the tree
+        newDirection = freshLocalPlayer.direction; // Keep facing the tree
         // Don't update position
       }
       
@@ -1347,7 +1351,7 @@ export function GameCanvas() {
     for (const { player } of npcs) {
       const petItemId = player.sprite.outfit.find(itemId => itemId.startsWith('pet_'));
       if (petItemId) {
-        drawPet(ctx, player.id, petItemId, player.x, player.y, player.direction, currentTime);
+        drawPet(ctx, player.id, petItemId, player.x, player.y, player.direction, currentTime, player);
       }
     }
     
@@ -1367,7 +1371,7 @@ export function GameCanvas() {
     for (const { player } of realPlayers) {
       const petItemId = player.sprite.outfit.find(itemId => itemId.startsWith('pet_'));
       if (petItemId) {
-        drawPet(ctx, player.id, petItemId, player.x, player.y, player.direction, currentTime);
+        drawPet(ctx, player.id, petItemId, player.x, player.y, player.direction, currentTime, player);
       }
     }
     
@@ -1527,6 +1531,13 @@ export function GameCanvas() {
     
     // Draw floating texts ("+X" for orb collection)
     drawFloatingTexts(ctx);
+    
+    // Draw player direction arrows at screen edges (for off-screen players)
+    // Reset transform to screen coordinates for UI overlay
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawPlayerDirectionArrows(ctx, camera, currentPlayers, currentPlayerId, canvasSize.width, canvasSize.height);
+    ctx.restore();
     
     ctx.restore();
     
