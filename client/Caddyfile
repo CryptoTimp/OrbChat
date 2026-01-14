@@ -1,7 +1,10 @@
-:{$PORT}
-
-root * dist
-
-file_server
-
-try_files {path} /index.html
+:{$PORT} {
+	root * dist
+	encode zstd gzip
+	file_server
+	try_files {path} /index.html
+	log {
+		output stdout
+		format console
+	}
+}
