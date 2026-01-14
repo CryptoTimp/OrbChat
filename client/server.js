@@ -27,15 +27,30 @@ if (existsSync(distPath)) {
   }
 }
 
+// Log all requests
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
+
 // Serve static files from the dist directory
-app.use(express.static(distPath));
+app.use(express.static(distPath, {
+  index: 'index.html',
+  extensions: ['html']
+}));
 
 // Handle React Router - serve index.html for all routes
 app.get('*', (req, res) => {
-  console.log('Requested path:', req.path);
+  console.log('Catch-all route hit for:', req.path);
   if (existsSync(indexPath)) {
-    res.sendFile(indexPath);
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error('Error sending index.html:', err);
+        res.status(500).send('Error serving index.html');
+      }
+    });
   } else {
+    console.error('index.html not found at:', indexPath);
     res.status(404).send('index.html not found');
   }
 });
