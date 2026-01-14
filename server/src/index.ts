@@ -384,15 +384,17 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const orb = rooms.collectOrb(roomId, orbId, playerId);
     
     if (orb) {
-      // Get player's current orbs from database (source of truth) instead of room state
-      const currentOrbs = players.getPlayerOrbs(playerId);
-      
-      // Get player from room state for multiplier calculation
+      // Get player from room state (client already updates Firebase, so we use room state as source)
       const player = rooms.getPlayerInRoom(roomId, playerId);
+      if (!player) return;
+      
+      // Use player's current orb balance from room state (client keeps this in sync with Firebase)
+      // This matches the pattern used in purchase_item and purchase_lootbox where client is source of truth
+      const currentOrbs = player.orbs || 0;
       
       // Calculate orb multiplier from equipped items
       let orbMultiplier = 1.0;
-      if (player && player.sprite?.outfit) {
+      if (player.sprite?.outfit) {
         const shopItems = shop.getShopItems();
         for (const itemId of player.sprite.outfit) {
           const item = shopItems.find(s => s.id === itemId);
@@ -407,13 +409,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const actualOrbValue = Math.floor(orb.value * orbMultiplier);
       const newBalance = currentOrbs + actualOrbValue;
       
-      // Update database (source of truth)
-      await players.updatePlayerOrbs(playerId, newBalance);
+      // Update room state (client will update Firebase and sync back via player_orbs_updated)
+      player.orbs = newBalance;
       
-      // Update player in room state to keep it in sync
-      if (player) {
-        player.orbs = newBalance;
-      }
+      // Update local database to keep it in sync (same pattern as purchase_item)
+      await players.updatePlayerOrbs(playerId, newBalance);
       
       // Broadcast collection and orb balance update to all players
       io.to(roomId).emit('orb_collected', { 

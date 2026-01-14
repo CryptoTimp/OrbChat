@@ -194,14 +194,26 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   // Room state actions
   setRoomState: (playersList, orbs, shrines, treeStates) => {
+    const currentState = get();
     const players = new Map<string, PlayerWithChat>();
-    const state = get();
     
+    // Preserve existing orb counts for players when new data doesn't include orb count
+    // This prevents resetting orb counts when room_state is received without orb data
     for (const player of playersList) {
-      players.set(player.id, player);
+      // If player exists in current state and has an orb count, preserve it if new player data doesn't include orbs
+      const existingPlayer = currentState.players.get(player.id);
+      if (existingPlayer && existingPlayer.orbs !== undefined && existingPlayer.orbs !== null && 
+          (player.orbs === undefined || player.orbs === null)) {
+        // Preserve existing orb count if new player data doesn't include orb count (undefined/null)
+        // Note: 0 is a valid orb count, so we don't preserve if new player has 0
+        players.set(player.id, { ...player, orbs: existingPlayer.orbs });
+      } else {
+        // Use new player data (has orb count or is a new player)
+        players.set(player.id, player);
+      }
       
       // Identify local player
-      if (player.id === state.playerId) {
+      if (player.id === currentState.playerId) {
         set({ localPlayer: player });
       }
     }
@@ -217,10 +229,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   
   setRoomStateWithLocalPlayer: (playersList, orbs, shrines, localPlayer, treeStates) => {
+    const currentState = get();
     const players = new Map<string, PlayerWithChat>();
     
+    // Preserve existing orb counts for players when new data doesn't include orb count
+    // This prevents resetting orb counts when room_state is received without orb data
     for (const player of playersList) {
-      players.set(player.id, player);
+      // If player exists in current state and has an orb count, preserve it if new player data doesn't include orbs
+      const existingPlayer = currentState.players.get(player.id);
+      if (existingPlayer && existingPlayer.orbs !== undefined && existingPlayer.orbs !== null && 
+          (player.orbs === undefined || player.orbs === null)) {
+        // Preserve existing orb count if new player data doesn't include orb count (undefined/null)
+        // Note: 0 is a valid orb count, so we don't preserve if new player has 0
+        players.set(player.id, { ...player, orbs: existingPlayer.orbs });
+      } else {
+        // Use new player data (has orb count or is a new player)
+        players.set(player.id, player);
+      }
     }
     
     const treeStatesMap = new Map<string, TreeState>();

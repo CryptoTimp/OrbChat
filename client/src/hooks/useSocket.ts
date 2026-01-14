@@ -363,8 +363,19 @@ function attachListeners(sock: Socket) {
       // For our own balance update, sync from Firebase (source of truth)
       await syncOrbsFromFirebase(playerId);
     } else {
-      // For other players, just update from server
-      state.updatePlayerOrbs(playerId, orbs);
+      // For other players, update the balance
+      // We trust server updates for purchases/transactions (they decrease balance)
+      // But we're more careful with orb collection updates (they should only increase)
+      const currentPlayer = state.players.get(playerId);
+      const currentOrbs = currentPlayer?.orbs;
+      
+      // Always update if:
+      // 1. Player doesn't exist yet (new player)
+      // 2. Current balance is 0 or undefined (initial state)
+      // 3. New balance is different (could be increase or decrease from purchases)
+      if (!currentPlayer || currentOrbs === undefined || currentOrbs === null || currentOrbs === 0 || orbs !== currentOrbs) {
+        state.updatePlayerOrbs(playerId, orbs);
+      }
     }
   });
   
