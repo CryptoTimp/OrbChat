@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "start": "http-server dist -p $PORT -a 0.0.0.0"
+    "start": "http-server dist -p $PORT --address 0.0.0.0"
   },
   "dependencies": {
     "firebase": "^12.7.0",
