@@ -120,9 +120,9 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       }
       
       const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
-      let price = 1000;
+      let price = 2500;
       if (category === 'wings') {
-        price = 100000;
+        price = 500000;
       } else if (category === 'pets') {
         price = 900000;
       } else if (onlyLegendary) {
@@ -168,6 +168,49 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   const itemAlreadyOwnedRef = useRef(false); // Track if the selected item was already owned
   const pendingSelectedItemRef = useRef<ShopItem | null>(null); // Track item to display even during re-renders
   const isOpeningRef = useRef(false); // Synchronous ref to prevent spam clicking
+  
+  // Cleanup function to stop all animations and sounds
+  const cleanup = useCallback(() => {
+    setIsOpening(false);
+    isOpeningRef.current = false;
+    
+    // Cancel animation
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    
+    // Stop all active tick sounds
+    activeTickSoundsRef.current.forEach(sound => {
+      sound.pause();
+      sound.currentTime = 0;
+    });
+    activeTickSoundsRef.current = [];
+  }, []);
+  
+  // Handle Escape key to close modal
+  useEffect(() => {
+    if (!lootBox) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        playCloseSound();
+        cleanup();
+        onClose();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [lootBox, onClose, cleanup]);
   
   // Get orbs directly from store so it updates when purchase completes
   const playerOrbs = useGameStore(state => state.localPlayer?.orbs || 0);
@@ -243,7 +286,6 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   // Check if selected item was already owned BEFORE purchase (use ref, not current inventory)
   // The current inventory check would be wrong because purchaseLootBox adds the item to inventory
   const isItemOwned = selectedItem ? itemAlreadyOwnedRef.current : false;
-  const refundAmount = (lootBox && isItemOwned) ? Math.floor(lootBox.price / 2) : 0;
   
   // Sort items by rarity (legendary to common) for display - highest rarity at top
   const sortedItems = useMemo(() => {
@@ -257,25 +299,6 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     });
   }, [normalizedItems]);
   
-  // Cleanup function to stop all animations and sounds
-  const cleanup = useCallback(() => {
-    setIsOpening(false);
-    isOpeningRef.current = false;
-    
-    // Cancel animation
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    
-    // Stop all active tick sounds
-    activeTickSoundsRef.current.forEach(sound => {
-      sound.pause();
-      sound.currentTime = 0;
-    });
-    activeTickSoundsRef.current = [];
-  }, []);
-
   // Weighted random selection (uses original order, not sorted)
   const selectRandomItem = useCallback((): ShopItem => {
     if (!lootBox || normalizedItems.length === 0) {
@@ -464,18 +487,6 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               playLevelUpSound();
             }
             
-            // If item is already owned, add refund immediately (optimistic)
-            if (itemAlreadyOwnedRef.current) {
-              const refundAmount = Math.floor(lootBox.price / 2);
-              const currentState = useGameStore.getState();
-              const currentOrbs = currentState.localPlayer?.orbs || optimisticOrbs;
-              const refundedOrbs = currentOrbs + refundAmount;
-              currentState.updatePlayerOrbs(currentState.playerId || '', refundedOrbs);
-              if (currentState.localPlayer) {
-                currentState.localPlayer.orbs = refundedOrbs;
-              }
-            }
-            
             // Purchase the loot box after animation completes (will sync with Firebase)
             purchaseLootBox(lootBox.id, item.id, lootBox.price);
             
@@ -620,9 +631,9 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           animation: crate-wobble 1.5s ease-in-out infinite;
         }
       `}</style>
-      <div className="fixed inset-0 flex items-center justify-start z-50 p-4 pointer-events-none">
+      <div className="fixed inset-0 flex items-start justify-start z-50 p-4 pointer-events-none">
         <div 
-          className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-[800px] max-h-[85vh] overflow-hidden flex flex-col pointer-events-auto ml-4 relative" 
+          className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-[800px] h-[95vh] overflow-hidden flex flex-col pointer-events-auto ml-4 mt-4 relative" 
           style={{ boxShadow: '0 0 30px rgba(251, 191, 36, 0.5), 0 0 60px rgba(0, 0, 0, 0.8)' }}
           onContextMenu={(e) => e.preventDefault()}
         >
@@ -775,14 +786,9 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                         </p>
                       </div>
                       {isItemOwned ? (
-                        <div className="mt-2">
-                          <p className="text-yellow-400 font-pixel text-xs mb-1 text-center">
-                            ⚠️ You already own this item!
-                          </p>
-                          <p className="text-cyan-300 font-pixel text-xs text-center">
-                            Refunded {refundAmount.toLocaleString()} orbs ({lootBox ? Math.floor((refundAmount / lootBox.price) * 100) : 50}% of case value)
-                          </p>
-                        </div>
+                        <p className="text-yellow-400 font-pixel text-xs mt-2 text-center">
+                          ⚠️ You already own this item!
+                        </p>
                       ) : (
                         <p className="text-gray-300 font-pixel text-xs mt-2 text-center">
                           You received a {displayItem.rarity || 'common'} item!

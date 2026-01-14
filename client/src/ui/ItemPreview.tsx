@@ -1941,7 +1941,7 @@ function drawCapePreview(ctx: CanvasRenderingContext2D, itemId: string, cx: numb
     'cape_purple': { main: '#8e44ad', accent: '#9b59b6' },
     'cape_royal': { main: '#9b59b6', accent: '#f1c40f', pattern: 'trim' },
     'cape_knight': { main: '#34495e', accent: '#95a5a6', pattern: 'trim' },
-    'cape_wizard': { main: '#2c3e50', accent: '#f1c40f', pattern: 'stars' },
+    'cape_wizard': { main: '#2c3e50', accent: '#f1c40f', pattern: 'trim' },
     'cape_vampire': { main: '#1a0a0a', accent: '#8b0000', pattern: 'trim' },
     'cape_ninja': { main: '#0a0a0a', accent: '#1a1a1a' },
     'cape_pirate': { main: '#2c1810', accent: '#f1c40f', pattern: 'trim' },

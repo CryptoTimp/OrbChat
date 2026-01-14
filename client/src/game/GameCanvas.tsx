@@ -654,6 +654,7 @@ export function GameCanvas() {
     const currentPlayerId = useGameStore.getState().playerId;
     const currentMapType = useGameStore.getState().mapType || 'cafe';
     const currentClickTarget = useGameStore.getState().clickTarget;
+    const selectedLootBox = useGameStore.getState().selectedLootBox;
     
     // Track other players cutting trees and update chopping animation
     if (currentMapType === 'forest') {
@@ -931,7 +932,16 @@ export function GameCanvas() {
         lastChopSoundSecondRef.current = -1;
       }
       
-      if (!cuttingTreeRef.current) {
+      // Block movement if loot box modal is open
+      if (selectedLootBox) {
+        // Clear click target when modal opens
+        if (currentClickTarget) {
+          useGameStore.getState().setClickTarget(null, null);
+        }
+        // Don't update position - keep player locked
+        newDirection = freshLocalPlayer.direction;
+        // Don't update position
+      } else if (!cuttingTreeRef.current) {
         // Normal movement - use freshLocalPlayer to get latest position and equipped items
         const movement = calculateMovement(
           freshLocalPlayer.x,

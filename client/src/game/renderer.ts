@@ -7930,7 +7930,7 @@ const CAPE_COLORS: Record<string, { main: string; accent?: string; trim?: string
   // Themed capes
   'cape_royal': { main: '#9b59b6', accent: '#8e44ad', trim: '#f1c40f' },
   'cape_knight': { main: '#34495e', accent: '#2c3e50', trim: '#95a5a6' },
-  'cape_wizard': { main: '#2c3e50', accent: '#34495e', pattern: 'stars' },
+  'cape_wizard': { main: '#2c3e50', accent: '#34495e', pattern: 'trim' },
   'cape_vampire': { main: '#1a0a0a', accent: '#4a0000', trim: '#8b0000' },
   'cape_ninja': { main: '#0a0a0a', accent: '#1a1a1a' },
   'cape_pirate': { main: '#2c1810', accent: '#3d2314', trim: '#f1c40f' },

@@ -111,10 +111,10 @@ export function ShopModal() {
       
       // Check if case only contains legendary items
       const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
-      // Wings case costs 100k, pet case costs 900k, legendary-only cases cost 200k, others cost 1k
-      let price = 1000;
+      // Wings case costs 500k, pet case costs 900k, legendary-only cases cost 200k, others cost 2.5k
+      let price = 2500;
       if (category === 'wings') {
-        price = 100000;
+        price = 500000;
       } else if (category === 'pets') {
         price = 900000;
       } else if (onlyLegendary) {
@@ -125,7 +125,7 @@ export function ShopModal() {
         id: `lootbox_${category}`,
         name: `${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
         category,
-        price, // Wings: 100k, pet: 900k, legendary-only: 200k, others: 1k
+        price, // Wings: 500k, pet: 900k, legendary-only: 200k, others: 2.5k
         items: itemsWithChances,
       } as LootBox;
     }).filter((box): box is LootBox => box !== null);
@@ -1048,10 +1048,10 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
       
       // Check if case only contains legendary items
       const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
-      // Wings case costs 100k, pet case costs 900k, legendary-only cases cost 200k, others cost 1k
-      let price = 1000;
+      // Wings case costs 500k, pet case costs 900k, legendary-only cases cost 200k, others cost 2.5k
+      let price = 2500;
       if (category === 'wings') {
-        price = 100000;
+        price = 500000;
       } else if (category === 'pets') {
         price = 900000;
       } else if (onlyLegendary) {
@@ -1062,7 +1062,7 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
         id: `lootbox_${category}`,
         name: `${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
         category,
-        price, // Wings: 100k, legendary-only: 200k, others: 1k
+        price, // Wings: 500k, legendary-only: 200k, others: 2.5k
         items: normalizedItems,
       } as LootBox;
     }).filter((box): box is LootBox => box !== null);

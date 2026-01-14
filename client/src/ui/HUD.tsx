@@ -117,9 +117,9 @@ export function HUD({ onLeaveRoom }: HUDProps) {
       }
       
       const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
-      let price = 1000;
+      let price = 2500;
       if (category === 'wings') {
-        price = 100000;
+        price = 500000;
       } else if (category === 'pets') {
         price = 900000;
       } else if (onlyLegendary) {

@@ -786,9 +786,8 @@ export function useSocket() {
       let newInventory: string[];
       
       if (alreadyOwned) {
-        // If already owned, refund half the case price
-        const refundAmount = Math.floor(lootBoxPrice / 2);
-        newOrbs = firebaseOrbs - lootBoxPrice + refundAmount; // Deduct full price, add back half
+        // If already owned, deduct full price (no refund)
+        newOrbs = firebaseOrbs - lootBoxPrice;
         newInventory = firebaseInventory; // Don't add item to inventory
       } else {
         // Normal purchase: deduct orbs and add selected item to inventory
@@ -820,8 +819,8 @@ export function useSocket() {
       // Now update Firebase (this happens asynchronously, but UI is already updated)
       if (alreadyOwned) {
         await updateUserOrbs(playerId, newOrbs);
-        addNotification(`Item already owned! Refunded ${Math.floor(lootBoxPrice / 2)} orbs.`, 'success');
-        console.log('Loot box item already owned, refunded half price:', Math.floor(lootBoxPrice / 2), 'new orbs:', newOrbs);
+        addNotification(`Item already owned!`, 'info');
+        console.log('Loot box item already owned, no refund. new orbs:', newOrbs);
       } else {
         await Promise.all([
           updateUserOrbs(playerId, newOrbs),
