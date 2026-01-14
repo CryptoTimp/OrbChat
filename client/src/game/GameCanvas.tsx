@@ -69,6 +69,7 @@ import {
   setTargetPosition 
 } from './Player';
 import { playShopBellSound, playOrbCollectionSound, playShrineRejectionSound, playClickSound, playLogReceivedSound, playChoppingSound } from '../utils/sounds';
+import { addNotification } from '../ui/Notifications';
 import { 
   Camera, 
   createCamera, 
@@ -411,6 +412,14 @@ export function GameCanvas() {
             
             // Check if player is near tree
             if (isPlayerInTreeRange(localPlayer.x, localPlayer.y, clickedTree)) {
+              // Check if player owns an axe
+              const inventory = useGameStore.getState().inventory;
+              const hasAxe = inventory.some(item => item.itemId === 'tool_axe');
+              if (!hasAxe) {
+                addNotification('You need an axe to cut trees. Buy one from the shop!', 'error');
+                return;
+              }
+              
               // Player is near tree, start cutting immediately
               const playerId = useGameStore.getState().playerId;
               const duration = 5000; // 5 seconds
@@ -946,6 +955,16 @@ export function GameCanvas() {
           
           // Check if tree is still available
           if (!treeState || (!treeState.isCut && treeState.cutBy === null)) {
+            // Check if player owns an axe
+            const inventory = useGameStore.getState().inventory;
+            const hasAxe = inventory.some(item => item.itemId === 'tool_axe');
+            if (!hasAxe) {
+              addNotification('You need an axe to cut trees. Buy one from the shop!', 'error');
+              pendingTreeInteractionRef.current = null;
+              setClickTarget(null, null);
+              return;
+            }
+            
             const duration = 5000; // 5 seconds
             const startTime = Date.now();
             const startX = x;

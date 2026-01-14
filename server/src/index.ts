@@ -4,6 +4,7 @@ import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import { initializeDatabase } from './db';
+import * as db from './db';
 import * as rooms from './rooms';
 import * as players from './players';
 import * as shop from './shop';
@@ -521,11 +522,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle tree cutting - start cutting
-  socket.on('start_cutting_tree', ({ treeId }) => {
+  socket.on('start_cutting_tree', async ({ treeId }) => {
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
 
     const { playerId, roomId } = mapping;
+    
+    // Check if player owns an axe
+    const hasAxe = db.hasItem(playerId, 'tool_axe');
+    if (!hasAxe) {
+      socket.emit('error', { message: 'You need an axe to cut trees. Buy one from the shop!' });
+      return;
+    }
+    
     const success = rooms.setTreeCutting(roomId, treeId, playerId);
     
     if (!success) {

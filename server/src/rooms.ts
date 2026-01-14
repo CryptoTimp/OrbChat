@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import { Room, PlayerWithChat, Orb, GAME_CONSTANTS, MapType, OrbType, RoomInfo, Shrine, TreeState } from './types';
+import * as players from './players';
 
 // Global room IDs that persist even when empty
 export const GLOBAL_ROOM_IDS = ['eu-1', 'eu-2', 'eu-3'];
@@ -491,8 +492,12 @@ export function interactWithShrine(
   }
 
   const MIN_ORBS_REQUIRED = 250000;
-  const playerOrbs = player.orbs || 0;
-  console.log(`[Shrine] Player ${playerId} has ${playerOrbs} orbs, required: ${MIN_ORBS_REQUIRED}`);
+  // Get orb balance from database (source of truth) instead of room state
+  // This ensures we have the latest balance even if room state is out of sync
+  const playerOrbs = players.getPlayerOrbs(playerId);
+  // Update room state to keep it in sync
+  player.orbs = playerOrbs;
+  console.log(`[Shrine] Player ${playerId} has ${playerOrbs} orbs (from DB), required: ${MIN_ORBS_REQUIRED}`);
   if (playerOrbs < MIN_ORBS_REQUIRED) {
     return { 
       success: false, 
@@ -527,7 +532,7 @@ export function interactWithShrine(
     // Determine orb count (3-8 orbs) - this is how many red shrine orbs to spawn
     const orbCount = 3 + Math.floor(Math.random() * 6);
     
-    // Calculate total value that would be rewarded (5000-15000 per orb, weighted)
+    // Calculate total value that would be rewarded (1000-5000 per orb, weighted)
     // Sum up the total value across all orbs
     let totalValue = 0;
     
@@ -536,20 +541,20 @@ export function interactWithShrine(
       let orbValue: number;
       
       if (valueRoll < 0.5) {
-        // 50% chance: 5000-7500
-        orbValue = 5000 + Math.floor(Math.random() * 2501);
+        // 50% chance: 1000-2000
+        orbValue = 1000 + Math.floor(Math.random() * 1001);
       } else if (valueRoll < 0.8) {
-        // 30% chance: 7500-10000
-        orbValue = 7500 + Math.floor(Math.random() * 2501);
+        // 30% chance: 2000-3000
+        orbValue = 2000 + Math.floor(Math.random() * 1001);
       } else if (valueRoll < 0.95) {
-        // 15% chance: 10000-12500
-        orbValue = 10000 + Math.floor(Math.random() * 2501);
+        // 15% chance: 3000-4000
+        orbValue = 3000 + Math.floor(Math.random() * 1001);
       } else if (valueRoll < 0.99) {
-        // 4% chance: 12500-14000
-        orbValue = 12500 + Math.floor(Math.random() * 1501);
+        // 4% chance: 4000-4500
+        orbValue = 4000 + Math.floor(Math.random() * 501);
       } else {
-        // 1% chance: 14000-15000 (very rare)
-        orbValue = 14000 + Math.floor(Math.random() * 1001);
+        // 1% chance: 4500-5000 (very rare)
+        orbValue = 4500 + Math.floor(Math.random() * 501);
       }
       
       totalValue += orbValue;

@@ -496,8 +496,15 @@ function attachListeners(sock: Socket) {
     const state = useGameStore.getState();
     
     if (playerId === state.playerId) {
-      // For our own sale, sync from Firebase (source of truth) since server updated it
-      await syncOrbsFromFirebase(playerId);
+      // For our own sale, use the server's newBalance (source of truth for the transaction)
+      // Also update Firebase to keep it in sync
+      try {
+        await updateUserOrbs(playerId, newBalance);
+      } catch (error) {
+        console.error('Failed to update Firebase orbs after selling logs:', error);
+      }
+      // Update local state with server's confirmed balance
+      state.updatePlayerOrbs(playerId, newBalance);
       addNotification(`Sold ${logCount} log${logCount !== 1 ? 's' : ''} for ${orbsReceived.toLocaleString()} orbs!`, 'success');
     } else {
       // For other players, just update from server
