@@ -470,11 +470,12 @@ export function getShrine(roomId: string, shrineId: string): Shrine | null {
 }
 
 // Interact with a shrine
-export function interactWithShrine(
+export async function interactWithShrine(
   roomId: string,
   shrineId: string,
-  playerId: string
-): { success: boolean; message: string; blessed: boolean; orbCount?: number; totalValue?: number } {
+  playerId: string,
+  firebaseOrbs?: number
+): Promise<{ success: boolean; message: string; blessed: boolean; orbCount?: number; totalValue?: number }> {
   const room = rooms.get(roomId);
   if (!room) {
     return { success: false, message: 'Room not found', blessed: false };
@@ -492,12 +493,37 @@ export function interactWithShrine(
   }
 
   const MIN_ORBS_REQUIRED = 250000;
-  // Get orb balance from database (source of truth) instead of room state
-  // This ensures we have the latest balance even if room state is out of sync
-  const playerOrbs = players.getPlayerOrbs(playerId);
-  // Update room state to keep it in sync
-  player.orbs = playerOrbs;
-  console.log(`[Shrine] Player ${playerId} has ${playerOrbs} orbs (from DB), required: ${MIN_ORBS_REQUIRED}`);
+  // Use Firebase balance from client if provided (client already polled Firebase successfully)
+  // Otherwise try to poll Firebase ourselves, or fall back to room state
+  let playerOrbs = player.orbs || 0;
+  let usedFirebase = false;
+  
+  if (firebaseOrbs !== undefined && firebaseOrbs !== null) {
+    // Client already polled Firebase and sent us the balance - use it (most reliable)
+    playerOrbs = firebaseOrbs;
+    usedFirebase = true;
+    // Update room state to keep it in sync
+    player.orbs = playerOrbs;
+    console.log(`[Shrine] Player ${playerId} has ${playerOrbs} orbs (from client Firebase poll), required: ${MIN_ORBS_REQUIRED}`);
+  } else {
+    // Client didn't send balance, try to poll Firebase ourselves (may fail if credentials not configured)
+    try {
+      const { getUserData } = await import('./firebase');
+      const userData = await getUserData(playerId);
+      if (userData?.orbs !== undefined && userData.orbs !== null) {
+        playerOrbs = userData.orbs;
+        usedFirebase = true;
+        // Update room state to keep it in sync
+        player.orbs = playerOrbs;
+      }
+    } catch (error: any) {
+      // Firebase might not be configured (credential error) - use room state as fallback
+      console.warn(`[Shrine] Failed to get Firebase orb balance for player ${playerId}, using room state:`, error?.message || error);
+      // Fallback to room state if Firebase fails - use whatever we have in room state
+      playerOrbs = player.orbs || 0;
+    }
+    console.log(`[Shrine] Player ${playerId} has ${playerOrbs} orbs (${usedFirebase ? 'from server Firebase poll' : 'from room state'}), required: ${MIN_ORBS_REQUIRED}`);
+  }
   if (playerOrbs < MIN_ORBS_REQUIRED) {
     return { 
       success: false, 

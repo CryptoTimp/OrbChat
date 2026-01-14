@@ -1080,10 +1080,10 @@ export function useSocket() {
     }
   }, []);
   
-  const interactWithShrine = useCallback((shrineId: string) => {
+  const interactWithShrine = useCallback((shrineId: string, firebaseOrbs?: number) => {
     const sock = getOrCreateSocket();
     if (sock.connected) {
-      sock.emit('shrine_interact', { shrineId });
+      sock.emit('shrine_interact', { shrineId, firebaseOrbs });
     }
   }, []);
   

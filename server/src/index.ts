@@ -207,16 +207,32 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     let allPlayers = rooms.getPlayersInRoom(roomId);
     
     // Refresh orb values from database for all players (to ensure accurate balances)
+    // Prioritize current player orb value (from Firebase) if it's valid, otherwise use database
     for (const p of allPlayers) {
-      const dbOrbs = players.getPlayerOrbs(p.id);
-      if (dbOrbs !== undefined && dbOrbs !== p.orbs) {
-        p.orbs = dbOrbs;
+      // If player already has a valid orb value (from Firebase), keep it
+      if (p.orbs && p.orbs > 0) {
+        // Player has a valid orb value, ensure it's in the database
+        const dbPlayer = db.getPlayer(p.id);
+        if (!dbPlayer || dbPlayer.orbs !== p.orbs) {
+          // Update database to match player's current value
+          db.updatePlayerOrbs(p.id, p.orbs);
+        }
+        // Keep the player's current orb value
+        continue;
+      }
+      
+      // If player's orb value is 0 or undefined, try to get from database
+      const dbPlayer = db.getPlayer(p.id);
+      if (dbPlayer && dbPlayer.orbs !== undefined && dbPlayer.orbs > 0) {
+        // Update from database if it has a valid value
+        p.orbs = dbPlayer.orbs;
         // Update in room as well
         const roomPlayer = rooms.getPlayerInRoom(roomId, p.id);
         if (roomPlayer) {
-          roomPlayer.orbs = dbOrbs;
+          roomPlayer.orbs = dbPlayer.orbs;
         }
       }
+      // If neither has a value, keep 0 (new player)
     }
     
     console.log(`Room ${roomId} (${roomMapType}) now has ${allPlayers.length} players:`, allPlayers.map(p => `${p.name} (${p.id}) - ${p.orbs} orbs`));
@@ -247,16 +263,32 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     io.to(roomId).emit('player_joined', player);
     
     // Refresh orb values from database for all players before broadcasting
+    // Prioritize current player orb value (from Firebase) if it's valid, otherwise use database
     for (const p of allPlayers) {
-      const dbOrbs = players.getPlayerOrbs(p.id);
-      if (dbOrbs !== undefined && dbOrbs !== p.orbs) {
-        p.orbs = dbOrbs;
+      // If player already has a valid orb value (from Firebase), keep it
+      if (p.orbs && p.orbs > 0) {
+        // Player has a valid orb value, ensure it's in the database
+        const dbPlayer = db.getPlayer(p.id);
+        if (!dbPlayer || dbPlayer.orbs !== p.orbs) {
+          // Update database to match player's current value
+          db.updatePlayerOrbs(p.id, p.orbs);
+        }
+        // Keep the player's current orb value
+        continue;
+      }
+      
+      // If player's orb value is 0 or undefined, try to get from database
+      const dbPlayer = db.getPlayer(p.id);
+      if (dbPlayer && dbPlayer.orbs !== undefined && dbPlayer.orbs > 0) {
+        // Update from database if it has a valid value
+        p.orbs = dbPlayer.orbs;
         // Update in room as well
         const roomPlayer = rooms.getPlayerInRoom(roomId, p.id);
         if (roomPlayer) {
-          roomPlayer.orbs = dbOrbs;
+          roomPlayer.orbs = dbPlayer.orbs;
         }
       }
+      // If neither has a value, keep 0 (new player)
     }
     
     // Broadcast updated room_state to ALL players so everyone has the latest player list
@@ -485,88 +517,104 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle shrine interaction
-  socket.on('shrine_interact', ({ shrineId }) => {
+  socket.on('shrine_interact', async ({ shrineId, firebaseOrbs }) => {
     const mapping = socketToPlayer.get(socket.id);
-    if (!mapping) return;
+    if (!mapping) {
+      console.log(`[Shrine] No mapping found for socket ${socket.id}`);
+      return;
+    }
 
     const { playerId, roomId } = mapping;
     console.log(`[Shrine] Player ${playerId} attempting to interact with shrine ${shrineId}`);
-    const result = rooms.interactWithShrine(roomId, shrineId, playerId);
-    console.log(`[Shrine] Interaction result:`, result);
+    try {
+      const result = await rooms.interactWithShrine(roomId, shrineId, playerId, firebaseOrbs);
+      console.log(`[Shrine] Interaction result:`, result);
 
-    if (!result.success) {
-      // For shrine interaction errors, emit a special event instead of generic error
-      // This prevents the client from disconnecting on orb balance issues
-      const shrine = rooms.getShrine(roomId, shrineId);
-      if (shrine) {
-        // Emit shrine_interaction_error event (cast to any to avoid TypeScript strict checking)
-        (socket as any).emit('shrine_interaction_error', { shrineId, message: result.message });
-      } else {
-        socket.emit('error', { message: result.message });
+      if (!result.success) {
+        // For shrine interaction errors, emit a special event instead of generic error
+        // This prevents the client from disconnecting on orb balance issues
+        const shrine = rooms.getShrine(roomId, shrineId);
+        if (shrine) {
+          // Emit shrine_interaction_error event (cast to any to avoid TypeScript strict checking)
+          (socket as any).emit('shrine_interaction_error', { shrineId, message: result.message });
+        } else {
+          socket.emit('error', { message: result.message });
+        }
+        return;
       }
-      return;
-    }
 
-    const shrine = rooms.getShrine(roomId, shrineId);
-    if (!shrine) {
-      socket.emit('error', { message: 'Shrine not found' });
-      return;
-    }
+      const shrine = rooms.getShrine(roomId, shrineId);
+      if (!shrine) {
+        socket.emit('error', { message: 'Shrine not found' });
+        return;
+      }
 
-    // If blessed, spawn red shrine orbs around the shrine base
-    let actualOrbsSpawned = 0;
-    if (result.blessed && result.orbCount && result.totalValue) {
-      const TILE_SIZE = 16;
-      const SCALE = 3;
-      const shrineX = shrine.x;
-      const shrineY = shrine.y;
-      // Spawn orbs very close to the base of the shrine (at ground level)
-      // Shrine base platform is approximately 12 * SCALE pixels radius
-      // Spawn orbs just outside the base platform, very close
-      const baseRadius = 12 * SCALE; // Shrine base radius
-      const orbRadius = baseRadius + 5 * SCALE; // Just outside base (about 15-20 pixels from center)
-      
-      // Split total value across the orb count (red shrine orbs)
-      const valuePerOrb = Math.floor(result.totalValue / result.orbCount);
-      const remainder = result.totalValue % result.orbCount;
-
-      for (let i = 0; i < result.orbCount; i++) {
-        // Evenly distribute around the shrine base
-        const angle = (Math.PI * 2 * i) / result.orbCount + (Math.random() - 0.5) * 0.2;
-        // Spawn very close to base with minimal variation
-        const distance = orbRadius * (0.9 + Math.random() * 0.1); // 90-100% of radius (very tight)
+      // If blessed, spawn red shrine orbs around the shrine base
+      let actualOrbsSpawned = 0;
+      if (result.blessed && result.orbCount && result.totalValue) {
+        const TILE_SIZE = 16;
+        const SCALE = 3;
+        const shrineX = shrine.x;
+        const shrineY = shrine.y;
+        // Spawn orbs very close to the base of the shrine (at ground level)
+        // Shrine base platform is approximately 12 * SCALE pixels radius
+        // Spawn orbs just outside the base platform, very close
+        const baseRadius = 12 * SCALE; // Shrine base radius
+        const orbRadius = baseRadius + 5 * SCALE; // Just outside base (about 15-20 pixels from center)
         
-        const orbX = shrineX + Math.cos(angle) * distance;
-        // Spawn at shrine base level (shrine.y is center, base platform is at y + 8*SCALE)
-        const orbY = shrineY + 8 * SCALE; // At base platform level
+        // Split total value across the orb count (red shrine orbs)
+        const valuePerOrb = Math.floor(result.totalValue / result.orbCount);
+        const remainder = result.totalValue % result.orbCount;
 
-        // Calculate orb value (distribute total evenly, add remainder to first orb)
-        const orbValue = valuePerOrb + (i === 0 ? remainder : 0);
+        for (let i = 0; i < result.orbCount; i++) {
+          // Evenly distribute around the shrine base
+          const angle = (Math.PI * 2 * i) / result.orbCount + (Math.random() - 0.5) * 0.2;
+          // Spawn very close to base with minimal variation
+          const distance = orbRadius * (0.9 + Math.random() * 0.1); // 90-100% of radius (very tight)
+          
+          const orbX = shrineX + Math.cos(angle) * distance;
+          // Spawn at shrine base level (shrine.y is center, base platform is at y + 8*SCALE)
+          const orbY = shrineY + 8 * SCALE; // At base platform level
 
-        // Create red shrine orb (bypass max orbs limit for shrine rewards)
-        const orb = rooms.createOrbAtPosition(roomId, orbX, orbY, orbValue, 'shrine', true);
-        if (orb) {
-          actualOrbsSpawned++;
-          // Mark orb as coming from shrine for client animation
-          orb.fromShrine = {
-            shrineId: shrine.id,
-            shrineX: shrine.x,
-            shrineY: shrine.y,
-          };
-          io.to(roomId).emit('orb_spawned', orb);
+          // Calculate orb value (distribute total evenly, add remainder to first orb)
+          const orbValue = valuePerOrb + (i === 0 ? remainder : 0);
+
+          // Create red shrine orb (bypass max orbs limit for shrine rewards)
+          const orb = rooms.createOrbAtPosition(roomId, orbX, orbY, orbValue, 'shrine', true);
+          if (orb) {
+            actualOrbsSpawned++;
+            // Mark orb as coming from shrine for client animation
+            orb.fromShrine = {
+              shrineId: shrine.id,
+              shrineX: shrine.x,
+              shrineY: shrine.y,
+            };
+            io.to(roomId).emit('orb_spawned', orb);
+          }
         }
       }
-    }
 
-    // Broadcast shrine interaction to all players in room (after spawning orbs to get accurate count)
-    // Since we bypass max orbs for shrine rewards, orbs should always spawn if blessed
-    io.to(roomId).emit('shrine_interacted', {
-      shrineId,
-      shrine,
-      message: result.message,
-      blessed: result.blessed && actualOrbsSpawned === result.orbCount, // Blessed if all orbs spawned successfully
-      orbsSpawned: actualOrbsSpawned,
-    });
+      // Broadcast shrine interaction to all players in room (after spawning orbs to get accurate count)
+      // Since we bypass max orbs for shrine rewards, orbs should always spawn if blessed
+      io.to(roomId).emit('shrine_interacted', {
+        shrineId,
+        shrine,
+        message: result.message,
+        blessed: result.blessed && actualOrbsSpawned === result.orbCount, // Blessed if all orbs spawned successfully
+        orbsSpawned: actualOrbsSpawned,
+      });
+    } catch (error: any) {
+      console.error(`[Shrine] Error during shrine interaction for player ${playerId}:`, error);
+      const shrine = rooms.getShrine(roomId, shrineId);
+      if (shrine) {
+        (socket as any).emit('shrine_interaction_error', { 
+          shrineId, 
+          message: 'An error occurred while interacting with the shrine. Please try again.' 
+        });
+      } else {
+        socket.emit('error', { message: 'Shrine interaction failed' });
+      }
+    }
   });
 
   // Handle tree cutting - start cutting

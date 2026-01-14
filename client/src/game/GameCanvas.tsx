@@ -131,6 +131,7 @@ export function GameCanvas() {
   
   // Pending shrine interaction (shrine to activate when player gets in range)
   const pendingShrineInteractionRef = useRef<string | null>(null);
+  const checkingShrineOrbsRef = useRef<boolean>(false);
   
   // Pending NPC stall interaction (stall to open when player gets in range)
   const pendingNPCStallInteractionRef = useRef<{ tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null>(null);
@@ -986,30 +987,66 @@ export function GameCanvas() {
         if (pendingShrine) {
           const inRange = isPlayerInShrineRange(x, y, pendingShrine);
           
-          if (inRange) {
+          if (inRange && !checkingShrineOrbsRef.current) {
             // Player is now in range, check requirements before activating shrine
             const now = Date.now();
-            const localPlayer = useGameStore.getState().localPlayer;
+            const state = useGameStore.getState();
+            const playerId = state.playerId;
             
-            // Check if player has enough orbs (250k requirement)
-            if (localPlayer && (localPlayer.orbs || 0) < 250000) {
-              // Not enough orbs - show message from relic
-              playShrineRejectionSound();
-              setShrineSpeechBubble(pendingShrineId, 'You do not have enough orbs to use this (250k required)');
-              pendingShrineInteractionRef.current = null;
-              setClickTarget(null, null);
-              return;
-            }
-            
-            if (!pendingShrine.cooldownEndTime || now >= pendingShrine.cooldownEndTime) {
-              console.log('Player in range of shrine, activating:', pendingShrineId);
-              interactWithShrine(pendingShrineId);
-              pendingShrineInteractionRef.current = null;
-              setClickTarget(null, null); // Clear click target
-            } else {
-              // Shrine went on cooldown, clear pending interaction
-              console.log('Shrine went on cooldown, clearing pending interaction');
-              pendingShrineInteractionRef.current = null;
+            // Poll Firebase for current orb balance (source of truth)
+            if (playerId) {
+              checkingShrineOrbsRef.current = true;
+              (async () => {
+                try {
+                  const { getUserProfile } = await import('../firebase/auth');
+                  const profile = await getUserProfile(playerId);
+                  const firebaseOrbs = profile?.orbs || 0;
+                  
+                  // Check if player has enough orbs (250k requirement)
+                  if (firebaseOrbs < 250000) {
+                    // Not enough orbs - show message from relic
+                    playShrineRejectionSound();
+                    setShrineSpeechBubble(pendingShrineId, 'You do not have enough orbs to use this (250k required)');
+                    pendingShrineInteractionRef.current = null;
+                    setClickTarget(null, null);
+                    checkingShrineOrbsRef.current = false;
+                    return;
+                  }
+                  
+                  // Check cooldown
+                  if (!pendingShrine.cooldownEndTime || now >= pendingShrine.cooldownEndTime) {
+                    console.log('Player in range of shrine, activating:', pendingShrineId);
+                    interactWithShrine(pendingShrineId, firebaseOrbs);
+                    pendingShrineInteractionRef.current = null;
+                    setClickTarget(null, null); // Clear click target
+                  } else {
+                    // Shrine went on cooldown, clear pending interaction
+                    console.log('Shrine went on cooldown, clearing pending interaction');
+                    pendingShrineInteractionRef.current = null;
+                  }
+                  checkingShrineOrbsRef.current = false;
+                } catch (error) {
+                  console.error('Failed to check Firebase orb balance for shrine:', error);
+                  // Fallback to local player balance
+                  const localPlayer = state.localPlayer;
+                  if (localPlayer && (localPlayer.orbs || 0) < 250000) {
+                    playShrineRejectionSound();
+                    setShrineSpeechBubble(pendingShrineId, 'You do not have enough orbs to use this (250k required)');
+                    pendingShrineInteractionRef.current = null;
+                    setClickTarget(null, null);
+                    checkingShrineOrbsRef.current = false;
+                    return;
+                  }
+                  
+                  if (!pendingShrine.cooldownEndTime || now >= pendingShrine.cooldownEndTime) {
+                    console.log('Player in range of shrine, activating:', pendingShrineId);
+                    interactWithShrine(pendingShrineId);
+                    pendingShrineInteractionRef.current = null;
+                    setClickTarget(null, null);
+                  }
+                  checkingShrineOrbsRef.current = false;
+                }
+              })();
             }
           }
         } else {

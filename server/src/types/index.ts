@@ -129,7 +129,7 @@ export interface ClientToServerEvents {
     equipped: boolean;
     equippedItems?: string[];  // Client sends updated equipped items for sprite broadcast
   }) => void;
-  shrine_interact: (data: { shrineId: string }) => void;
+  shrine_interact: (data: { shrineId: string; firebaseOrbs?: number }) => void;
   start_cutting_tree: (data: { treeId: string }) => void;
   complete_cutting_tree: (data: { treeId: string }) => void;
   cancel_cutting_tree: (data: { treeId: string }) => void;
