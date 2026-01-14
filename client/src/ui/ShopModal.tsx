@@ -134,8 +134,44 @@ export function ShopModal() {
       } as LootBox;
     }).filter((box): box is LootBox => box !== null);
     
-    // Sort by price (most expensive first)
-    return boxes.sort((a, b) => b.price - a.price);
+    // Generate Godlike Cases for each cosmetic type
+    const godlikeCategories = ['hats', 'shirts', 'legs', 'capes', 'wings', 'accessories', 'boosts', 'pets'];
+    const godlikeBoxes = godlikeCategories.map(category => {
+      const categoryItems = shopItems.filter(item => {
+        if (item.id === 'tool_axe') return false;
+        // Only include godlike items
+        if ((item.rarity || 'common') !== 'godlike') return false;
+        if (category === 'hats') return item.spriteLayer === 'hat';
+        if (category === 'shirts') return item.spriteLayer === 'shirt';
+        if (category === 'legs') return item.spriteLayer === 'legs';
+        if (category === 'capes') return item.spriteLayer === 'cape';
+        if (category === 'wings') return item.spriteLayer === 'wings';
+        if (category === 'accessories') return item.spriteLayer === 'accessory';
+        if (category === 'boosts') return item.spriteLayer === 'boost';
+        if (category === 'pets') return item.spriteLayer === 'pet';
+        return false;
+      });
+      
+      if (categoryItems.length === 0) return null;
+      
+      // Each of the 3 godlike items gets 0.05% chance
+      const itemsWithChances = categoryItems.map(item => ({
+        item,
+        chance: 0.05
+      }));
+      
+      return {
+        id: `lootbox_godlike_${category}`,
+        name: `Godlike ${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
+        category: `godlike_${category}`,
+        price: 10000,
+        items: itemsWithChances,
+      } as LootBox;
+    }).filter((box): box is LootBox => box !== null);
+    
+    // Combine regular and godlike boxes, then sort by price (most expensive first)
+    const allBoxes = [...boxes, ...godlikeBoxes];
+    return allBoxes.sort((a, b) => b.price - a.price);
   }, [shopItems]);
   
   // Update tab and filter when shop opens with initial values
@@ -1075,8 +1111,44 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
       } as LootBox;
     }).filter((box): box is LootBox => box !== null);
     
-    // Sort by price (most expensive first)
-    return boxes.sort((a, b) => b.price - a.price);
+    // Generate Godlike Cases for each cosmetic type
+    const godlikeCategories = ['hats', 'shirts', 'legs', 'capes', 'wings', 'accessories', 'boosts', 'pets'];
+    const godlikeBoxes = godlikeCategories.map(category => {
+      const categoryItems = shopItems.filter(item => {
+        if (item.id === 'tool_axe') return false;
+        // Only include godlike items
+        if ((item.rarity || 'common') !== 'godlike') return false;
+        if (category === 'hats') return item.spriteLayer === 'hat';
+        if (category === 'shirts') return item.spriteLayer === 'shirt';
+        if (category === 'legs') return item.spriteLayer === 'legs';
+        if (category === 'capes') return item.spriteLayer === 'cape';
+        if (category === 'wings') return item.spriteLayer === 'wings';
+        if (category === 'accessories') return item.spriteLayer === 'accessory';
+        if (category === 'boosts') return item.spriteLayer === 'boost';
+        if (category === 'pets') return item.spriteLayer === 'pet';
+        return false;
+      });
+      
+      if (categoryItems.length === 0) return null;
+      
+      // Each of the 3 godlike items gets 0.05% chance
+      const itemsWithChances = categoryItems.map(item => ({
+        item,
+        chance: 0.05
+      }));
+      
+      return {
+        id: `lootbox_godlike_${category}`,
+        name: `Godlike ${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
+        category: `godlike_${category}`,
+        price: 10000,
+        items: itemsWithChances,
+      } as LootBox;
+    }).filter((box): box is LootBox => box !== null);
+    
+    // Combine regular and godlike boxes, then sort by price (most expensive first)
+    const allBoxes = [...boxes, ...godlikeBoxes];
+    return allBoxes.sort((a, b) => b.price - a.price);
   }, [shopItems]);
   
   return (

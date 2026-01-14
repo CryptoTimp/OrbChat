@@ -770,9 +770,9 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           animation: crate-wobble 1.5s ease-in-out infinite;
         }
       `}</style>
-      <div className="fixed inset-0 flex items-start justify-start z-50 p-4 pointer-events-none">
+      <div className="fixed inset-0 flex items-start justify-start z-50 p-2 sm:p-4 pointer-events-none">
         <div 
-          className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-[800px] h-[95vh] overflow-hidden flex flex-col pointer-events-auto ml-4 mt-4 relative" 
+          className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-full max-w-[800px] max-h-[95vh] h-auto overflow-hidden flex flex-col pointer-events-auto ml-2 sm:ml-4 mt-2 sm:mt-4 relative" 
           style={{ boxShadow: '0 0 30px rgba(251, 191, 36, 0.5), 0 0 60px rgba(0, 0, 0, 0.8)' }}
           onContextMenu={(e) => e.preventDefault()}
         >
@@ -835,8 +835,8 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           </div>
           
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-700 shrink-0">
-            <h2 className="text-2xl font-pixel text-amber-400 flex items-center gap-2">
+          <div className="flex items-center justify-between p-2 sm:p-4 border-b border-gray-700 shrink-0">
+            <h2 className="text-lg sm:text-2xl font-pixel text-amber-400 flex items-center gap-2">
               📦 {lootBox.name}
             </h2>
             <button
@@ -852,10 +852,10 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           </div>
           
           {/* Content */}
-          <div className="flex-1 overflow-hidden flex flex-col p-6">
+          <div className="flex-1 overflow-hidden flex flex-col p-3 sm:p-6 min-h-0">
             {/* Orb balance at top */}
-            <div className="mb-4 flex items-center justify-center shrink-0">
-              <div className="flex items-center gap-2">
+            <div className="mb-2 sm:mb-4 flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
               <span className="text-cyan-300 font-pixel">●</span>
               <span 
                 className={`font-pixel text-lg transition-colors ${
@@ -895,7 +895,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             </div>
             
             {/* Reward box area - always visible to keep UI static */}
-            <div className="mb-4 shrink-0 min-h-[280px] flex items-center justify-center gap-4">
+            <div className="mb-3 sm:mb-4 shrink-0 min-h-[200px] sm:min-h-[280px] flex items-center justify-center gap-2 sm:gap-4">
               {(selectedItem || pendingSelectedItemRef.current) ? (() => {
                 const displayItem = selectedItem || pendingSelectedItemRef.current;
                 // Handle "nothing" result for exclusive cases
@@ -903,13 +903,13 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                   return (
                     // Show "Nothing" result for godlike cases
                     <>
-                      <div 
-                        className="bg-gray-800 rounded-lg p-6 border-2 w-[280px] h-[280px] flex items-center justify-center"
-                        style={{ borderColor: '#6b7280' }}
-                      >
-                        <div className="text-8xl opacity-50">❌</div>
-                      </div>
-                      <div className="bg-gray-800 rounded-lg p-6 border-2 w-[280px] h-[280px] flex flex-col justify-center overflow-hidden" style={{ borderColor: '#6b7280' }}>
+                    <div 
+                      className="bg-gray-800 rounded-lg p-3 sm:p-6 border-2 w-[140px] h-[140px] sm:w-[280px] sm:h-[280px] flex items-center justify-center shrink-0"
+                      style={{ borderColor: '#6b7280' }}
+                    >
+                      <div className="text-4xl sm:text-8xl opacity-50">❌</div>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3 sm:p-6 border-2 w-[140px] h-[140px] sm:w-[280px] sm:h-[280px] flex flex-col justify-center overflow-hidden shrink-0" style={{ borderColor: '#6b7280' }}>
                         <h3 className="font-pixel text-xl mb-1 text-center break-words line-clamp-2 text-gray-400">
                           Nothing
                         </h3>
@@ -932,12 +932,14 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                   // Show reward when item is selected - same size box as crate, with info box on the right
                   <>
                     <div 
-                      className="bg-gray-800 rounded-lg p-6 border-2 w-[280px] h-[280px] flex items-center justify-center"
+                      className="bg-gray-800 rounded-lg p-3 sm:p-6 border-2 w-[140px] h-[140px] sm:w-[280px] sm:h-[280px] flex items-center justify-center shrink-0"
                       style={{ borderColor: RARITY_BORDER_COLORS[displayItem.rarity || 'common'] }}
                     >
-                      <ItemPreview item={displayItem} size={128} />
+                      <div className="scale-50 sm:scale-100 origin-center">
+                        <ItemPreview item={displayItem} size={128} />
+                      </div>
                     </div>
-                    <div className="bg-gray-800 rounded-lg p-6 border-2 w-[280px] h-[280px] flex flex-col justify-center overflow-hidden" style={{ borderColor: RARITY_BORDER_COLORS[displayItem.rarity || 'common'] }}>
+                    <div className="bg-gray-800 rounded-lg p-3 sm:p-6 border-2 w-[140px] h-[140px] sm:w-[280px] sm:h-[280px] flex flex-col justify-center overflow-hidden shrink-0" style={{ borderColor: RARITY_BORDER_COLORS[displayItem.rarity || 'common'] }}>
                       <h3 className={`font-pixel text-xl mb-1 text-center break-words line-clamp-2 ${RARITY_COLORS[displayItem.rarity || 'common'].text}`}>
                         {displayItem.name}
                       </h3>
@@ -1095,7 +1097,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             )}
             
             {/* Scroller - always visible */}
-            <div className="relative h-48 mb-6 shrink-0 overflow-hidden" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+            <div className="relative h-32 sm:h-48 mb-3 sm:mb-6 shrink-0 overflow-hidden" style={{ paddingTop: '5px', paddingBottom: '5px' }}>
               {/* Center highlight */}
               <div className="absolute left-1/2 top-0 bottom-0 w-32 -translate-x-1/2 border-2 border-amber-400 bg-amber-400/10 z-10 pointer-events-none" />
               
@@ -1224,11 +1226,11 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             </div>
             
             {/* Possible items list - scrollable */}
-            <div className="flex-1 overflow-y-auto">
-              <p className="text-gray-300 font-pixel text-sm mb-4">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <p className="text-gray-300 font-pixel text-xs sm:text-sm mb-2 sm:mb-4">
                 This case contains {sortedItems.length} possible items:
               </p>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-1 sm:gap-2">
               {sortedItems.map(({ item, normalizedChance }) => {
                 const rarityColor = RARITY_COLORS[item.rarity || 'common'];
                 const rarity = item.rarity || 'common';
@@ -1266,9 +1268,9 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             </div>
             
             {/* Case selector menu at bottom */}
-            <div className="mt-4 pt-4 border-t border-gray-700 shrink-0">
-              <p className="text-gray-300 font-pixel text-sm mb-2">Switch Case:</p>
-              <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+            <div className="mt-2 sm:mt-4 pt-2 sm:pt-4 border-t border-gray-700 shrink-0">
+              <p className="text-gray-300 font-pixel text-xs sm:text-sm mb-1 sm:mb-2">Switch Case:</p>
+              <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
                 {allLootBoxes.map(box => {
                   const isSelected = lootBox?.id === box.id;
                   const canAffordBox = playerOrbs >= box.price;

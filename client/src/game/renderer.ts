@@ -863,7 +863,9 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
       if (itemId.includes('wings') || itemId === 'acc_wings_dragon' || 
           itemId === 'acc_wings_golden' || itemId === 'acc_wings_phoenix' || 
           itemId === 'acc_wings_void' || itemId === 'acc_wings_celestial' || 
-          itemId === 'acc_wings_galaxy' || itemId === 'acc_wings_rainbow') {
+          itemId === 'acc_wings_galaxy' || itemId === 'acc_wings_rainbow' ||
+          itemId === 'acc_wings_godlike_void' || itemId === 'acc_wings_godlike_chaos' || 
+          itemId === 'acc_wings_godlike_abyss') {
         const side = (i % 2 === 0) ? -1 : 1;
         baseX = x + side * 28 + (Math.random() - 0.5) * 5; // Wing tips far to the sides
         baseY = y - 20 + (Math.random() - 0.5) * 8; // Top of wings
@@ -9012,6 +9014,209 @@ function drawBackAccessories(ctx: CanvasRenderingContext2D, player: PlayerWithCh
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+    clearGlow(ctx);
+  }
+  
+  // === GODLIKE WINGS ===
+  
+  // Void Godlike Wings
+  if (outfit.includes('acc_wings_godlike_void')) {
+    applyWingGlow('acc_wings_godlike_void');
+    const voidWingTime = Date.now();
+    const voidWingPulse = Math.sin(voidWingTime * 0.005) * 0.3 + 0.7;
+    const voidWingSwirl = voidWingTime * 0.004;
+    
+    ctx.shadowColor = '#ef4444';
+    ctx.shadowBlur = 25 + voidWingPulse * 15;
+    
+    ctx.fillStyle = `rgba(0, 0, 0, ${voidWingPulse})`;
+    // Left wing
+    ctx.save();
+    ctx.translate(leftWingX, centerY);
+    ctx.rotate(-waveAngle * 1.1);
+    ctx.translate(-leftWingX, -centerY);
+    ctx.beginPath();
+    ctx.moveTo(leftWingX, scaledY + 6 * p);
+    ctx.lineTo(scaledX - 6 * p, scaledY - 6 * p);
+    ctx.lineTo(scaledX - 14 * p, scaledY);
+    ctx.lineTo(scaledX - 16 * p, scaledY + 8 * p);
+    ctx.lineTo(scaledX - 12 * p, scaledY + 14 * p);
+    ctx.lineTo(scaledX - 6 * p, scaledY + 16 * p);
+    ctx.closePath();
+    ctx.fill();
+    // Intense void energy veins
+    ctx.fillStyle = `rgba(75, 0, 130, ${voidWingPulse})`;
+    ctx.fillRect(scaledX - 8 * p, scaledY + 2 * p, 2 * p, 6 * p);
+    ctx.fillRect(scaledX - 12 * p, scaledY + 4 * p, 2 * p, 4 * p);
+    ctx.fillStyle = `rgba(239, 68, 68, ${voidWingPulse * 0.8})`;
+    ctx.fillRect(scaledX - 10 * p, scaledY + 3 * p, 1.5 * p, 4 * p);
+    ctx.restore();
+    // Right wing
+    ctx.save();
+    ctx.translate(rightWingX, centerY);
+    ctx.rotate(waveAngle * 1.1);
+    ctx.translate(-rightWingX, -centerY);
+    ctx.fillStyle = `rgba(0, 0, 0, ${voidWingPulse})`;
+    ctx.beginPath();
+    ctx.moveTo(rightWingX, scaledY + 6 * p);
+    ctx.lineTo(scaledX + scaledWidth + 6 * p, scaledY - 6 * p);
+    ctx.lineTo(scaledX + scaledWidth + 14 * p, scaledY);
+    ctx.lineTo(scaledX + scaledWidth + 16 * p, scaledY + 8 * p);
+    ctx.lineTo(scaledX + scaledWidth + 12 * p, scaledY + 14 * p);
+    ctx.lineTo(scaledX + scaledWidth + 6 * p, scaledY + 16 * p);
+    ctx.closePath();
+    ctx.fill();
+    // Intense void energy veins
+    ctx.fillStyle = `rgba(75, 0, 130, ${voidWingPulse})`;
+    ctx.fillRect(scaledX + scaledWidth + 6 * p, scaledY + 2 * p, 2 * p, 6 * p);
+    ctx.fillRect(scaledX + scaledWidth + 10 * p, scaledY + 4 * p, 2 * p, 4 * p);
+    ctx.fillStyle = `rgba(239, 68, 68, ${voidWingPulse * 0.8})`;
+    ctx.fillRect(scaledX + scaledWidth + 8 * p, scaledY + 3 * p, 1.5 * p, 4 * p);
+    ctx.restore();
+    // Swirling void energy particles
+    for (let i = 0; i < 6; i++) {
+      const swirlPhase = voidWingSwirl + i * 1;
+      const swirlX = scaledX + scaledWidth / 2 + Math.cos(swirlPhase) * 8 * p;
+      const swirlY = centerY + Math.sin(swirlPhase) * 6 * p;
+      ctx.fillStyle = `rgba(75, 0, 130, ${voidWingPulse})`;
+      ctx.beginPath();
+      ctx.arc(swirlX, swirlY, 2.5 * p, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    clearGlow(ctx);
+  }
+  
+  // Chaos Godlike Wings
+  if (outfit.includes('acc_wings_godlike_chaos')) {
+    applyWingGlow('acc_wings_godlike_chaos');
+    const chaosWingTime = Date.now();
+    const chaosWingPulse = Math.sin(chaosWingTime * 0.005) * 0.3 + 0.7;
+    const chaosWingSwirl = chaosWingTime * 0.004;
+    
+    ctx.shadowColor = '#ef4444';
+    ctx.shadowBlur = 25 + chaosWingPulse * 15;
+    
+    ctx.fillStyle = `rgba(139, 0, 0, ${chaosWingPulse})`;
+    // Left wing
+    ctx.save();
+    ctx.translate(leftWingX, centerY);
+    ctx.rotate(-waveAngle * 1.1);
+    ctx.translate(-leftWingX, -centerY);
+    ctx.beginPath();
+    ctx.moveTo(leftWingX, scaledY + 6 * p);
+    ctx.lineTo(scaledX - 6 * p, scaledY - 6 * p);
+    ctx.lineTo(scaledX - 14 * p, scaledY);
+    ctx.lineTo(scaledX - 16 * p, scaledY + 8 * p);
+    ctx.lineTo(scaledX - 12 * p, scaledY + 14 * p);
+    ctx.lineTo(scaledX - 6 * p, scaledY + 16 * p);
+    ctx.closePath();
+    ctx.fill();
+    // Chaos energy veins
+    ctx.fillStyle = `rgba(75, 0, 130, ${chaosWingPulse})`;
+    ctx.fillRect(scaledX - 8 * p, scaledY + 2 * p, 2 * p, 6 * p);
+    ctx.fillRect(scaledX - 12 * p, scaledY + 4 * p, 2 * p, 4 * p);
+    ctx.fillStyle = `rgba(239, 68, 68, ${chaosWingPulse * 0.8})`;
+    ctx.fillRect(scaledX - 10 * p, scaledY + 3 * p, 1.5 * p, 4 * p);
+    ctx.restore();
+    // Right wing
+    ctx.save();
+    ctx.translate(rightWingX, centerY);
+    ctx.rotate(waveAngle * 1.1);
+    ctx.translate(-rightWingX, -centerY);
+    ctx.fillStyle = `rgba(139, 0, 0, ${chaosWingPulse})`;
+    ctx.beginPath();
+    ctx.moveTo(rightWingX, scaledY + 6 * p);
+    ctx.lineTo(scaledX + scaledWidth + 6 * p, scaledY - 6 * p);
+    ctx.lineTo(scaledX + scaledWidth + 14 * p, scaledY);
+    ctx.lineTo(scaledX + scaledWidth + 16 * p, scaledY + 8 * p);
+    ctx.lineTo(scaledX + scaledWidth + 12 * p, scaledY + 14 * p);
+    ctx.lineTo(scaledX + scaledWidth + 6 * p, scaledY + 16 * p);
+    ctx.closePath();
+    ctx.fill();
+    // Chaos energy veins
+    ctx.fillStyle = `rgba(75, 0, 130, ${chaosWingPulse})`;
+    ctx.fillRect(scaledX + scaledWidth + 6 * p, scaledY + 2 * p, 2 * p, 6 * p);
+    ctx.fillRect(scaledX + scaledWidth + 10 * p, scaledY + 4 * p, 2 * p, 4 * p);
+    ctx.fillStyle = `rgba(239, 68, 68, ${chaosWingPulse * 0.8})`;
+    ctx.fillRect(scaledX + scaledWidth + 8 * p, scaledY + 3 * p, 1.5 * p, 4 * p);
+    ctx.restore();
+    // Swirling chaos energy particles
+    for (let i = 0; i < 6; i++) {
+      const swirlPhase = chaosWingSwirl + i * 1;
+      const swirlX = scaledX + scaledWidth / 2 + Math.cos(swirlPhase) * 8 * p;
+      const swirlY = centerY + Math.sin(swirlPhase) * 6 * p;
+      ctx.fillStyle = `rgba(139, 0, 0, ${chaosWingPulse})`;
+      ctx.beginPath();
+      ctx.arc(swirlX, swirlY, 2.5 * p, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    clearGlow(ctx);
+  }
+  
+  // Abyss Godlike Wings
+  if (outfit.includes('acc_wings_godlike_abyss')) {
+    applyWingGlow('acc_wings_godlike_abyss');
+    const abyssWingTime = Date.now();
+    const abyssWingPulse = Math.sin(abyssWingTime * 0.005) * 0.3 + 0.7;
+    const abyssWingSwirl = abyssWingTime * 0.004;
+    
+    ctx.shadowColor = '#ef4444';
+    ctx.shadowBlur = 25 + abyssWingPulse * 15;
+    
+    ctx.fillStyle = `rgba(0, 0, 0, ${abyssWingPulse})`;
+    // Left wing
+    ctx.save();
+    ctx.translate(leftWingX, centerY);
+    ctx.rotate(-waveAngle * 1.1);
+    ctx.translate(-leftWingX, -centerY);
+    ctx.beginPath();
+    ctx.moveTo(leftWingX, scaledY + 6 * p);
+    ctx.lineTo(scaledX - 6 * p, scaledY - 6 * p);
+    ctx.lineTo(scaledX - 14 * p, scaledY);
+    ctx.lineTo(scaledX - 16 * p, scaledY + 8 * p);
+    ctx.lineTo(scaledX - 12 * p, scaledY + 14 * p);
+    ctx.lineTo(scaledX - 6 * p, scaledY + 16 * p);
+    ctx.closePath();
+    ctx.fill();
+    // Abyss energy veins
+    ctx.fillStyle = `rgba(75, 0, 130, ${abyssWingPulse})`;
+    ctx.fillRect(scaledX - 8 * p, scaledY + 2 * p, 2 * p, 6 * p);
+    ctx.fillRect(scaledX - 12 * p, scaledY + 4 * p, 2 * p, 4 * p);
+    ctx.fillStyle = `rgba(239, 68, 68, ${abyssWingPulse * 0.8})`;
+    ctx.fillRect(scaledX - 10 * p, scaledY + 3 * p, 1.5 * p, 4 * p);
+    ctx.restore();
+    // Right wing
+    ctx.save();
+    ctx.translate(rightWingX, centerY);
+    ctx.rotate(waveAngle * 1.1);
+    ctx.translate(-rightWingX, -centerY);
+    ctx.fillStyle = `rgba(0, 0, 0, ${abyssWingPulse})`;
+    ctx.beginPath();
+    ctx.moveTo(rightWingX, scaledY + 6 * p);
+    ctx.lineTo(scaledX + scaledWidth + 6 * p, scaledY - 6 * p);
+    ctx.lineTo(scaledX + scaledWidth + 14 * p, scaledY);
+    ctx.lineTo(scaledX + scaledWidth + 16 * p, scaledY + 8 * p);
+    ctx.lineTo(scaledX + scaledWidth + 12 * p, scaledY + 14 * p);
+    ctx.lineTo(scaledX + scaledWidth + 6 * p, scaledY + 16 * p);
+    ctx.closePath();
+    ctx.fill();
+    // Abyss energy veins
+    ctx.fillStyle = `rgba(75, 0, 130, ${abyssWingPulse})`;
+    ctx.fillRect(scaledX + scaledWidth + 6 * p, scaledY + 2 * p, 2 * p, 6 * p);
+    ctx.fillRect(scaledX + scaledWidth + 10 * p, scaledY + 4 * p, 2 * p, 4 * p);
+    ctx.fillStyle = `rgba(239, 68, 68, ${abyssWingPulse * 0.8})`;
+    ctx.fillRect(scaledX + scaledWidth + 8 * p, scaledY + 3 * p, 1.5 * p, 4 * p);
+    ctx.restore();
+    // Swirling abyss energy particles
+    for (let i = 0; i < 6; i++) {
+      const swirlPhase = abyssWingSwirl + i * 1;
+      const swirlX = scaledX + scaledWidth / 2 + Math.cos(swirlPhase) * 8 * p;
+      const swirlY = centerY + Math.sin(swirlPhase) * 6 * p;
+      ctx.fillStyle = `rgba(0, 0, 0, ${abyssWingPulse})`;
+      ctx.beginPath();
+      ctx.arc(swirlX, swirlY, 2.5 * p, 0, Math.PI * 2);
+      ctx.fill();
+    }
     clearGlow(ctx);
   }
 }

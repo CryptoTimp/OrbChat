@@ -786,6 +786,24 @@ export function useSocket() {
         state.updatePlayerOrbs(playerId, newOrbs);
         addNotification(`Case was empty. Better luck next time!`, 'error');
         
+        // Get loot box name from category (handle godlike cases)
+        let lootBoxCategory = lootBoxId.replace('lootbox_', '');
+        let lootBoxName: string;
+        
+        if (lootBoxCategory.startsWith('godlike_')) {
+          // Handle godlike cases: "godlike_hats" -> "Godlike Hats Case"
+          const category = lootBoxCategory.replace('godlike_', '');
+          lootBoxName = `Godlike ${category.charAt(0).toUpperCase() + category.slice(1)} Case`;
+        } else {
+          // Regular cases: "hats" -> "Hats Case"
+          lootBoxName = lootBoxCategory.charAt(0).toUpperCase() + lootBoxCategory.slice(1) + ' Case';
+        }
+        
+        // Send chat message for "nothing" result
+        const message = `opened a ${lootBoxName} but found nothing!`;
+        console.log('Sending loot box chat message (nothing):', message);
+        sendChat(message);
+        
         // Notify server
         const sock = getOrCreateSocket();
         if (sock.connected) {
@@ -854,19 +872,32 @@ export function useSocket() {
         sock.emit('purchase_lootbox', { lootBoxId, itemId: selectedItemId, newOrbs, newInventory, alreadyOwned });
       }
       
-      // Send chat message about the loot box opening (always send, even if already owned)
+      // Send chat message about the loot box opening (always send, even if already owned or nothing)
       console.log('Loot box chat message - item found:', item, 'selectedItemId:', selectedItemId, 'shopItems length:', shopItems.length, 'alreadyOwned:', alreadyOwned);
+      
+      // Get loot box name from category (handle godlike cases)
+      let lootBoxCategory = lootBoxId.replace('lootbox_', '');
+      let lootBoxName: string;
+      
+      if (lootBoxCategory.startsWith('godlike_')) {
+        // Handle godlike cases: "godlike_hats" -> "Godlike Hats Case"
+        const category = lootBoxCategory.replace('godlike_', '');
+        lootBoxName = `Godlike ${category.charAt(0).toUpperCase() + category.slice(1)} Case`;
+      } else {
+        // Regular cases: "hats" -> "Hats Case"
+        lootBoxName = lootBoxCategory.charAt(0).toUpperCase() + lootBoxCategory.slice(1) + ' Case';
+      }
+      
       if (item) {
-        // Get loot box name from category
-        const lootBoxCategory = lootBoxId.replace('lootbox_', '');
-        const lootBoxName = lootBoxCategory.charAt(0).toUpperCase() + lootBoxCategory.slice(1) + ' Case';
-        
-          // Format message with item name wrapped in special markers for coloring and square brackets
-          const message = `opened a ${lootBoxName} and received [ITEM:${item.rarity || 'common'}][${item.name}][/ITEM] !`;
+        // Format message with item name wrapped in special markers for coloring and square brackets
+        const message = `opened a ${lootBoxName} and received [ITEM:${item.rarity || 'common'}][${item.name}][/ITEM] !`;
         console.log('Sending loot box chat message:', message);
         sendChat(message);
       } else {
-        console.warn('Item not found in shopItems for chat message:', selectedItemId, 'Available items:', shopItems.map(i => i.id).slice(0, 10));
+        // Handle "nothing" result (for godlike cases)
+        const message = `opened a ${lootBoxName} but found nothing!`;
+        console.log('Sending loot box chat message (nothing):', message);
+        sendChat(message);
       }
     } catch (error) {
       console.error('Loot box purchase failed:', error);
