@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "start": "serve -s dist --listen 0.0.0.0:$PORT"
+    "start": "npx serve@latest -s dist -l $PORT --hostname 0.0.0.0"
   },
   "dependencies": {
     "firebase": "^12.7.0",
