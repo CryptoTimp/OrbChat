@@ -1,6 +1,6 @@
-:8080
+{$PORT}
 
-root * /app/dist
+root * dist
 
 file_server
 
