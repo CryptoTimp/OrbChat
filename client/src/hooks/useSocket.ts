@@ -303,11 +303,7 @@ function attachListeners(sock: Socket) {
     
     state.removeOrb(orbId);
     
-    // Server already calculated the multiplier and sent the multiplied value
-    // orbValue is already the final value after multiplier
-    state.updatePlayerOrbs(playerId, newBalance);
-    
-    // If this is our orb collection, play sound, update Firebase, and record session stats
+    // If this is our orb collection, update Firebase first (source of truth), then update store
     if (playerId === state.playerId) {
       // Record session stats
       state.recordOrbCollection(orbType, orbValue || 0);
@@ -323,12 +319,21 @@ function attachListeners(sock: Socket) {
           await updateUserOrbs(playerId, newFirebaseOrbs);
           console.log('Updated Firebase orbs:', newFirebaseOrbs);
           
-          // Update game store with Firebase value (source of truth)
-          state.updatePlayerOrbs(playerId, newFirebaseOrbs);
+          // Update game store with Firebase value (source of truth) - only update once
+          // Pass the orb value so HUD can use it for floating text color
+          state.updatePlayerOrbs(playerId, newFirebaseOrbs, orbValue);
         } catch (error) {
           console.error('Failed to update Firebase orbs:', error);
+          // Fallback to server's newBalance if Firebase update fails
+          state.updatePlayerOrbs(playerId, newBalance, orbValue);
         }
+      } else {
+        // If no orbValue, just use server's newBalance
+        state.updatePlayerOrbs(playerId, newBalance, 0);
       }
+    } else {
+      // For other players, just use server's newBalance
+      state.updatePlayerOrbs(playerId, newBalance);
     }
   });
   
@@ -382,9 +387,23 @@ function attachListeners(sock: Socket) {
   sock.on('error', ({ message }) => {
     console.error('Server error:', message);
     
-    // ALWAYS clear roomId and playerName on ANY error to prevent auto-rejoin
-    // This is critical for password errors - we must prevent App.tsx from showing "Connecting to room..."
     const state = useGameStore.getState();
+    
+    // Handle shrine interaction errors gracefully (don't disconnect)
+    if (message.includes('enough orbs') || message.includes('shrine') || message.includes('Shrine')) {
+      // Sync orbs from Firebase to ensure client state is up to date
+      if (state.playerId) {
+        syncOrbsFromFirebase(state.playerId).catch(err => {
+          console.error('Failed to sync orbs after shrine error:', err);
+        });
+      }
+      // Don't clear room state for shrine errors - just log and continue
+      console.log('Shrine interaction error (non-critical):', message);
+      return;
+    }
+    
+    // ALWAYS clear roomId and playerName on critical errors (password, connection, etc.)
+    // This is critical for password errors - we must prevent App.tsx from showing "Connecting to room..."
     console.log('Error handler: Clearing roomId and playerName. Current roomId:', state.roomId, 'Current playerName:', state.playerName);
     state.setRoomId('');
     state.setPlayerName('');
@@ -416,6 +435,22 @@ function attachListeners(sock: Socket) {
     } else {
       playShrineRejectionSound();
     }
+  });
+  
+  // Shrine interaction errors (non-critical, don't disconnect)
+  sock.on('shrine_interaction_error', async ({ shrineId, message }) => {
+    const state = useGameStore.getState();
+    
+    // Sync orbs from Firebase to ensure client state is up to date
+    if (state.playerId) {
+      await syncOrbsFromFirebase(state.playerId);
+    }
+    
+    // Show error message on shrine speech bubble
+    setShrineSpeechBubble(shrineId, message);
+    playShrineRejectionSound();
+    
+    console.log('Shrine interaction error (non-critical):', message);
   });
   
   // Tree state events

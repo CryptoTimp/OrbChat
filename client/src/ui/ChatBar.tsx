@@ -25,6 +25,7 @@ export function ChatBar() {
   const shopItems = useGameStore(state => state.shopItems);
   
   // Calculate cheapest prices per rarity for name coloring
+  // Gold color always requires 250k minimum
   const cheapestPrices = useMemo(() => {
     const prices: Record<ItemRarity, number> = {
       common: Infinity,
@@ -37,6 +38,12 @@ export function ChatBar() {
       if (item.price < prices[item.rarity]) {
         prices[item.rarity] = item.price;
       }
+    }
+    // Ensure gold color requires at least 250k
+    if (prices.legendary !== Infinity) {
+      prices.legendary = Math.max(250000, prices.legendary);
+    } else {
+      prices.legendary = 250000;
     }
     return prices;
   }, [shopItems]);

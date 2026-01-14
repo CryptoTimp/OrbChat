@@ -484,6 +484,23 @@ export function interactWithShrine(
     return { success: false, message: 'Shrine not found', blessed: false };
   }
 
+  // Check if player has enough orbs (250k requirement)
+  const player = room.players.get(playerId);
+  if (!player) {
+    return { success: false, message: 'Player not found', blessed: false };
+  }
+
+  const MIN_ORBS_REQUIRED = 250000;
+  const playerOrbs = player.orbs || 0;
+  console.log(`[Shrine] Player ${playerId} has ${playerOrbs} orbs, required: ${MIN_ORBS_REQUIRED}`);
+  if (playerOrbs < MIN_ORBS_REQUIRED) {
+    return { 
+      success: false, 
+      message: 'You do not have enough orbs to use this (250k required)', 
+      blessed: false 
+    };
+  }
+
   const now = Date.now();
   const COOLDOWN_DURATION = 60000; // 60 seconds
 

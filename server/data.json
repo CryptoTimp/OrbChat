@@ -1460,12 +1460,6 @@
   },
   "inventory": [
     {
-      "player_id": "ZqlLG9gh1odb9nNy6QEpHuIJofd2",
-      "item_id": "log",
-      "equipped": false,
-      "purchased_at": "2026-01-14T15:08:32.274Z"
-    },
-    {
       "player_id": "mCY7QgXzKwRJA8YRzP90qJppE1y2",
       "item_id": "log",
       "equipped": false,

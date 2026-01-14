@@ -635,7 +635,7 @@ export function updateCheapestPrices(): void {
 export function getOrbCountColor(orbs: number): { color: string; glow: string | null } {
   // Fallback thresholds if shop items aren't loaded yet (for background NPCs, etc.)
   const FALLBACK_THRESHOLDS = {
-    legendary: 100000,  // 100k
+    legendary: 250000,  // 250k
     epic: 50000,        // 50k
     rare: 20000,        // 20k
     uncommon: 5000,     // 5k
@@ -643,8 +643,9 @@ export function getOrbCountColor(orbs: number): { color: string; glow: string | 
   };
   
   // Use shop prices if available, otherwise use fallback thresholds
+  // Gold color always requires 250k minimum
   const thresholds = {
-    legendary: cheapestPricesByRarity.legendary !== Infinity ? cheapestPricesByRarity.legendary : FALLBACK_THRESHOLDS.legendary,
+    legendary: Math.max(250000, cheapestPricesByRarity.legendary !== Infinity ? cheapestPricesByRarity.legendary : FALLBACK_THRESHOLDS.legendary),
     epic: cheapestPricesByRarity.epic !== Infinity ? cheapestPricesByRarity.epic : FALLBACK_THRESHOLDS.epic,
     rare: cheapestPricesByRarity.rare !== Infinity ? cheapestPricesByRarity.rare : FALLBACK_THRESHOLDS.rare,
     uncommon: cheapestPricesByRarity.uncommon !== Infinity ? cheapestPricesByRarity.uncommon : FALLBACK_THRESHOLDS.uncommon,
@@ -4897,9 +4898,9 @@ export function isPlayerInTreeRange(playerX: number, playerY: number, tree: Tree
   return dist < 50 * p;
 }
 
-// Draw forest tree foliage (called AFTER players to create depth effect)
+// Draw tree stumps (called BEFORE players so players appear on top)
 // Note: Camera transform is already applied to ctx, so we draw in world coordinates
-export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>): void {
+export function drawForestStumps(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>): void {
   if (forestTrees.length === 0) return;
   
   const p = SCALE;
@@ -4909,7 +4910,7 @@ export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Ma
     const treeState = treeStates?.get(treeId);
     const s = tree.scale;
     
-    // If tree is cut, draw stump instead of foliage and trunk
+    // Only draw stumps for cut trees
     if (treeState?.isCut) {
       const stumpX = tree.trunkX;
       const stumpY = tree.trunkY + tree.trunkH - 8 * s * p; // Stump at base of trunk
@@ -4923,8 +4924,25 @@ export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Ma
       // Draw stump top (lighter brown for wood grain effect)
       ctx.fillStyle = '#4a3a2a';
       ctx.fillRect(stumpX, stumpY, stumpW, 2 * s * p);
-      
-      continue; // Skip trunk and foliage for cut trees
+    }
+  }
+}
+
+// Draw forest tree foliage (called AFTER players to create depth effect)
+// Note: Camera transform is already applied to ctx, so we draw in world coordinates
+export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>): void {
+  if (forestTrees.length === 0) return;
+  
+  const p = SCALE;
+  
+  for (const tree of forestTrees) {
+    const treeId = getTreeId(tree);
+    const treeState = treeStates?.get(treeId);
+    const s = tree.scale;
+    
+    // Skip cut trees (stumps are drawn separately before players)
+    if (treeState?.isCut) {
+      continue;
     }
     
     // Draw TRUNK (only if tree is not cut)

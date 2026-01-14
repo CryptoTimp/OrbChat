@@ -14,6 +14,7 @@ import {
   clearPlayerTrail,
   setShopItems,
   drawForestFoliage,
+  drawForestStumps,
   getForestTrees,
   getTreeId,
   drawTreeProgressBar,
@@ -118,6 +119,9 @@ export function GameCanvas() {
   const cuttingTreeRef = useRef<{ treeId: string; startTime: number; duration: number; startX: number; startY: number } | null>(null);
   const [cuttingTree, setCuttingTree] = useState<{ treeId: string; progress: number } | null>(null);
   const lastChopSoundSecondRef = useRef<number>(-1); // Track last second when chopping sound was played
+  
+  // Track other players' tree cutting (playerId -> { treeId, startTime })
+  const otherPlayersCuttingRef = useRef<Map<string, { treeId: string; startTime: number; duration: number }>>(new Map());
   
   // Update ref when state changes
   useEffect(() => {
@@ -409,7 +413,7 @@ export function GameCanvas() {
             if (isPlayerInTreeRange(localPlayer.x, localPlayer.y, clickedTree)) {
               // Player is near tree, start cutting immediately
               const playerId = useGameStore.getState().playerId;
-              const duration = 3000 + Math.random() * 5000; // 3-8 seconds
+              const duration = 5000; // 5 seconds
               const startTime = Date.now();
               const currentLocalPlayer = useGameStore.getState().localPlayer;
               const startX = currentLocalPlayer?.x || 0;
@@ -613,6 +617,52 @@ export function GameCanvas() {
     const currentPlayerId = useGameStore.getState().playerId;
     const currentMapType = useGameStore.getState().mapType || 'cafe';
     const currentClickTarget = useGameStore.getState().clickTarget;
+    
+    // Track other players cutting trees and update chopping animation
+    if (currentMapType === 'forest') {
+      const trees = getForestTrees();
+      for (const tree of trees) {
+        const treeId = getTreeId(tree);
+        const treeState = treeStates.get(treeId);
+        
+        if (treeState && treeState.cutBy && treeState.cutBy !== currentPlayerId && !treeState.isCut) {
+          // Another player is cutting this tree
+          const cuttingPlayerId = treeState.cutBy;
+          
+          // Check if we're already tracking this player cutting this tree
+          const existing = otherPlayersCuttingRef.current.get(cuttingPlayerId);
+          if (!existing || existing.treeId !== treeId) {
+            // New cutting started - track it with fixed duration
+            const duration = 5000; // 5 seconds
+            otherPlayersCuttingRef.current.set(cuttingPlayerId, {
+              treeId,
+              startTime: currentTime,
+              duration
+            });
+            // Set chopping animation
+            setPlayerChopping(cuttingPlayerId, true);
+          }
+        } else if (treeState && (!treeState.cutBy || treeState.isCut)) {
+          // Tree is no longer being cut - clear tracking for any players cutting it
+          for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+            if (cutting.treeId === treeId) {
+              otherPlayersCuttingRef.current.delete(playerId);
+              setPlayerChopping(playerId, false);
+            }
+          }
+        }
+      }
+      
+      // Clean up tracking for players who are no longer cutting (or finished)
+      for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+        const treeState = treeStates.get(cutting.treeId);
+        if (!treeState || !treeState.cutBy || treeState.cutBy !== playerId || treeState.isCut) {
+          // Player is no longer cutting this tree
+          otherPlayersCuttingRef.current.delete(playerId);
+          setPlayerChopping(playerId, false);
+        }
+      }
+    }
     
     // Handle tree cutting progress
     if (cuttingTreeRef.current) {
@@ -888,7 +938,7 @@ export function GameCanvas() {
           
           // Check if tree is still available
           if (!treeState || (!treeState.isCut && treeState.cutBy === null)) {
-            const duration = 3000 + Math.random() * 5000; // 3-8 seconds
+            const duration = 5000; // 5 seconds
             const startTime = Date.now();
             const startX = x;
             const startY = y;
@@ -920,8 +970,20 @@ export function GameCanvas() {
           const inRange = isPlayerInShrineRange(x, y, pendingShrine);
           
           if (inRange) {
-            // Player is now in range, activate shrine
+            // Player is now in range, check requirements before activating shrine
             const now = Date.now();
+            const localPlayer = useGameStore.getState().localPlayer;
+            
+            // Check if player has enough orbs (250k requirement)
+            if (localPlayer && (localPlayer.orbs || 0) < 250000) {
+              // Not enough orbs - show message from relic
+              playShrineRejectionSound();
+              setShrineSpeechBubble(pendingShrineId, 'You do not have enough orbs to use this (250k required)');
+              pendingShrineInteractionRef.current = null;
+              setClickTarget(null, null);
+              return;
+            }
+            
             if (!pendingShrine.cooldownEndTime || now >= pendingShrine.cooldownEndTime) {
               console.log('Player in range of shrine, activating:', pendingShrineId);
               interactWithShrine(pendingShrineId);
@@ -1275,7 +1337,12 @@ export function GameCanvas() {
       drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId);
     }
     
-    // Draw forest foliage on TOP of players (so they walk behind trees)
+    // Draw tree stumps BEFORE players (so players appear on top of stumps)
+    if (currentMapType === 'forest') {
+      drawForestStumps(ctx, treeStates);
+    }
+    
+    // Draw forest foliage on TOP of players (so they walk behind full trees)
     if (currentMapType === 'forest') {
       drawForestFoliage(ctx, treeStates);
       
@@ -1294,6 +1361,20 @@ export function GameCanvas() {
           const progress = Math.min(1, elapsed / duration);
           // Pass camera.zoom (not full transform which includes renderScale)
           drawTreeProgressBar(ctx, tree, progress, currentTime, camera.zoom);
+        }
+      }
+      
+      // Draw progress bars for other players cutting trees
+      const allTrees = getForestTrees();
+      for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+        const tree = allTrees.find(t => getTreeId(t) === cutting.treeId);
+        if (tree) {
+          const elapsed = currentTime - cutting.startTime;
+          const progress = Math.min(1, elapsed / cutting.duration);
+          // Only draw if still in progress (not complete)
+          if (progress < 1) {
+            drawTreeProgressBar(ctx, tree, progress, currentTime, camera.zoom);
+          }
         }
       }
     }

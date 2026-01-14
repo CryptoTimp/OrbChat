@@ -18,6 +18,7 @@ interface GameState {
   // Local player state
   localPlayer: PlayerWithChat | null;
   clickTarget: { x: number; y: number } | null;
+  lastOrbValue?: number; // Last orb value collected (for HUD floating text)
   
   // Shop & Inventory
   shopItems: ShopItem[];
@@ -71,7 +72,7 @@ interface GameState {
   addOrb: (orb: Orb) => void;
   removeOrb: (orbId: string) => void;
   getOrbById: (orbId: string) => Orb | undefined;
-  updatePlayerOrbs: (playerId: string, orbs: number) => void;
+  updatePlayerOrbs: (playerId: string, orbs: number, lastOrbValue?: number) => void;
   
   // Session stats actions
   recordOrbCollection: (orbType: OrbType, value: number) => void;
@@ -357,7 +358,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     return get().orbs.find(o => o.id === orbId);
   },
   
-  updatePlayerOrbs: (playerId, orbs) => {
+  updatePlayerOrbs: (playerId, orbs, lastOrbValue) => {
     const players = new Map(get().players);
     const player = players.get(playerId);
     
@@ -367,7 +368,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (playerId === get().playerId) {
         set({ 
           players, 
-          localPlayer: { ...get().localPlayer!, orbs } 
+          localPlayer: { ...get().localPlayer!, orbs },
+          lastOrbValue: lastOrbValue || undefined // Store last orb value for HUD
         });
       } else {
         set({ players });

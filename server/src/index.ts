@@ -441,10 +441,20 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     if (!mapping) return;
 
     const { playerId, roomId } = mapping;
+    console.log(`[Shrine] Player ${playerId} attempting to interact with shrine ${shrineId}`);
     const result = rooms.interactWithShrine(roomId, shrineId, playerId);
+    console.log(`[Shrine] Interaction result:`, result);
 
     if (!result.success) {
-      socket.emit('error', { message: result.message });
+      // For shrine interaction errors, emit a special event instead of generic error
+      // This prevents the client from disconnecting on orb balance issues
+      const shrine = rooms.getShrine(roomId, shrineId);
+      if (shrine) {
+        // Emit shrine_interaction_error event (cast to any to avoid TypeScript strict checking)
+        (socket as any).emit('shrine_interaction_error', { shrineId, message: result.message });
+      } else {
+        socket.emit('error', { message: result.message });
+      }
       return;
     }
 

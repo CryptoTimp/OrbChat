@@ -167,6 +167,7 @@ export interface ServerToClientEvents {
   tree_state_updated: (data: { treeStates: TreeState[] }) => void;
   tree_cut_complete: (data: { treeId: string; logCount: number }) => void;
   logs_sold: (data: { playerId: string; logCount: number; orbsReceived: number; newBalance: number }) => void;
+  shrine_interaction_error: (data: { shrineId: string; message: string }) => void;
   error: (data: { message: string }) => void;
 }
 

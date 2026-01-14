@@ -44,6 +44,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   const mapType = useGameStore(state => state.mapType);
   const shopItems = useGameStore(state => state.shopItems);
   const inventory = useGameStore(state => state.inventory);
+  const lastOrbValue = useGameStore(state => state.lastOrbValue);
   const { leaveRoom: socketLeaveRoom } = useSocket();
   
   // Animated orb count
@@ -144,10 +145,14 @@ export function HUD({ onLeaveRoom }: HUDProps) {
       const startTime = Date.now();
       
       // Spawn +X animation from orb balance (canvas-style, ref-based)
+      // Use the last orb value from store if available, otherwise use the difference
+      // This prevents showing red for normal orbs after shrine rewards
+      const displayValue = lastOrbValue !== undefined ? lastOrbValue : difference;
+      
       if (orbBalanceRef.current && difference > 0) {
         const newFloatingText: FloatingText = {
           id: `ft_${Date.now()}_${Math.random()}`,
-          value: difference,
+          value: displayValue, // Use the actual orb value, not the total difference
           createdAt: Date.now(),
           progress: 0,
         };
@@ -189,12 +194,17 @@ export function HUD({ onLeaveRoom }: HUDProps) {
     
     previousOrbsRef.current = currentOrbs;
     
+    // Clear lastOrbValue after use to prevent stale values
+    if (lastOrbValue !== undefined) {
+      useGameStore.setState({ lastOrbValue: undefined });
+    }
+    
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [currentOrbs]);
+  }, [currentOrbs, lastOrbValue]);
   
   // Get orb balance color based on total orbs (same as nameplates)
   const orbColorInfo = getOrbCountColor(displayedOrbs);
