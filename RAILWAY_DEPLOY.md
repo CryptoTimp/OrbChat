@@ -1,30 +1,29 @@
 # Railway Deployment Guide
 
-## Step-by-Step Instructions
+## Quick Start (5 Steps)
 
 ### Step 1: Deploy the Server
 
 1. In Railway dashboard, click **"New Project"** → **"Deploy from GitHub repo"**
 2. Select your `OrbChat` repository
-3. Railway will create a service. Click on it to configure:
-   - **Root Directory**: Set to `server`
-   - **Build Command**: `npm install && npm run build` (or leave auto-detected)
-   - **Start Command**: `npm start` (or leave auto-detected)
-
-4. Go to the **Variables** tab and add:
+3. Railway will create a service. Click on it to open settings
+4. In the service settings, find **"Root Directory"** and set it to: `server`
+5. Go to the **Variables** tab and add:
    ```
-   PORT=3001
-   ALLOWED_ORIGINS=https://your-client-service.railway.app
+   ALLOWED_ORIGINS=https://placeholder.railway.app
    ```
-   ⚠️ **Note**: You'll need to update `ALLOWED_ORIGINS` after you get the client URL in Step 2.
+   ⚠️ **Note**: We'll update this after getting the client URL.
 
-5. Railway will automatically generate a domain. **Copy this URL** (e.g., `https://your-server-production.up.railway.app`)
+6. Railway will automatically deploy and generate a domain. 
+   - Click on the service → **Settings** → **Networking** → **Generate Domain**
+   - **Copy this URL** (e.g., `https://your-server-production.up.railway.app`)
+   - Save it somewhere!
 
 ### Step 2: Deploy the Client
 
 1. In the same Railway project, click **"New"** → **"Service"** → **"GitHub Repo"**
 2. Select the same `OrbChat` repository
-3. Configure the service:
+3. In the service settings:
    - **Root Directory**: Set to `client`
    - **Build Command**: `npm install && npm run build`
    - **Start Command**: `npx serve -s dist -l $PORT`
@@ -33,18 +32,25 @@
    ```
    VITE_SOCKET_URL=https://your-server-production.up.railway.app
    ```
-   ⚠️ **Replace** `your-server-production.up.railway.app` with the actual server URL from Step 1.
+   ⚠️ **Replace** with the actual server URL from Step 1.
 
-5. Railway will generate a client domain. **Copy this URL** (e.g., `https://your-client-production.up.railway.app`)
+5. Railway will automatically deploy. Generate a domain:
+   - Click on the service → **Settings** → **Networking** → **Generate Domain**
+   - **Copy this URL** (e.g., `https://your-client-production.up.railway.app`)
+   - Save it!
 
 ### Step 3: Update CORS Settings
 
 1. Go back to your **Server** service
-2. Update the `ALLOWED_ORIGINS` variable to include your client URL:
-   ```
-   ALLOWED_ORIGINS=https://your-client-production.up.railway.app
-   ```
-3. Railway will automatically redeploy
+2. Go to **Variables** tab
+3. Update the `ALLOWED_ORIGINS` variable:
+   - Click the edit icon (pencil) next to `ALLOWED_ORIGINS`
+   - Replace the value with your client URL:
+     ```
+     https://your-client-production.up.railway.app
+     ```
+   - Click **Save**
+4. Railway will automatically redeploy (watch the Deployments tab)
 
 ### Step 4: Update Client Socket URL (if needed)
 
@@ -65,11 +71,13 @@ If the client didn't pick up the environment variable:
 ## Environment Variables Summary
 
 ### Server Service
-- `PORT=3001` (optional, Railway sets this automatically)
 - `ALLOWED_ORIGINS=https://your-client-url.railway.app`
+  - ⚠️ Must match your client URL exactly (no trailing slash)
+  - Railway automatically sets `PORT`, so you don't need to set it
 
 ### Client Service
 - `VITE_SOCKET_URL=https://your-server-url.railway.app`
+  - ⚠️ Must match your server URL exactly (no trailing slash)
 
 ## Troubleshooting
 
