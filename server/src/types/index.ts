@@ -108,6 +108,13 @@ export interface ClientToServerEvents {
     newOrbs?: number;  // Client sends updated orbs after Firebase update
     newInventory?: string[];  // Client sends updated inventory
   }) => void;
+  purchase_lootbox: (data: { 
+    lootBoxId: string;
+    itemId: string; 
+    newOrbs?: number;  // Client sends updated orbs after Firebase update
+    newInventory?: string[];  // Client sends updated inventory
+    alreadyOwned?: boolean;  // Whether the item was already owned (refund case)
+  }) => void;
   equip_item: (data: { 
     itemId: string; 
     equipped: boolean;
