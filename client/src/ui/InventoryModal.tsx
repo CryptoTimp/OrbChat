@@ -197,7 +197,8 @@ export function InventoryModal() {
     switch (activeTab) {
       case 'all':
         // Combine all items from all categories and sort by rarity (common at top)
-        const allItems = sortByRarity([...tools, ...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets]);
+        // Exclude tools from allItems since they're shown in the Tools section above
+        const allItems = sortByRarity([...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets]);
         return (
           <div>
             {/* Logs section */}

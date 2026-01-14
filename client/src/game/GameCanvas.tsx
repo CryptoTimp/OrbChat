@@ -631,12 +631,15 @@ export function GameCanvas() {
           
           // Check if we're already tracking this player cutting this tree
           const existing = otherPlayersCuttingRef.current.get(cuttingPlayerId);
-          if (!existing || existing.treeId !== treeId) {
-            // New cutting started - track it with fixed duration
-            const duration = 5000; // 5 seconds
+          // Use server-provided startTime if available, otherwise use current time (fallback)
+          const serverStartTime = treeState.cuttingStartTime || currentTime;
+          
+          if (!existing || existing.treeId !== treeId || existing.startTime !== serverStartTime) {
+            // New cutting started or startTime changed - track it with fixed duration
+            const duration = 5000; // 5 seconds (matches server expectation)
             otherPlayersCuttingRef.current.set(cuttingPlayerId, {
               treeId,
-              startTime: currentTime,
+              startTime: serverStartTime, // Use server time for accurate progress
               duration
             });
             // Set chopping animation
@@ -656,8 +659,13 @@ export function GameCanvas() {
       // Clean up tracking for players who are no longer cutting (or finished)
       for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
         const treeState = treeStates.get(cutting.treeId);
-        if (!treeState || !treeState.cutBy || treeState.cutBy !== playerId || treeState.isCut) {
-          // Player is no longer cutting this tree
+        // Check if progress is complete (>= 1) or tree state indicates cutting is done
+        const elapsed = currentTime - cutting.startTime;
+        const progress = elapsed / cutting.duration;
+        const isProgressComplete = progress >= 1;
+        
+        if (!treeState || !treeState.cutBy || treeState.cutBy !== playerId || treeState.isCut || isProgressComplete) {
+          // Player is no longer cutting this tree (either tree is cut, state changed, or progress complete)
           otherPlayersCuttingRef.current.delete(playerId);
           setPlayerChopping(playerId, false);
         }
@@ -1374,6 +1382,10 @@ export function GameCanvas() {
           // Only draw if still in progress (not complete)
           if (progress < 1) {
             drawTreeProgressBar(ctx, tree, progress, currentTime, camera.zoom);
+          } else {
+            // Progress complete - clear chopping animation and tracking
+            otherPlayersCuttingRef.current.delete(playerId);
+            setPlayerChopping(playerId, false);
           }
         }
       }
@@ -1418,7 +1430,7 @@ export function GameCanvas() {
           const scaledX = player.x * SCALE;
           const scaledY = player.y * SCALE;
           const scaledWidth = PLAYER_WIDTH * SCALE;
-          drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * SCALE, Infinity, zoom, player.id);
+          drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * SCALE, Infinity, zoom, player.id, currentTime);
         }
       }
     }
@@ -1428,7 +1440,7 @@ export function GameCanvas() {
       const scaledX = player.x * SCALE;
       const scaledY = player.y * SCALE;
       const scaledWidth = PLAYER_WIDTH * SCALE;
-      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * SCALE, Infinity, zoom, player.id);
+      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * SCALE, Infinity, zoom, player.id, currentTime);
     }
     
     // Draw chat bubbles on top of everything (NPCs first, then real players, then centurions)

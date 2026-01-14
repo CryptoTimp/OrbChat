@@ -4758,7 +4758,7 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
   const scaledX = npcPlayer.x * SCALE;
   const scaledY = npcPlayer.y * SCALE;
   const scaledWidth = PLAYER_WIDTH * SCALE;
-  drawNameTag(ctx, npcPlayer.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, npcPlayer.id);
+      drawNameTag(ctx, npcPlayer.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, npcPlayer.id, time);
   
   // Get speech bubble from npcSpeechBubbles map (updated by updateDealerSpeechBubbles)
   const speechBubble = npcSpeechBubbles.get(dealerType.id);
@@ -6739,9 +6739,9 @@ export function drawPlayer(
     const idParts = player.id.split('_');
     const isGameNPC = player.id.startsWith('npc_') && idParts.length >= 3;
     if (isGameNPC) {
-      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, player.id);
+      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, player.id, time);
     } else {
-      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, player.orbs || 0, zoom, player.id);
+      drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, player.orbs || 0, zoom, player.id, time);
     }
   }
   
@@ -9265,7 +9265,14 @@ function drawNPCInfinityIcon(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.restore();
 }
 
-export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, orbs: number = 0, zoom: number = 1, playerId?: string): void {
+// Generate rainbow color based on time (cycles through spectrum)
+function getRainbowColor(time: number): string {
+  // Cycle through 360 degrees of hue over 3 seconds
+  const hue = (time * 0.001 * 60) % 360; // 60 degrees per second = full cycle in 6 seconds
+  return `hsl(${hue}, 100%, 60%)`;
+}
+
+export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, orbs: number = 0, zoom: number = 1, playerId?: string, time: number = Date.now()): void {
   // Scale font size and dimensions inversely to zoom (bigger when zoomed out, smaller when zoomed in)
   const baseFontSize = 10;
   const fontSize = baseFontSize / zoom;
@@ -9412,9 +9419,19 @@ export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: numb
   // Draw name (ensure text alignment and baseline are correct)
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom'; // Match the baseline used for other text
+  
+  // Check if this is YON - apply rainbow animated color
+  const isYON = name === 'YON';
+  
   // Use orb color for player names (NPCs use white)
   const isNPC = playerId && (playerId.startsWith('villager_') || playerId.startsWith('centurion_') || playerId.startsWith('npc_'));
-  if (isNPC || isInfinity) {
+  if (isYON) {
+    // Rainbow animated color for YON
+    const rainbowColor = getRainbowColor(time);
+    ctx.fillStyle = rainbowColor;
+    ctx.shadowColor = rainbowColor;
+    ctx.shadowBlur = 8 / zoom; // Glowing rainbow effect
+  } else if (isNPC || isInfinity) {
     ctx.fillStyle = '#ffffff'; // NPCs and game NPCs use white
   } else {
     // Use orb color for player names

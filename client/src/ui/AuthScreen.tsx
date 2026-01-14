@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { signUp, signIn } from '../firebase/auth';
+import { useState, useEffect } from 'react';
+import { signUp, signIn, getCurrentUser } from '../firebase/auth';
 import { BackgroundNPCs } from './BackgroundNPCs';
 import { playClickSound } from '../utils/sounds';
 
@@ -22,11 +22,27 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     return !!localStorage.getItem('rememberedEmail');
   });
 
+  // Check if user is already signed in
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      setError('You are already signed in. Please refresh the page or sign out first.');
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     playClickSound();
     setError('');
     setLoading(true);
+
+    // Check if user is already signed in before attempting sign in
+    const currentUser = getCurrentUser();
+    if (currentUser && isLogin) {
+      setError('You are already signed in. Please refresh the page or sign out first.');
+      setLoading(false);
+      return;
+    }
 
     try {
       if (isLogin) {

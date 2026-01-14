@@ -604,7 +604,7 @@
     "acc_wings_dragon": {
       "id": "acc_wings_dragon",
       "name": "Dragon Wings",
-      "price": 100000,
+      "price": 300000,
       "sprite_layer": "wings",
       "sprite_path": "/sprites/acc_wings_dragon.png",
       "rarity": "legendary"
@@ -612,7 +612,7 @@
     "acc_aura_fire": {
       "id": "acc_aura_fire",
       "name": "Fire Aura",
-      "price": 125000,
+      "price": 375000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_fire.png",
       "rarity": "legendary"
@@ -620,7 +620,7 @@
     "acc_aura_ice": {
       "id": "acc_aura_ice",
       "name": "Ice Aura",
-      "price": 125000,
+      "price": 375000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_ice.png",
       "rarity": "legendary"
@@ -668,7 +668,7 @@
     "boost_sonic": {
       "id": "boost_sonic",
       "name": "Sonic Surge",
-      "price": 80000,
+      "price": 240000,
       "sprite_layer": "boost",
       "sprite_path": "/sprites/boost_sonic.png",
       "rarity": "legendary",
@@ -678,7 +678,7 @@
     "boost_phantom": {
       "id": "boost_phantom",
       "name": "Phantom Velocity",
-      "price": 200000,
+      "price": 600000,
       "sprite_layer": "boost",
       "sprite_path": "/sprites/boost_phantom.png",
       "rarity": "legendary",
@@ -864,7 +864,7 @@
     "legs_gold": {
       "id": "legs_gold",
       "name": "Golden Armor Legs",
-      "price": 85000,
+      "price": 255000,
       "sprite_layer": "legs",
       "sprite_path": "/sprites/legs_gold.png",
       "rarity": "legendary"
@@ -1008,7 +1008,7 @@
     "cape_phoenix": {
       "id": "cape_phoenix",
       "name": "Phoenix Plume",
-      "price": 80000,
+      "price": 240000,
       "sprite_layer": "cape",
       "sprite_path": "/sprites/cape_phoenix.png",
       "rarity": "legendary"
@@ -1016,7 +1016,7 @@
     "cape_void": {
       "id": "cape_void",
       "name": "Void Shroud",
-      "price": 100000,
+      "price": 300000,
       "sprite_layer": "cape",
       "sprite_path": "/sprites/cape_void.png",
       "rarity": "legendary"
@@ -1024,7 +1024,7 @@
     "cape_celestial": {
       "id": "cape_celestial",
       "name": "Celestial Mantle",
-      "price": 150000,
+      "price": 450000,
       "sprite_layer": "cape",
       "sprite_path": "/sprites/cape_celestial.png",
       "rarity": "legendary"
@@ -1032,7 +1032,7 @@
     "cape_rainbow": {
       "id": "cape_rainbow",
       "name": "Prismatic Cape",
-      "price": 200000,
+      "price": 600000,
       "sprite_layer": "cape",
       "sprite_path": "/sprites/cape_rainbow.png",
       "rarity": "legendary"
@@ -1040,7 +1040,7 @@
     "cape_galaxy": {
       "id": "cape_galaxy",
       "name": "Galactic Shroud",
-      "price": 250000,
+      "price": 750000,
       "sprite_layer": "cape",
       "sprite_path": "/sprites/cape_galaxy.png",
       "rarity": "legendary"
@@ -1048,7 +1048,7 @@
     "hat_golden": {
       "id": "hat_golden",
       "name": "Golden Crown",
-      "price": 85000,
+      "price": 255000,
       "sprite_layer": "hat",
       "sprite_path": "/sprites/hat_golden.png",
       "rarity": "legendary"
@@ -1056,7 +1056,7 @@
     "hat_phoenix_legendary": {
       "id": "hat_phoenix_legendary",
       "name": "Phoenix Crown",
-      "price": 95000,
+      "price": 285000,
       "sprite_layer": "hat",
       "sprite_path": "/sprites/hat_phoenix_legendary.png",
       "rarity": "legendary"
@@ -1064,7 +1064,7 @@
     "hat_void": {
       "id": "hat_void",
       "name": "Void Helm",
-      "price": 110000,
+      "price": 330000,
       "sprite_layer": "hat",
       "sprite_path": "/sprites/hat_void.png",
       "rarity": "legendary"
@@ -1072,7 +1072,7 @@
     "hat_celestial": {
       "id": "hat_celestial",
       "name": "Celestial Halo",
-      "price": 150000,
+      "price": 450000,
       "sprite_layer": "hat",
       "sprite_path": "/sprites/hat_celestial.png",
       "rarity": "legendary"
@@ -1080,7 +1080,7 @@
     "hat_galaxy": {
       "id": "hat_galaxy",
       "name": "Galaxy Crown",
-      "price": 200000,
+      "price": 600000,
       "sprite_layer": "hat",
       "sprite_path": "/sprites/hat_galaxy.png",
       "rarity": "legendary"
@@ -1088,7 +1088,7 @@
     "hat_rainbow": {
       "id": "hat_rainbow",
       "name": "Prismatic Crown",
-      "price": 180000,
+      "price": 540000,
       "sprite_layer": "hat",
       "sprite_path": "/sprites/hat_rainbow.png",
       "rarity": "legendary"
@@ -1104,7 +1104,7 @@
     "armor_golden": {
       "id": "armor_golden",
       "name": "Golden Plate Armor",
-      "price": 90000,
+      "price": 270000,
       "sprite_layer": "shirt",
       "sprite_path": "/sprites/armor_golden.png",
       "rarity": "legendary"
@@ -1112,7 +1112,7 @@
     "robe_phoenix_legendary": {
       "id": "robe_phoenix_legendary",
       "name": "Phoenix Vestments",
-      "price": 100000,
+      "price": 300000,
       "sprite_layer": "shirt",
       "sprite_path": "/sprites/robe_phoenix_legendary.png",
       "rarity": "legendary"
@@ -1120,7 +1120,7 @@
     "armor_void": {
       "id": "armor_void",
       "name": "Void Armor",
-      "price": 115000,
+      "price": 345000,
       "sprite_layer": "shirt",
       "sprite_path": "/sprites/armor_void.png",
       "rarity": "legendary"
@@ -1128,7 +1128,7 @@
     "robe_celestial": {
       "id": "robe_celestial",
       "name": "Celestial Robes",
-      "price": 155000,
+      "price": 465000,
       "sprite_layer": "shirt",
       "sprite_path": "/sprites/robe_celestial.png",
       "rarity": "legendary"
@@ -1136,7 +1136,7 @@
     "armor_galaxy": {
       "id": "armor_galaxy",
       "name": "Galactic Armor",
-      "price": 210000,
+      "price": 630000,
       "sprite_layer": "shirt",
       "sprite_path": "/sprites/armor_galaxy.png",
       "rarity": "legendary"
@@ -1144,7 +1144,7 @@
     "robe_rainbow": {
       "id": "robe_rainbow",
       "name": "Prismatic Robes",
-      "price": 185000,
+      "price": 555000,
       "sprite_layer": "shirt",
       "sprite_path": "/sprites/robe_rainbow.png",
       "rarity": "legendary"
@@ -1160,7 +1160,7 @@
     "legs_phoenix_legendary": {
       "id": "legs_phoenix_legendary",
       "name": "Phoenix Greaves",
-      "price": 95000,
+      "price": 285000,
       "sprite_layer": "legs",
       "sprite_path": "/sprites/legs_phoenix_legendary.png",
       "rarity": "legendary"
@@ -1168,7 +1168,7 @@
     "legs_void": {
       "id": "legs_void",
       "name": "Void Leggings",
-      "price": 105000,
+      "price": 315000,
       "sprite_layer": "legs",
       "sprite_path": "/sprites/legs_void.png",
       "rarity": "legendary"
@@ -1176,7 +1176,7 @@
     "legs_celestial": {
       "id": "legs_celestial",
       "name": "Celestial Pants",
-      "price": 145000,
+      "price": 435000,
       "sprite_layer": "legs",
       "sprite_path": "/sprites/legs_celestial.png",
       "rarity": "legendary"
@@ -1184,7 +1184,7 @@
     "legs_galaxy": {
       "id": "legs_galaxy",
       "name": "Galactic Leggings",
-      "price": 195000,
+      "price": 585000,
       "sprite_layer": "legs",
       "sprite_path": "/sprites/legs_galaxy.png",
       "rarity": "legendary"
@@ -1192,7 +1192,7 @@
     "legs_rainbow": {
       "id": "legs_rainbow",
       "name": "Prismatic Pants",
-      "price": 175000,
+      "price": 525000,
       "sprite_layer": "legs",
       "sprite_path": "/sprites/legs_rainbow.png",
       "rarity": "legendary"
@@ -1240,7 +1240,7 @@
     "boost_orb_platinum": {
       "id": "boost_orb_platinum",
       "name": "Platinum Collector",
-      "price": 120000,
+      "price": 360000,
       "sprite_layer": "boost",
       "sprite_path": "/sprites/boost_orb_platinum.png",
       "rarity": "legendary",
@@ -1250,7 +1250,7 @@
     "boost_orb_divine": {
       "id": "boost_orb_divine",
       "name": "Divine Harvest",
-      "price": 300000,
+      "price": 900000,
       "sprite_layer": "boost",
       "sprite_path": "/sprites/boost_orb_divine.png",
       "rarity": "legendary",
@@ -1260,7 +1260,7 @@
     "acc_aura_golden": {
       "id": "acc_aura_golden",
       "name": "Golden Aura",
-      "price": 88000,
+      "price": 264000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_golden.png",
       "rarity": "legendary"
@@ -1268,7 +1268,7 @@
     "acc_aura_phoenix": {
       "id": "acc_aura_phoenix",
       "name": "Phoenix Aura",
-      "price": 98000,
+      "price": 294000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_phoenix.png",
       "rarity": "legendary"
@@ -1276,7 +1276,7 @@
     "acc_aura_void": {
       "id": "acc_aura_void",
       "name": "Void Aura",
-      "price": 108000,
+      "price": 324000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_void.png",
       "rarity": "legendary"
@@ -1284,7 +1284,7 @@
     "acc_aura_celestial": {
       "id": "acc_aura_celestial",
       "name": "Celestial Aura",
-      "price": 148000,
+      "price": 444000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_celestial.png",
       "rarity": "legendary"
@@ -1292,7 +1292,7 @@
     "acc_aura_galaxy": {
       "id": "acc_aura_galaxy",
       "name": "Galactic Aura",
-      "price": 198000,
+      "price": 594000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_galaxy.png",
       "rarity": "legendary"
@@ -1300,7 +1300,7 @@
     "acc_aura_rainbow": {
       "id": "acc_aura_rainbow",
       "name": "Prismatic Aura",
-      "price": 178000,
+      "price": 534000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_aura_rainbow.png",
       "rarity": "legendary"
@@ -1308,7 +1308,7 @@
     "acc_wings_golden": {
       "id": "acc_wings_golden",
       "name": "Golden Wings",
-      "price": 92000,
+      "price": 276000,
       "sprite_layer": "wings",
       "sprite_path": "/sprites/acc_wings_golden.png",
       "rarity": "legendary"
@@ -1316,7 +1316,7 @@
     "acc_wings_phoenix": {
       "id": "acc_wings_phoenix",
       "name": "Phoenix Wings",
-      "price": 102000,
+      "price": 306000,
       "sprite_layer": "wings",
       "sprite_path": "/sprites/acc_wings_phoenix.png",
       "rarity": "legendary"
@@ -1324,7 +1324,7 @@
     "acc_wings_void": {
       "id": "acc_wings_void",
       "name": "Void Wings",
-      "price": 112000,
+      "price": 336000,
       "sprite_layer": "wings",
       "sprite_path": "/sprites/acc_wings_void.png",
       "rarity": "legendary"
@@ -1332,7 +1332,7 @@
     "acc_wings_celestial": {
       "id": "acc_wings_celestial",
       "name": "Celestial Wings",
-      "price": 152000,
+      "price": 456000,
       "sprite_layer": "wings",
       "sprite_path": "/sprites/acc_wings_celestial.png",
       "rarity": "legendary"
@@ -1340,7 +1340,7 @@
     "acc_wings_galaxy": {
       "id": "acc_wings_galaxy",
       "name": "Galactic Wings",
-      "price": 202000,
+      "price": 606000,
       "sprite_layer": "wings",
       "sprite_path": "/sprites/acc_wings_galaxy.png",
       "rarity": "legendary"
@@ -1348,7 +1348,7 @@
     "acc_wings_rainbow": {
       "id": "acc_wings_rainbow",
       "name": "Prismatic Wings",
-      "price": 182000,
+      "price": 546000,
       "sprite_layer": "wings",
       "sprite_path": "/sprites/acc_wings_rainbow.png",
       "rarity": "legendary"
@@ -1356,7 +1356,7 @@
     "acc_weapon_golden": {
       "id": "acc_weapon_golden",
       "name": "Golden Dual Blades",
-      "price": 90000,
+      "price": 270000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_weapon_golden.png",
       "rarity": "legendary"
@@ -1364,7 +1364,7 @@
     "acc_weapon_phoenix": {
       "id": "acc_weapon_phoenix",
       "name": "Phoenix Dual Flames",
-      "price": 100000,
+      "price": 300000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_weapon_phoenix.png",
       "rarity": "legendary"
@@ -1372,7 +1372,7 @@
     "acc_weapon_void": {
       "id": "acc_weapon_void",
       "name": "Void Dual Scythes",
-      "price": 110000,
+      "price": 330000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_weapon_void.png",
       "rarity": "legendary"
@@ -1380,7 +1380,7 @@
     "acc_weapon_celestial": {
       "id": "acc_weapon_celestial",
       "name": "Celestial Dual Orbs",
-      "price": 150000,
+      "price": 450000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_weapon_celestial.png",
       "rarity": "legendary"
@@ -1388,7 +1388,7 @@
     "acc_weapon_galaxy": {
       "id": "acc_weapon_galaxy",
       "name": "Galactic Dual Blades",
-      "price": 200000,
+      "price": 600000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_weapon_galaxy.png",
       "rarity": "legendary"
@@ -1396,7 +1396,7 @@
     "acc_weapon_rainbow": {
       "id": "acc_weapon_rainbow",
       "name": "Prismatic Dual Prisms",
-      "price": 180000,
+      "price": 540000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_weapon_rainbow.png",
       "rarity": "legendary"
@@ -1404,7 +1404,7 @@
     "pet_golden": {
       "id": "pet_golden",
       "name": "Golden Dragon",
-      "price": 250000,
+      "price": 750000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_golden.png",
       "rarity": "legendary"
@@ -1412,7 +1412,7 @@
     "pet_phoenix": {
       "id": "pet_phoenix",
       "name": "Phoenix Companion",
-      "price": 280000,
+      "price": 840000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_phoenix.png",
       "rarity": "legendary"
@@ -1420,7 +1420,7 @@
     "pet_void": {
       "id": "pet_void",
       "name": "Void Shadow",
-      "price": 300000,
+      "price": 900000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_void.png",
       "rarity": "legendary"
@@ -1428,7 +1428,7 @@
     "pet_celestial": {
       "id": "pet_celestial",
       "name": "Celestial Star",
-      "price": 350000,
+      "price": 1050000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_celestial.png",
       "rarity": "legendary"
@@ -1436,7 +1436,7 @@
     "pet_galaxy": {
       "id": "pet_galaxy",
       "name": "Galactic Nebula",
-      "price": 400000,
+      "price": 1200000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_galaxy.png",
       "rarity": "legendary"
@@ -1444,7 +1444,7 @@
     "pet_rainbow": {
       "id": "pet_rainbow",
       "name": "Prismatic Spirit",
-      "price": 380000,
+      "price": 1140000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_rainbow.png",
       "rarity": "legendary"
@@ -1458,12 +1458,5 @@
       "rarity": "common"
     }
   },
-  "inventory": [
-    {
-      "player_id": "mCY7QgXzKwRJA8YRzP90qJppE1y2",
-      "item_id": "log",
-      "equipped": false,
-      "purchased_at": "2026-01-14T15:43:05.482Z"
-    }
-  ]
+  "inventory": []
 }

@@ -97,68 +97,68 @@ export function initializeDatabase(): void {
 function migrateAddLegendarySetItems(): void {
   const legendaryItems: ShopItemData[] = [
     // Legendary Hats
-    { id: 'hat_golden', name: 'Golden Crown', price: 85000, sprite_layer: 'hat', sprite_path: '/sprites/hat_golden.png', rarity: 'legendary' },
-    { id: 'hat_phoenix_legendary', name: 'Phoenix Crown', price: 95000, sprite_layer: 'hat', sprite_path: '/sprites/hat_phoenix_legendary.png', rarity: 'legendary' },
-    { id: 'hat_void', name: 'Void Helm', price: 110000, sprite_layer: 'hat', sprite_path: '/sprites/hat_void.png', rarity: 'legendary' },
-    { id: 'hat_celestial', name: 'Celestial Halo', price: 150000, sprite_layer: 'hat', sprite_path: '/sprites/hat_celestial.png', rarity: 'legendary' },
-    { id: 'hat_galaxy', name: 'Galaxy Crown', price: 200000, sprite_layer: 'hat', sprite_path: '/sprites/hat_galaxy.png', rarity: 'legendary' },
-    { id: 'hat_rainbow', name: 'Prismatic Crown', price: 180000, sprite_layer: 'hat', sprite_path: '/sprites/hat_rainbow.png', rarity: 'legendary' },
+    { id: 'hat_golden', name: 'Golden Crown', price: 255000, sprite_layer: 'hat', sprite_path: '/sprites/hat_golden.png', rarity: 'legendary' },
+    { id: 'hat_phoenix_legendary', name: 'Phoenix Crown', price: 285000, sprite_layer: 'hat', sprite_path: '/sprites/hat_phoenix_legendary.png', rarity: 'legendary' },
+    { id: 'hat_void', name: 'Void Helm', price: 330000, sprite_layer: 'hat', sprite_path: '/sprites/hat_void.png', rarity: 'legendary' },
+    { id: 'hat_celestial', name: 'Celestial Halo', price: 450000, sprite_layer: 'hat', sprite_path: '/sprites/hat_celestial.png', rarity: 'legendary' },
+    { id: 'hat_galaxy', name: 'Galaxy Crown', price: 600000, sprite_layer: 'hat', sprite_path: '/sprites/hat_galaxy.png', rarity: 'legendary' },
+    { id: 'hat_rainbow', name: 'Prismatic Crown', price: 540000, sprite_layer: 'hat', sprite_path: '/sprites/hat_rainbow.png', rarity: 'legendary' },
     
     // Epic Hats (missing)
     { id: 'hat_demon', name: 'Demon Crown', price: 48000, sprite_layer: 'hat', sprite_path: '/sprites/hat_demon.png', rarity: 'epic' },
     
-    // Legendary Shirts
-    { id: 'armor_golden', name: 'Golden Plate Armor', price: 90000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_golden.png', rarity: 'legendary' },
-    { id: 'robe_phoenix_legendary', name: 'Phoenix Vestments', price: 100000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_phoenix_legendary.png', rarity: 'legendary' },
-    { id: 'armor_void', name: 'Void Armor', price: 115000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_void.png', rarity: 'legendary' },
-    { id: 'robe_celestial', name: 'Celestial Robes', price: 155000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_celestial.png', rarity: 'legendary' },
-    { id: 'armor_galaxy', name: 'Galactic Armor', price: 210000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_galaxy.png', rarity: 'legendary' },
-    { id: 'robe_rainbow', name: 'Prismatic Robes', price: 185000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_rainbow.png', rarity: 'legendary' },
+    // Legendary Shirts - 200% price increase
+    { id: 'armor_golden', name: 'Golden Plate Armor', price: 270000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_golden.png', rarity: 'legendary' },
+    { id: 'robe_phoenix_legendary', name: 'Phoenix Vestments', price: 300000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_phoenix_legendary.png', rarity: 'legendary' },
+    { id: 'armor_void', name: 'Void Armor', price: 345000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_void.png', rarity: 'legendary' },
+    { id: 'robe_celestial', name: 'Celestial Robes', price: 465000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_celestial.png', rarity: 'legendary' },
+    { id: 'armor_galaxy', name: 'Galactic Armor', price: 630000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_galaxy.png', rarity: 'legendary' },
+    { id: 'robe_rainbow', name: 'Prismatic Robes', price: 555000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_rainbow.png', rarity: 'legendary' },
     
     // Epic Shirts (missing)
     { id: 'robe_phoenix', name: 'Phoenix Robe', price: 48000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_phoenix.png', rarity: 'epic' },
     
-    // Legendary Legs
-    { id: 'legs_phoenix_legendary', name: 'Phoenix Greaves', price: 95000, sprite_layer: 'legs', sprite_path: '/sprites/legs_phoenix_legendary.png', rarity: 'legendary' },
-    { id: 'legs_void', name: 'Void Leggings', price: 105000, sprite_layer: 'legs', sprite_path: '/sprites/legs_void.png', rarity: 'legendary' },
-    { id: 'legs_celestial', name: 'Celestial Pants', price: 145000, sprite_layer: 'legs', sprite_path: '/sprites/legs_celestial.png', rarity: 'legendary' },
-    { id: 'legs_galaxy', name: 'Galactic Leggings', price: 195000, sprite_layer: 'legs', sprite_path: '/sprites/legs_galaxy.png', rarity: 'legendary' },
-    { id: 'legs_rainbow', name: 'Prismatic Pants', price: 175000, sprite_layer: 'legs', sprite_path: '/sprites/legs_rainbow.png', rarity: 'legendary' },
+    // Legendary Legs - 200% price increase
+    { id: 'legs_phoenix_legendary', name: 'Phoenix Greaves', price: 285000, sprite_layer: 'legs', sprite_path: '/sprites/legs_phoenix_legendary.png', rarity: 'legendary' },
+    { id: 'legs_void', name: 'Void Leggings', price: 315000, sprite_layer: 'legs', sprite_path: '/sprites/legs_void.png', rarity: 'legendary' },
+    { id: 'legs_celestial', name: 'Celestial Pants', price: 435000, sprite_layer: 'legs', sprite_path: '/sprites/legs_celestial.png', rarity: 'legendary' },
+    { id: 'legs_galaxy', name: 'Galactic Leggings', price: 585000, sprite_layer: 'legs', sprite_path: '/sprites/legs_galaxy.png', rarity: 'legendary' },
+    { id: 'legs_rainbow', name: 'Prismatic Pants', price: 525000, sprite_layer: 'legs', sprite_path: '/sprites/legs_rainbow.png', rarity: 'legendary' },
     
-    // Legendary Accessories (matching each set)
-    { id: 'acc_aura_golden', name: 'Golden Aura', price: 88000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_golden.png', rarity: 'legendary' },
-    { id: 'acc_aura_phoenix', name: 'Phoenix Aura', price: 98000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_phoenix.png', rarity: 'legendary' },
-    { id: 'acc_aura_void', name: 'Void Aura', price: 108000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_void.png', rarity: 'legendary' },
-    { id: 'acc_aura_celestial', name: 'Celestial Aura', price: 148000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_celestial.png', rarity: 'legendary' },
-    { id: 'acc_aura_galaxy', name: 'Galactic Aura', price: 198000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_galaxy.png', rarity: 'legendary' },
-    { id: 'acc_aura_rainbow', name: 'Prismatic Aura', price: 178000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_rainbow.png', rarity: 'legendary' },
+    // Legendary Accessories (matching each set) - 200% price increase
+    { id: 'acc_aura_golden', name: 'Golden Aura', price: 264000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_golden.png', rarity: 'legendary' },
+    { id: 'acc_aura_phoenix', name: 'Phoenix Aura', price: 294000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_phoenix.png', rarity: 'legendary' },
+    { id: 'acc_aura_void', name: 'Void Aura', price: 324000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_void.png', rarity: 'legendary' },
+    { id: 'acc_aura_celestial', name: 'Celestial Aura', price: 444000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_celestial.png', rarity: 'legendary' },
+    { id: 'acc_aura_galaxy', name: 'Galactic Aura', price: 594000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_galaxy.png', rarity: 'legendary' },
+    { id: 'acc_aura_rainbow', name: 'Prismatic Aura', price: 534000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_rainbow.png', rarity: 'legendary' },
     
-    // Legendary Wings (matching each legendary set)
-    { id: 'acc_wings_golden', name: 'Golden Wings', price: 92000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_golden.png', rarity: 'legendary' },
-    { id: 'acc_wings_phoenix', name: 'Phoenix Wings', price: 102000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_phoenix.png', rarity: 'legendary' },
-    { id: 'acc_wings_void', name: 'Void Wings', price: 112000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_void.png', rarity: 'legendary' },
-    { id: 'acc_wings_celestial', name: 'Celestial Wings', price: 152000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_celestial.png', rarity: 'legendary' },
-    { id: 'acc_wings_galaxy', name: 'Galactic Wings', price: 202000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_galaxy.png', rarity: 'legendary' },
-    { id: 'acc_wings_rainbow', name: 'Prismatic Wings', price: 182000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_rainbow.png', rarity: 'legendary' },
+    // Legendary Wings (matching each legendary set) - 200% price increase
+    { id: 'acc_wings_golden', name: 'Golden Wings', price: 276000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_golden.png', rarity: 'legendary' },
+    { id: 'acc_wings_phoenix', name: 'Phoenix Wings', price: 306000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_phoenix.png', rarity: 'legendary' },
+    { id: 'acc_wings_void', name: 'Void Wings', price: 336000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_void.png', rarity: 'legendary' },
+    { id: 'acc_wings_celestial', name: 'Celestial Wings', price: 456000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_celestial.png', rarity: 'legendary' },
+    { id: 'acc_wings_galaxy', name: 'Galactic Wings', price: 606000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_galaxy.png', rarity: 'legendary' },
+    { id: 'acc_wings_rainbow', name: 'Prismatic Wings', price: 546000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_rainbow.png', rarity: 'legendary' },
     
-    // Legendary Dual Weapons (matching each legendary set)
-    { id: 'acc_weapon_golden', name: 'Golden Dual Blades', price: 90000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_golden.png', rarity: 'legendary' },
-    { id: 'acc_weapon_phoenix', name: 'Phoenix Dual Flames', price: 100000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_phoenix.png', rarity: 'legendary' },
-    { id: 'acc_weapon_void', name: 'Void Dual Scythes', price: 110000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_void.png', rarity: 'legendary' },
-    { id: 'acc_weapon_celestial', name: 'Celestial Dual Orbs', price: 150000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_celestial.png', rarity: 'legendary' },
-    { id: 'acc_weapon_galaxy', name: 'Galactic Dual Blades', price: 200000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_galaxy.png', rarity: 'legendary' },
-    { id: 'acc_weapon_rainbow', name: 'Prismatic Dual Prisms', price: 180000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_rainbow.png', rarity: 'legendary' },
+    // Legendary Dual Weapons (matching each legendary set) - 200% price increase
+    { id: 'acc_weapon_golden', name: 'Golden Dual Blades', price: 270000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_golden.png', rarity: 'legendary' },
+    { id: 'acc_weapon_phoenix', name: 'Phoenix Dual Flames', price: 300000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_phoenix.png', rarity: 'legendary' },
+    { id: 'acc_weapon_void', name: 'Void Dual Scythes', price: 330000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_void.png', rarity: 'legendary' },
+    { id: 'acc_weapon_celestial', name: 'Celestial Dual Orbs', price: 450000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_celestial.png', rarity: 'legendary' },
+    { id: 'acc_weapon_galaxy', name: 'Galactic Dual Blades', price: 600000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_galaxy.png', rarity: 'legendary' },
+    { id: 'acc_weapon_rainbow', name: 'Prismatic Dual Prisms', price: 540000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_rainbow.png', rarity: 'legendary' },
     
     // Tools
     { id: 'tool_axe', name: 'Axe', price: 5000, sprite_layer: 'accessory', sprite_path: '/sprites/tool_axe.png', rarity: 'common' },
     
-    // Legendary Pets (matching each legendary set)
-    { id: 'pet_golden', name: 'Golden Dragon', price: 250000, sprite_layer: 'pet', sprite_path: '/sprites/pet_golden.png', rarity: 'legendary' },
-    { id: 'pet_phoenix', name: 'Phoenix Companion', price: 280000, sprite_layer: 'pet', sprite_path: '/sprites/pet_phoenix.png', rarity: 'legendary' },
-    { id: 'pet_void', name: 'Void Shadow', price: 300000, sprite_layer: 'pet', sprite_path: '/sprites/pet_void.png', rarity: 'legendary' },
-    { id: 'pet_celestial', name: 'Celestial Star', price: 350000, sprite_layer: 'pet', sprite_path: '/sprites/pet_celestial.png', rarity: 'legendary' },
-    { id: 'pet_galaxy', name: 'Galactic Nebula', price: 400000, sprite_layer: 'pet', sprite_path: '/sprites/pet_galaxy.png', rarity: 'legendary' },
-    { id: 'pet_rainbow', name: 'Prismatic Spirit', price: 380000, sprite_layer: 'pet', sprite_path: '/sprites/pet_rainbow.png', rarity: 'legendary' },
+    // Legendary Pets (matching each legendary set) - 200% price increase
+    { id: 'pet_golden', name: 'Golden Dragon', price: 750000, sprite_layer: 'pet', sprite_path: '/sprites/pet_golden.png', rarity: 'legendary' },
+    { id: 'pet_phoenix', name: 'Phoenix Companion', price: 840000, sprite_layer: 'pet', sprite_path: '/sprites/pet_phoenix.png', rarity: 'legendary' },
+    { id: 'pet_void', name: 'Void Shadow', price: 900000, sprite_layer: 'pet', sprite_path: '/sprites/pet_void.png', rarity: 'legendary' },
+    { id: 'pet_celestial', name: 'Celestial Star', price: 1050000, sprite_layer: 'pet', sprite_path: '/sprites/pet_celestial.png', rarity: 'legendary' },
+    { id: 'pet_galaxy', name: 'Galactic Nebula', price: 1200000, sprite_layer: 'pet', sprite_path: '/sprites/pet_galaxy.png', rarity: 'legendary' },
+    { id: 'pet_rainbow', name: 'Prismatic Spirit', price: 1140000, sprite_layer: 'pet', sprite_path: '/sprites/pet_rainbow.png', rarity: 'legendary' },
   ];
   
   let addedCount = 0;
@@ -186,9 +186,9 @@ const ECONOMY_PRICES: Record<string, number> = {
   'hat_halo': 6000, 'hat_horns': 5000, 'hat_tiara': 7500, 'hat_viking': 4500, 'hat_knight': 8000,
   // HATS - Epic
   'hat_crown': 25000, 'hat_astronaut': 35000, 'hat_dragon': 45000, 'hat_phoenix': 50000, 'hat_demon': 48000,
-  // HATS - Legendary
-  'hat_golden': 85000, 'hat_phoenix_legendary': 95000, 'hat_void': 110000,
-  'hat_celestial': 150000, 'hat_galaxy': 200000, 'hat_rainbow': 180000,
+  // HATS - Legendary - 200% price increase
+  'hat_golden': 255000, 'hat_phoenix_legendary': 285000, 'hat_void': 330000,
+  'hat_celestial': 450000, 'hat_galaxy': 600000, 'hat_rainbow': 540000,
   
   // SHIRTS - Common
   'shirt_red': 100, 'shirt_blue': 100, 'shirt_green': 100, 'shirt_yellow': 100, 'shirt_purple': 100,
@@ -202,9 +202,9 @@ const ECONOMY_PRICES: Record<string, number> = {
   'armor_knight': 9000, 'armor_samurai': 9500, 'suit_space': 10000, 'jacket_neon': 7500,
   // SHIRTS - Epic
   'armor_gold': 35000, 'robe_dragon': 40000, 'armor_demon': 45000, 'robe_phoenix': 48000,
-  // SHIRTS - Legendary
-  'armor_golden': 90000, 'robe_phoenix_legendary': 100000, 'armor_void': 115000,
-  'robe_celestial': 155000, 'armor_galaxy': 210000, 'robe_rainbow': 185000,
+  // SHIRTS - Legendary - 200% price increase
+  'armor_golden': 270000, 'robe_phoenix_legendary': 300000, 'armor_void': 345000,
+  'robe_celestial': 465000, 'armor_galaxy': 630000, 'robe_rainbow': 555000,
   
   // LEGS - Common
   'legs_jeans_blue': 100, 'legs_jeans_black': 100, 'legs_shorts': 80, 'legs_sweatpants': 100,
@@ -216,9 +216,9 @@ const ECONOMY_PRICES: Record<string, number> = {
   'legs_princess': 6500, 'legs_angel': 7000,
   // LEGS - Epic
   'legs_dragon': 30000, 'legs_demon': 35000, 'legs_phoenix': 40000,
-  // LEGS - Legendary
-  'legs_gold': 85000, 'legs_phoenix_legendary': 95000, 'legs_void': 105000,
-  'legs_celestial': 145000, 'legs_galaxy': 195000, 'legs_rainbow': 175000,
+  // LEGS - Legendary - 200% price increase
+  'legs_gold': 255000, 'legs_phoenix_legendary': 285000, 'legs_void': 315000,
+  'legs_celestial': 435000, 'legs_galaxy': 585000, 'legs_rainbow': 525000,
   
   // ACCESSORIES - Common
   'acc_glasses': 200, 'acc_sunglasses': 250, 'acc_eyepatch': 150, 'acc_scarf': 300, 'acc_bowtie': 200,
@@ -229,18 +229,18 @@ const ECONOMY_PRICES: Record<string, number> = {
   'acc_cape_royal': 8000, 'acc_wings_fairy': 9000, 'acc_sword': 5000, 'acc_staff': 6000, 'acc_guitar': 7000,
   // ACCESSORIES - Epic
   'acc_wings_angel': 25000, 'acc_wings_devil': 25000, 'acc_jetpack': 35000,
-  // ACCESSORIES - Legendary
-  'acc_wings_dragon': 100000, 'acc_aura_fire': 125000, 'acc_aura_ice': 125000,
-  'acc_aura_golden': 88000, 'acc_aura_phoenix': 98000, 'acc_aura_void': 108000,
-  'acc_aura_celestial': 148000, 'acc_aura_galaxy': 198000, 'acc_aura_rainbow': 178000,
-  'acc_wings_golden': 92000, 'acc_wings_phoenix': 102000, 'acc_wings_void': 112000,
-  'acc_wings_celestial': 152000, 'acc_wings_galaxy': 202000, 'acc_wings_rainbow': 182000,
-  'acc_weapon_golden': 90000, 'acc_weapon_phoenix': 100000, 'acc_weapon_void': 110000,
-  'acc_weapon_celestial': 150000, 'acc_weapon_galaxy': 200000, 'acc_weapon_rainbow': 180000,
+  // ACCESSORIES - Legendary - 200% price increase
+  'acc_wings_dragon': 300000, 'acc_aura_fire': 375000, 'acc_aura_ice': 375000,
+  'acc_aura_golden': 264000, 'acc_aura_phoenix': 294000, 'acc_aura_void': 324000,
+  'acc_aura_celestial': 444000, 'acc_aura_galaxy': 594000, 'acc_aura_rainbow': 534000,
+  'acc_wings_golden': 276000, 'acc_wings_phoenix': 306000, 'acc_wings_void': 336000,
+  'acc_wings_celestial': 456000, 'acc_wings_galaxy': 606000, 'acc_wings_rainbow': 546000,
+  'acc_weapon_golden': 270000, 'acc_weapon_phoenix': 300000, 'acc_weapon_void': 330000,
+  'acc_weapon_celestial': 450000, 'acc_weapon_galaxy': 600000, 'acc_weapon_rainbow': 540000,
   
-  // PETS - Legendary (very expensive)
-  'pet_golden': 250000, 'pet_phoenix': 280000, 'pet_void': 300000,
-  'pet_celestial': 350000, 'pet_galaxy': 400000, 'pet_rainbow': 380000,
+  // PETS - Legendary (very expensive) - 200% price increase
+  'pet_golden': 750000, 'pet_phoenix': 840000, 'pet_void': 900000,
+  'pet_celestial': 1050000, 'pet_galaxy': 1200000, 'pet_rainbow': 1140000,
   
   // CAPES - Common
   'cape_red': 250, 'cape_blue': 250, 'cape_green': 250,
@@ -250,15 +250,15 @@ const ECONOMY_PRICES: Record<string, number> = {
   'cape_royal': 6000, 'cape_knight': 7000, 'cape_wizard': 8000, 'cape_vampire': 9000, 'cape_nature': 8500,
   // CAPES - Epic
   'cape_fire': 25000, 'cape_ice': 25000, 'cape_lightning': 30000, 'cape_dragon': 45000,
-  // CAPES - Legendary
-  'cape_phoenix': 80000, 'cape_void': 100000, 'cape_celestial': 150000, 'cape_rainbow': 200000, 'cape_galaxy': 250000,
+  // CAPES - Legendary - 200% price increase
+  'cape_phoenix': 240000, 'cape_void': 300000, 'cape_celestial': 450000, 'cape_rainbow': 600000, 'cape_galaxy': 750000,
   
-  // BOOSTS (Speed)
+  // BOOSTS (Speed) - Legendary items with 200% price increase
   'boost_swift': 2000, 'boost_runner': 8000, 'boost_dash': 25000,
-  'boost_lightning': 40000, 'boost_sonic': 80000, 'boost_phantom': 200000,
-  // BOOSTS (Orb)
+  'boost_lightning': 40000, 'boost_sonic': 240000, 'boost_phantom': 600000,
+  // BOOSTS (Orb) - Legendary items with 200% price increase
   'boost_orb_lucky': 3000, 'boost_orb_fortune': 12000, 'boost_orb_wealth': 35000,
-  'boost_orb_treasure': 55000, 'boost_orb_platinum': 120000, 'boost_orb_divine': 300000,
+  'boost_orb_treasure': 55000, 'boost_orb_platinum': 360000, 'boost_orb_divine': 900000,
 };
 
 function migrateUpdatePrices(): void {
@@ -311,7 +311,7 @@ function migrateAddLegItems(): void {
     { id: 'legs_dragon', name: 'Dragon Leg Armor', price: 30000, sprite_layer: 'legs', sprite_path: '/sprites/legs_dragon.png', rarity: 'epic' },
     { id: 'legs_demon', name: 'Demon Greaves', price: 35000, sprite_layer: 'legs', sprite_path: '/sprites/legs_demon.png', rarity: 'epic' },
     { id: 'legs_phoenix', name: 'Phoenix Leggings', price: 40000, sprite_layer: 'legs', sprite_path: '/sprites/legs_phoenix.png', rarity: 'epic' },
-    { id: 'legs_gold', name: 'Golden Armor Legs', price: 85000, sprite_layer: 'legs', sprite_path: '/sprites/legs_gold.png', rarity: 'legendary' },
+    { id: 'legs_gold', name: 'Golden Armor Legs', price: 255000, sprite_layer: 'legs', sprite_path: '/sprites/legs_gold.png', rarity: 'legendary' },
   ];
   
   let addedCount = 0;
@@ -355,12 +355,12 @@ function migrateAddCapeItems(): void {
     { id: 'cape_lightning', name: 'Storm Cape', price: 30000, sprite_layer: 'cape', sprite_path: '/sprites/cape_lightning.png', rarity: 'epic' },
     { id: 'cape_dragon', name: 'Dragonscale Cape', price: 45000, sprite_layer: 'cape', sprite_path: '/sprites/cape_dragon.png', rarity: 'epic' },
     
-    // Legendary Capes - 75000-250000 orbs
-    { id: 'cape_phoenix', name: 'Phoenix Plume', price: 80000, sprite_layer: 'cape', sprite_path: '/sprites/cape_phoenix.png', rarity: 'legendary' },
-    { id: 'cape_void', name: 'Void Shroud', price: 100000, sprite_layer: 'cape', sprite_path: '/sprites/cape_void.png', rarity: 'legendary' },
-    { id: 'cape_celestial', name: 'Celestial Mantle', price: 150000, sprite_layer: 'cape', sprite_path: '/sprites/cape_celestial.png', rarity: 'legendary' },
-    { id: 'cape_rainbow', name: 'Prismatic Cape', price: 200000, sprite_layer: 'cape', sprite_path: '/sprites/cape_rainbow.png', rarity: 'legendary' },
-    { id: 'cape_galaxy', name: 'Galactic Shroud', price: 250000, sprite_layer: 'cape', sprite_path: '/sprites/cape_galaxy.png', rarity: 'legendary' },
+    // Legendary Capes - 75000-250000 orbs - 200% price increase
+    { id: 'cape_phoenix', name: 'Phoenix Plume', price: 240000, sprite_layer: 'cape', sprite_path: '/sprites/cape_phoenix.png', rarity: 'legendary' },
+    { id: 'cape_void', name: 'Void Shroud', price: 300000, sprite_layer: 'cape', sprite_path: '/sprites/cape_void.png', rarity: 'legendary' },
+    { id: 'cape_celestial', name: 'Celestial Mantle', price: 450000, sprite_layer: 'cape', sprite_path: '/sprites/cape_celestial.png', rarity: 'legendary' },
+    { id: 'cape_rainbow', name: 'Prismatic Cape', price: 600000, sprite_layer: 'cape', sprite_path: '/sprites/cape_rainbow.png', rarity: 'legendary' },
+    { id: 'cape_galaxy', name: 'Galactic Shroud', price: 750000, sprite_layer: 'cape', sprite_path: '/sprites/cape_galaxy.png', rarity: 'legendary' },
   ];
   
   // Remove old accessory capes if they exist (migrate to new cape layer)
@@ -422,13 +422,13 @@ function seedShopItems(): void {
     { id: 'hat_phoenix', name: 'Phoenix Crest', price: 50000, sprite_layer: 'hat', sprite_path: '/sprites/hat_phoenix.png', rarity: 'epic' },
     { id: 'hat_demon', name: 'Demon Crown', price: 48000, sprite_layer: 'hat', sprite_path: '/sprites/hat_demon.png', rarity: 'epic' },
     
-    // Legendary - 75000-250000 orbs (Complete Sets)
-    { id: 'hat_golden', name: 'Golden Crown', price: 85000, sprite_layer: 'hat', sprite_path: '/sprites/hat_golden.png', rarity: 'legendary' },
-    { id: 'hat_phoenix_legendary', name: 'Phoenix Crown', price: 95000, sprite_layer: 'hat', sprite_path: '/sprites/hat_phoenix_legendary.png', rarity: 'legendary' },
-    { id: 'hat_void', name: 'Void Helm', price: 110000, sprite_layer: 'hat', sprite_path: '/sprites/hat_void.png', rarity: 'legendary' },
-    { id: 'hat_celestial', name: 'Celestial Halo', price: 150000, sprite_layer: 'hat', sprite_path: '/sprites/hat_celestial.png', rarity: 'legendary' },
-    { id: 'hat_galaxy', name: 'Galaxy Crown', price: 200000, sprite_layer: 'hat', sprite_path: '/sprites/hat_galaxy.png', rarity: 'legendary' },
-    { id: 'hat_rainbow', name: 'Prismatic Crown', price: 180000, sprite_layer: 'hat', sprite_path: '/sprites/hat_rainbow.png', rarity: 'legendary' },
+    // Legendary - 75000-250000 orbs (Complete Sets) - 200% price increase
+    { id: 'hat_golden', name: 'Golden Crown', price: 255000, sprite_layer: 'hat', sprite_path: '/sprites/hat_golden.png', rarity: 'legendary' },
+    { id: 'hat_phoenix_legendary', name: 'Phoenix Crown', price: 285000, sprite_layer: 'hat', sprite_path: '/sprites/hat_phoenix_legendary.png', rarity: 'legendary' },
+    { id: 'hat_void', name: 'Void Helm', price: 330000, sprite_layer: 'hat', sprite_path: '/sprites/hat_void.png', rarity: 'legendary' },
+    { id: 'hat_celestial', name: 'Celestial Halo', price: 450000, sprite_layer: 'hat', sprite_path: '/sprites/hat_celestial.png', rarity: 'legendary' },
+    { id: 'hat_galaxy', name: 'Galaxy Crown', price: 600000, sprite_layer: 'hat', sprite_path: '/sprites/hat_galaxy.png', rarity: 'legendary' },
+    { id: 'hat_rainbow', name: 'Prismatic Crown', price: 540000, sprite_layer: 'hat', sprite_path: '/sprites/hat_rainbow.png', rarity: 'legendary' },
     
     // === SHIRTS === (Body/Chest)
     // Basic Colors (Common) - 100-400 orbs
@@ -471,13 +471,13 @@ function seedShopItems(): void {
     { id: 'armor_demon', name: 'Demon Armor', price: 45000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_demon.png', rarity: 'epic' },
     { id: 'robe_phoenix', name: 'Phoenix Robe', price: 48000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_phoenix.png', rarity: 'epic' },
     
-    // Legendary - 75000-250000 orbs (Complete Sets)
-    { id: 'armor_golden', name: 'Golden Plate Armor', price: 90000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_golden.png', rarity: 'legendary' },
-    { id: 'robe_phoenix_legendary', name: 'Phoenix Vestments', price: 100000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_phoenix_legendary.png', rarity: 'legendary' },
-    { id: 'armor_void', name: 'Void Armor', price: 115000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_void.png', rarity: 'legendary' },
-    { id: 'robe_celestial', name: 'Celestial Robes', price: 155000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_celestial.png', rarity: 'legendary' },
-    { id: 'armor_galaxy', name: 'Galactic Armor', price: 210000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_galaxy.png', rarity: 'legendary' },
-    { id: 'robe_rainbow', name: 'Prismatic Robes', price: 185000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_rainbow.png', rarity: 'legendary' },
+    // Legendary - 75000-250000 orbs (Complete Sets) - 200% price increase
+    { id: 'armor_golden', name: 'Golden Plate Armor', price: 270000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_golden.png', rarity: 'legendary' },
+    { id: 'robe_phoenix_legendary', name: 'Phoenix Vestments', price: 300000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_phoenix_legendary.png', rarity: 'legendary' },
+    { id: 'armor_void', name: 'Void Armor', price: 345000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_void.png', rarity: 'legendary' },
+    { id: 'robe_celestial', name: 'Celestial Robes', price: 465000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_celestial.png', rarity: 'legendary' },
+    { id: 'armor_galaxy', name: 'Galactic Armor', price: 630000, sprite_layer: 'shirt', sprite_path: '/sprites/armor_galaxy.png', rarity: 'legendary' },
+    { id: 'robe_rainbow', name: 'Prismatic Robes', price: 555000, sprite_layer: 'shirt', sprite_path: '/sprites/robe_rainbow.png', rarity: 'legendary' },
     
     // === LEGS === (Pants/Trousers)
     // Basic (Common) - 100-400 orbs
@@ -510,13 +510,13 @@ function seedShopItems(): void {
     { id: 'legs_demon', name: 'Demon Greaves', price: 35000, sprite_layer: 'legs', sprite_path: '/sprites/legs_demon.png', rarity: 'epic' },
     { id: 'legs_phoenix', name: 'Phoenix Leggings', price: 40000, sprite_layer: 'legs', sprite_path: '/sprites/legs_phoenix.png', rarity: 'epic' },
     
-    // Legendary - 75000-250000 orbs (Complete Sets)
-    { id: 'legs_gold', name: 'Golden Armor Legs', price: 85000, sprite_layer: 'legs', sprite_path: '/sprites/legs_gold.png', rarity: 'legendary' },
-    { id: 'legs_phoenix_legendary', name: 'Phoenix Greaves', price: 95000, sprite_layer: 'legs', sprite_path: '/sprites/legs_phoenix_legendary.png', rarity: 'legendary' },
-    { id: 'legs_void', name: 'Void Leggings', price: 105000, sprite_layer: 'legs', sprite_path: '/sprites/legs_void.png', rarity: 'legendary' },
-    { id: 'legs_celestial', name: 'Celestial Pants', price: 145000, sprite_layer: 'legs', sprite_path: '/sprites/legs_celestial.png', rarity: 'legendary' },
-    { id: 'legs_galaxy', name: 'Galactic Leggings', price: 195000, sprite_layer: 'legs', sprite_path: '/sprites/legs_galaxy.png', rarity: 'legendary' },
-    { id: 'legs_rainbow', name: 'Prismatic Pants', price: 175000, sprite_layer: 'legs', sprite_path: '/sprites/legs_rainbow.png', rarity: 'legendary' },
+    // Legendary - 75000-250000 orbs (Complete Sets) - 200% price increase
+    { id: 'legs_gold', name: 'Golden Armor Legs', price: 255000, sprite_layer: 'legs', sprite_path: '/sprites/legs_gold.png', rarity: 'legendary' },
+    { id: 'legs_phoenix_legendary', name: 'Phoenix Greaves', price: 285000, sprite_layer: 'legs', sprite_path: '/sprites/legs_phoenix_legendary.png', rarity: 'legendary' },
+    { id: 'legs_void', name: 'Void Leggings', price: 315000, sprite_layer: 'legs', sprite_path: '/sprites/legs_void.png', rarity: 'legendary' },
+    { id: 'legs_celestial', name: 'Celestial Pants', price: 435000, sprite_layer: 'legs', sprite_path: '/sprites/legs_celestial.png', rarity: 'legendary' },
+    { id: 'legs_galaxy', name: 'Galactic Leggings', price: 585000, sprite_layer: 'legs', sprite_path: '/sprites/legs_galaxy.png', rarity: 'legendary' },
+    { id: 'legs_rainbow', name: 'Prismatic Pants', price: 525000, sprite_layer: 'legs', sprite_path: '/sprites/legs_rainbow.png', rarity: 'legendary' },
     
     // === ACCESSORIES === (Face/Back/Extras)
     // Common - 100-400 orbs
@@ -549,34 +549,34 @@ function seedShopItems(): void {
     { id: 'acc_wings_devil', name: 'Devil Wings', price: 25000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_devil.png', rarity: 'epic' },
     { id: 'acc_jetpack', name: 'Jetpack', price: 35000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_jetpack.png', rarity: 'epic' },
     
-    // Legendary - 75000+ orbs
-    { id: 'acc_wings_dragon', name: 'Dragon Wings', price: 100000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_dragon.png', rarity: 'legendary' },
-    { id: 'acc_aura_fire', name: 'Fire Aura', price: 125000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_fire.png', rarity: 'legendary' },
-    { id: 'acc_aura_ice', name: 'Ice Aura', price: 125000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_ice.png', rarity: 'legendary' },
+    // Legendary - 75000+ orbs - 200% price increase
+    { id: 'acc_wings_dragon', name: 'Dragon Wings', price: 300000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_dragon.png', rarity: 'legendary' },
+    { id: 'acc_aura_fire', name: 'Fire Aura', price: 375000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_fire.png', rarity: 'legendary' },
+    { id: 'acc_aura_ice', name: 'Ice Aura', price: 375000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_ice.png', rarity: 'legendary' },
     
-    // Legendary Set Accessories (matching each legendary set)
-    { id: 'acc_aura_golden', name: 'Golden Aura', price: 88000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_golden.png', rarity: 'legendary' },
-    { id: 'acc_aura_phoenix', name: 'Phoenix Aura', price: 98000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_phoenix.png', rarity: 'legendary' },
-    { id: 'acc_aura_void', name: 'Void Aura', price: 108000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_void.png', rarity: 'legendary' },
-    { id: 'acc_aura_celestial', name: 'Celestial Aura', price: 148000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_celestial.png', rarity: 'legendary' },
-    { id: 'acc_aura_galaxy', name: 'Galactic Aura', price: 198000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_galaxy.png', rarity: 'legendary' },
-    { id: 'acc_aura_rainbow', name: 'Prismatic Aura', price: 178000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_rainbow.png', rarity: 'legendary' },
+    // Legendary Set Accessories (matching each legendary set) - 200% price increase
+    { id: 'acc_aura_golden', name: 'Golden Aura', price: 264000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_golden.png', rarity: 'legendary' },
+    { id: 'acc_aura_phoenix', name: 'Phoenix Aura', price: 294000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_phoenix.png', rarity: 'legendary' },
+    { id: 'acc_aura_void', name: 'Void Aura', price: 324000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_void.png', rarity: 'legendary' },
+    { id: 'acc_aura_celestial', name: 'Celestial Aura', price: 444000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_celestial.png', rarity: 'legendary' },
+    { id: 'acc_aura_galaxy', name: 'Galactic Aura', price: 594000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_galaxy.png', rarity: 'legendary' },
+    { id: 'acc_aura_rainbow', name: 'Prismatic Aura', price: 534000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_aura_rainbow.png', rarity: 'legendary' },
     
-    // Legendary Wings (matching each legendary set)
-    { id: 'acc_wings_golden', name: 'Golden Wings', price: 92000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_golden.png', rarity: 'legendary' },
-    { id: 'acc_wings_phoenix', name: 'Phoenix Wings', price: 102000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_phoenix.png', rarity: 'legendary' },
-    { id: 'acc_wings_void', name: 'Void Wings', price: 112000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_void.png', rarity: 'legendary' },
-    { id: 'acc_wings_celestial', name: 'Celestial Wings', price: 152000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_celestial.png', rarity: 'legendary' },
-    { id: 'acc_wings_galaxy', name: 'Galactic Wings', price: 202000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_galaxy.png', rarity: 'legendary' },
-    { id: 'acc_wings_rainbow', name: 'Prismatic Wings', price: 182000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_rainbow.png', rarity: 'legendary' },
+    // Legendary Wings (matching each legendary set) - 200% price increase
+    { id: 'acc_wings_golden', name: 'Golden Wings', price: 276000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_golden.png', rarity: 'legendary' },
+    { id: 'acc_wings_phoenix', name: 'Phoenix Wings', price: 306000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_phoenix.png', rarity: 'legendary' },
+    { id: 'acc_wings_void', name: 'Void Wings', price: 336000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_void.png', rarity: 'legendary' },
+    { id: 'acc_wings_celestial', name: 'Celestial Wings', price: 456000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_celestial.png', rarity: 'legendary' },
+    { id: 'acc_wings_galaxy', name: 'Galactic Wings', price: 606000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_galaxy.png', rarity: 'legendary' },
+    { id: 'acc_wings_rainbow', name: 'Prismatic Wings', price: 546000, sprite_layer: 'wings', sprite_path: '/sprites/acc_wings_rainbow.png', rarity: 'legendary' },
     
-    // Legendary Dual Weapons (matching each legendary set)
-    { id: 'acc_weapon_golden', name: 'Golden Dual Blades', price: 90000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_golden.png', rarity: 'legendary' },
-    { id: 'acc_weapon_phoenix', name: 'Phoenix Dual Flames', price: 100000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_phoenix.png', rarity: 'legendary' },
-    { id: 'acc_weapon_void', name: 'Void Dual Scythes', price: 110000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_void.png', rarity: 'legendary' },
-    { id: 'acc_weapon_celestial', name: 'Celestial Dual Orbs', price: 150000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_celestial.png', rarity: 'legendary' },
-    { id: 'acc_weapon_galaxy', name: 'Galactic Dual Blades', price: 200000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_galaxy.png', rarity: 'legendary' },
-    { id: 'acc_weapon_rainbow', name: 'Prismatic Dual Prisms', price: 180000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_rainbow.png', rarity: 'legendary' },
+    // Legendary Dual Weapons (matching each legendary set) - 200% price increase
+    { id: 'acc_weapon_golden', name: 'Golden Dual Blades', price: 270000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_golden.png', rarity: 'legendary' },
+    { id: 'acc_weapon_phoenix', name: 'Phoenix Dual Flames', price: 300000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_phoenix.png', rarity: 'legendary' },
+    { id: 'acc_weapon_void', name: 'Void Dual Scythes', price: 330000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_void.png', rarity: 'legendary' },
+    { id: 'acc_weapon_celestial', name: 'Celestial Dual Orbs', price: 450000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_celestial.png', rarity: 'legendary' },
+    { id: 'acc_weapon_galaxy', name: 'Galactic Dual Blades', price: 600000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_galaxy.png', rarity: 'legendary' },
+    { id: 'acc_weapon_rainbow', name: 'Prismatic Dual Prisms', price: 540000, sprite_layer: 'accessory', sprite_path: '/sprites/acc_weapon_rainbow.png', rarity: 'legendary' },
     
     // === SPEED BOOSTS === (Special)
     // Uncommon boost - 2000 orbs (~8 min)
@@ -591,11 +591,11 @@ function seedShopItems(): void {
     // Epic boost - 40000 orbs (~2.5 hours)
     { id: 'boost_lightning', name: 'Lightning Step', price: 40000, sprite_layer: 'boost', sprite_path: '/sprites/boost_lightning.png', rarity: 'epic', speed_multiplier: 1.6, trail_color: '#f59e0b' },
     
-    // Legendary boost - 80000 orbs (~5 hours)
-    { id: 'boost_sonic', name: 'Sonic Surge', price: 80000, sprite_layer: 'boost', sprite_path: '/sprites/boost_sonic.png', rarity: 'legendary', speed_multiplier: 1.75, trail_color: '#ef4444' },
+    // Legendary boost - 80000 orbs (~5 hours) - 200% price increase
+    { id: 'boost_sonic', name: 'Sonic Surge', price: 240000, sprite_layer: 'boost', sprite_path: '/sprites/boost_sonic.png', rarity: 'legendary', speed_multiplier: 1.75, trail_color: '#ef4444' },
     
-    // Ultra Legendary - 200000 orbs (~13+ hours)
-    { id: 'boost_phantom', name: 'Phantom Velocity', price: 200000, sprite_layer: 'boost', sprite_path: '/sprites/boost_phantom.png', rarity: 'legendary', speed_multiplier: 2.0, trail_color: '#ec4899' },
+    // Ultra Legendary - 200000 orbs (~13+ hours) - 200% price increase
+    { id: 'boost_phantom', name: 'Phantom Velocity', price: 600000, sprite_layer: 'boost', sprite_path: '/sprites/boost_phantom.png', rarity: 'legendary', speed_multiplier: 2.0, trail_color: '#ec4899' },
     
     // === ORB BOOSTS === (Special)
     // Uncommon orb boost - 3000 orbs (~12 min)
@@ -616,13 +616,13 @@ function seedShopItems(): void {
     // Ultra Legendary orb boost - 300000 orbs (~20+ hours)
     { id: 'boost_orb_divine', name: 'Divine Harvest', price: 300000, sprite_layer: 'boost', sprite_path: '/sprites/boost_orb_divine.png', rarity: 'legendary', orb_multiplier: 3.0, trail_color: '#ec4899' },
     
-    // === LEGENDARY PETS === (Cosmetic companions that follow you)
-    { id: 'pet_golden', name: 'Golden Dragon', price: 250000, sprite_layer: 'pet', sprite_path: '/sprites/pet_golden.png', rarity: 'legendary' },
-    { id: 'pet_phoenix', name: 'Phoenix Companion', price: 280000, sprite_layer: 'pet', sprite_path: '/sprites/pet_phoenix.png', rarity: 'legendary' },
-    { id: 'pet_void', name: 'Void Shadow', price: 300000, sprite_layer: 'pet', sprite_path: '/sprites/pet_void.png', rarity: 'legendary' },
-    { id: 'pet_celestial', name: 'Celestial Star', price: 350000, sprite_layer: 'pet', sprite_path: '/sprites/pet_celestial.png', rarity: 'legendary' },
-    { id: 'pet_galaxy', name: 'Galactic Nebula', price: 400000, sprite_layer: 'pet', sprite_path: '/sprites/pet_galaxy.png', rarity: 'legendary' },
-    { id: 'pet_rainbow', name: 'Prismatic Spirit', price: 380000, sprite_layer: 'pet', sprite_path: '/sprites/pet_rainbow.png', rarity: 'legendary' },
+    // === LEGENDARY PETS === (Cosmetic companions that follow you) - 200% price increase
+    { id: 'pet_golden', name: 'Golden Dragon', price: 750000, sprite_layer: 'pet', sprite_path: '/sprites/pet_golden.png', rarity: 'legendary' },
+    { id: 'pet_phoenix', name: 'Phoenix Companion', price: 840000, sprite_layer: 'pet', sprite_path: '/sprites/pet_phoenix.png', rarity: 'legendary' },
+    { id: 'pet_void', name: 'Void Shadow', price: 900000, sprite_layer: 'pet', sprite_path: '/sprites/pet_void.png', rarity: 'legendary' },
+    { id: 'pet_celestial', name: 'Celestial Star', price: 1050000, sprite_layer: 'pet', sprite_path: '/sprites/pet_celestial.png', rarity: 'legendary' },
+    { id: 'pet_galaxy', name: 'Galactic Nebula', price: 1200000, sprite_layer: 'pet', sprite_path: '/sprites/pet_galaxy.png', rarity: 'legendary' },
+    { id: 'pet_rainbow', name: 'Prismatic Spirit', price: 1140000, sprite_layer: 'pet', sprite_path: '/sprites/pet_rainbow.png', rarity: 'legendary' },
   ];
 
   for (const item of items) {

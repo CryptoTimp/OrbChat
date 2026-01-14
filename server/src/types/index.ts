@@ -52,6 +52,7 @@ export interface TreeState {
   treeId: string;
   isCut: boolean;
   cutBy: string | null; // playerId currently cutting, or null
+  cuttingStartTime?: number; // timestamp when cutting started (for progress bar sync)
   respawnAt: number; // timestamp when tree should respawn
 }
 
