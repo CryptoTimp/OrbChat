@@ -79,10 +79,23 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     
     console.log(`Room ${roomId} exists: ${!!existingRoom}, isNewRoom: ${isNewRoom}, existingRoom.isPrivate: ${existingRoom?.isPrivate}, password provided: ${!!password}`);
     
-    // IMPORTANT: Check if room is private FIRST, before any other logic
-    // This must happen before checking if room is empty or can be converted
-    if (existingRoom && existingRoom.isPrivate) {
-      console.log(`[PASSWORD CHECK] Room ${roomId} is private, validating password...`);
+    // Check if room is truly empty (no players OR no active sockets)
+    const playersInRoom = existingRoom ? rooms.getPlayersInRoom(roomId) : [];
+    const roomSockets = io.sockets.adapter.rooms.get(roomId);
+    const activeSocketCount = roomSockets ? roomSockets.size : 0;
+    const isEmptyRoom = playersInRoom.length === 0 || activeSocketCount === 0;
+    
+    // Check if the current player is the only one in the room (allowing them to convert their own room)
+    const isOnlyPlayerInRoom = existingRoom && playersInRoom.length === 1 && playersInRoom[0]?.id === playerId;
+    const canConvertToPrivate = isEmptyRoom || isOnlyPlayerInRoom;
+    
+    console.log(`Room ${roomId} check: players=${playersInRoom.length}, activeSockets=${activeSocketCount}, isEmpty=${isEmptyRoom}, isOnlyPlayer=${isOnlyPlayerInRoom}, canConvert=${canConvertToPrivate}`);
+    
+    // IMPORTANT: Check if room is private, but allow recreating empty private rooms
+    // If room is empty and password is provided, allow recreating it (overwriting the old password)
+    if (existingRoom && existingRoom.isPrivate && !isEmptyRoom) {
+      // Room is private and has players - must validate password
+      console.log(`[PASSWORD CHECK] Room ${roomId} is private with players, validating password...`);
       if (!password) {
         console.log(`[PASSWORD CHECK] Password required for private room ${roomId}, emitting error`);
         socket.emit('error', { message: 'Password required for private room' });
@@ -99,18 +112,6 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       console.log(`[PASSWORD CHECK] Password validated successfully for room ${roomId}`);
     }
     
-    // Check if room is truly empty (no players OR no active sockets)
-    const playersInRoom = existingRoom ? rooms.getPlayersInRoom(roomId) : [];
-    const roomSockets = io.sockets.adapter.rooms.get(roomId);
-    const activeSocketCount = roomSockets ? roomSockets.size : 0;
-    const isEmptyRoom = playersInRoom.length === 0 || activeSocketCount === 0;
-    
-    // Check if the current player is the only one in the room (allowing them to convert their own room)
-    const isOnlyPlayerInRoom = existingRoom && playersInRoom.length === 1 && playersInRoom[0]?.id === playerId;
-    const canConvertToPrivate = isEmptyRoom || isOnlyPlayerInRoom;
-    
-    console.log(`Room ${roomId} check: players=${playersInRoom.length}, activeSockets=${activeSocketCount}, isEmpty=${isEmptyRoom}, isOnlyPlayer=${isOnlyPlayerInRoom}, canConvert=${canConvertToPrivate}`);
-    
     // Hash password if creating new private room or converting empty/public room
     let passwordHash: string | undefined;
     let finalIsPrivate = false;
@@ -120,10 +121,16 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       passwordHash = await rooms.hashPassword(password);
       finalIsPrivate = true;
       console.log(`Creating new private room ${roomId} with password`);
-    } else if (existingRoom && existingRoom.isPrivate) {
-      // Joining existing private room - use existing hash
+    } else if (existingRoom && existingRoom.isPrivate && !isEmptyRoom) {
+      // Joining existing private room with players - use existing hash (password already validated above)
       passwordHash = existingRoom.passwordHash;
       finalIsPrivate = true;
+    } else if (existingRoom && existingRoom.isPrivate && isEmptyRoom && password) {
+      // Recreating empty private room with new password
+      passwordHash = await rooms.hashPassword(password);
+      finalIsPrivate = true;
+      existingRoom.passwordHash = passwordHash;
+      console.log(`Recreating empty private room ${roomId} with new password`);
     } else if (existingRoom && !existingRoom.isPrivate && password && canConvertToPrivate) {
       // Converting public room to private - ALLOW if empty or if only current player is in it
       // Clean up any stale players if there are no active sockets
