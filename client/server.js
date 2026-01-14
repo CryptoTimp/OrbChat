@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +21,6 @@ console.log('Index.html exists:', existsSync(indexPath));
 // List files in dist if it exists
 if (existsSync(distPath)) {
   try {
-    const { readdirSync } = await import('fs');
     console.log('Files in dist:', readdirSync(distPath));
   } catch (err) {
     console.error('Error reading dist:', err);
