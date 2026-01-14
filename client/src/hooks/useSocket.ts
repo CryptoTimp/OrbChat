@@ -303,33 +303,38 @@ function attachListeners(sock: Socket) {
     
     state.removeOrb(orbId);
     
-    // If this is our orb collection, update Firebase first (source of truth), then update store
+    // If this is our orb collection, update store immediately (optimistic update), then sync Firebase in background
     if (playerId === state.playerId) {
       // Record session stats
       state.recordOrbCollection(orbType, orbValue || 0);
       // Play pickup sound effect (disabled for now)
       // playPickupSound();
       
+      // Update local state immediately with server's newBalance (optimistic update for instant UI feedback)
+      // Pass the orb value so HUD can use it for floating text color
+      state.updatePlayerOrbs(playerId, newBalance, orbValue);
+      
+      // Sync with Firebase in the background (non-blocking)
       if (orbValue && orbValue > 0) {
-        try {
-          // Get current orbs from Firebase and add the multiplied value (server already applied multiplier)
-          const profile = await getUserProfile(playerId);
-          const currentFirebaseOrbs = profile?.orbs || 0;
-          const newFirebaseOrbs = currentFirebaseOrbs + orbValue;
-          await updateUserOrbs(playerId, newFirebaseOrbs);
-          console.log('Updated Firebase orbs:', newFirebaseOrbs);
-          
-          // Update game store with Firebase value (source of truth) - only update once
-          // Pass the orb value so HUD can use it for floating text color
-          state.updatePlayerOrbs(playerId, newFirebaseOrbs, orbValue);
-        } catch (error) {
-          console.error('Failed to update Firebase orbs:', error);
-          // Fallback to server's newBalance if Firebase update fails
-          state.updatePlayerOrbs(playerId, newBalance, orbValue);
-        }
-      } else {
-        // If no orbValue, just use server's newBalance
-        state.updatePlayerOrbs(playerId, newBalance, 0);
+        // Fire and forget - don't wait for Firebase, just sync in background
+        (async () => {
+          try {
+            // Get current orbs from Firebase and add the multiplied value (server already applied multiplier)
+            const profile = await getUserProfile(playerId);
+            const currentFirebaseOrbs = profile?.orbs || 0;
+            const newFirebaseOrbs = currentFirebaseOrbs + orbValue;
+            await updateUserOrbs(playerId, newFirebaseOrbs);
+            console.log('Synced Firebase orbs:', newFirebaseOrbs);
+            
+            // Only update if Firebase value differs (shouldn't happen, but just in case)
+            if (newFirebaseOrbs !== newBalance) {
+              console.warn(`Firebase orb balance (${newFirebaseOrbs}) differs from server (${newBalance}), using server value`);
+            }
+          } catch (error) {
+            console.error('Failed to sync Firebase orbs (non-critical):', error);
+            // Don't update UI on Firebase error - server value is authoritative
+          }
+        })();
       }
     } else {
       // For other players, just use server's newBalance
@@ -389,16 +394,30 @@ function attachListeners(sock: Socket) {
     
     const state = useGameStore.getState();
     
-    // Handle shrine interaction errors gracefully (don't disconnect)
-    if (message.includes('enough orbs') || message.includes('shrine') || message.includes('Shrine')) {
-      // Sync orbs from Firebase to ensure client state is up to date
-      if (state.playerId) {
+    // Handle non-critical gameplay errors gracefully (don't disconnect or clear room state)
+    const nonCriticalErrors = [
+      'enough orbs',
+      'shrine',
+      'Shrine',
+      'need an axe',
+      'already cut',
+      'being cut',
+      'already own',
+      'Not enough',
+      'no logs',
+      'no stones',
+    ];
+    
+    if (nonCriticalErrors.some(keyword => message.includes(keyword))) {
+      // Sync orbs from Firebase to ensure client state is up to date (for orb-related errors)
+      if (state.playerId && (message.includes('enough orbs') || message.includes('Not enough'))) {
         syncOrbsFromFirebase(state.playerId).catch(err => {
-          console.error('Failed to sync orbs after shrine error:', err);
+          console.error('Failed to sync orbs after error:', err);
         });
       }
-      // Don't clear room state for shrine errors - just log and continue
-      console.log('Shrine interaction error (non-critical):', message);
+      // Don't clear room state for gameplay errors - just show notification and continue
+      console.log('Gameplay error (non-critical):', message);
+      addNotification(message, 'error');
       return;
     }
     
@@ -1113,11 +1132,15 @@ export function useSocket() {
             }));
             state.setInventory(inventoryItems, newOrbs);
             state.updatePlayerOrbs(playerId, newOrbs);
+            
+            // Send log count and orbs received to server for broadcasting
+            sock.emit('sell_logs', { logCount, orbsReceived });
+          } else {
+            // No logs to sell - let server handle the error message
+            sock.emit('sell_logs', { logCount: 0, orbsReceived: 0 });
           }
         }
       }
-      
-      sock.emit('sell_logs');
     }
   }, []);
   

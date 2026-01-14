@@ -1452,7 +1452,7 @@
     "tool_axe": {
       "id": "tool_axe",
       "name": "Axe",
-      "price": 5000,
+      "price": 1000,
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/tool_axe.png",
       "rarity": "common"

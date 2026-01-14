@@ -75,24 +75,43 @@ export function ShopModal() {
       };
       
       // Create items with chances distributed evenly within each rarity
-      const itemsWithChances = categoryItems.map(item => {
-        const rarity = item.rarity || 'common';
-        const itemsInRarity = itemsByRarity[rarity].length;
-        // Distribute the rarity's total percentage evenly among all items of that rarity
-        const chancePerItem = itemsInRarity > 0 ? rarityTotals[rarity] / itemsInRarity : 0;
-        
-        return {
-          item,
-          chance: chancePerItem,
-        };
-      });
+      // Special handling for pets: gold, phoenix, void = 20% each, rest = 13.3% each
+      let itemsWithChances;
+      if (category === 'pets') {
+        itemsWithChances = categoryItems.map(item => {
+          let chance = 0;
+          if (item.id === 'pet_golden' || item.id === 'pet_phoenix' || item.id === 'pet_void') {
+            chance = 20.0;
+          } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
+            chance = 13.3;
+          }
+          return {
+            item,
+            chance,
+          };
+        });
+      } else {
+        itemsWithChances = categoryItems.map(item => {
+          const rarity = item.rarity || 'common';
+          const itemsInRarity = itemsByRarity[rarity].length;
+          // Distribute the rarity's total percentage evenly among all items of that rarity
+          const chancePerItem = itemsInRarity > 0 ? rarityTotals[rarity] / itemsInRarity : 0;
+          
+          return {
+            item,
+            chance: chancePerItem,
+          };
+        });
+      }
       
       // Check if case only contains legendary items
       const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
-      // Wings case costs 100k, legendary-only cases cost 200k, others cost 1k
+      // Wings case costs 100k, pet case costs 900k, legendary-only cases cost 200k, others cost 1k
       let price = 1000;
       if (category === 'wings') {
         price = 100000;
+      } else if (category === 'pets') {
+        price = 900000;
       } else if (onlyLegendary) {
         price = 200000;
       }
@@ -101,7 +120,7 @@ export function ShopModal() {
         id: `lootbox_${category}`,
         name: `${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
         category,
-        price, // Wings: 100k, legendary-only: 200k, others: 1k
+        price, // Wings: 100k, pet: 900k, legendary-only: 200k, others: 1k
         items: itemsWithChances,
       } as LootBox;
     }).filter((box): box is LootBox => box !== null);
@@ -988,27 +1007,46 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
       };
       
       // Create items with chances distributed evenly within each rarity
-      const itemsWithChances = categoryItems.map(item => {
-        const rarity = item.rarity || 'common';
-        const itemsInRarity = itemsByRarity[rarity].length;
-        // Distribute the rarity's total percentage evenly among all items of that rarity
-        const chancePerItem = itemsInRarity > 0 ? rarityTotals[rarity] / itemsInRarity : 0;
-        
-        return {
-          item,
-          chance: chancePerItem,
-        };
-      });
+      // Special handling for pets: gold, phoenix, void = 20% each, rest = 13.3% each
+      let itemsWithChances;
+      if (category === 'pets') {
+        itemsWithChances = categoryItems.map(item => {
+          let chance = 0;
+          if (item.id === 'pet_golden' || item.id === 'pet_phoenix' || item.id === 'pet_void') {
+            chance = 20.0;
+          } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
+            chance = 13.3;
+          }
+          return {
+            item,
+            chance,
+          };
+        });
+      } else {
+        itemsWithChances = categoryItems.map(item => {
+          const rarity = item.rarity || 'common';
+          const itemsInRarity = itemsByRarity[rarity].length;
+          // Distribute the rarity's total percentage evenly among all items of that rarity
+          const chancePerItem = itemsInRarity > 0 ? rarityTotals[rarity] / itemsInRarity : 0;
+          
+          return {
+            item,
+            chance: chancePerItem,
+          };
+        });
+      }
       
       // Items are already normalized to sum to 100% (79.92 + 15.98 + 3.2 + 0.64 + 0.26 = 100)
       const normalizedItems = itemsWithChances;
       
       // Check if case only contains legendary items
       const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
-      // Wings case costs 100k, legendary-only cases cost 200k, others cost 1k
+      // Wings case costs 100k, pet case costs 900k, legendary-only cases cost 200k, others cost 1k
       let price = 1000;
       if (category === 'wings') {
         price = 100000;
+      } else if (category === 'pets') {
+        price = 900000;
       } else if (onlyLegendary) {
         price = 200000;
       }

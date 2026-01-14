@@ -133,7 +133,7 @@ export interface ClientToServerEvents {
   start_cutting_tree: (data: { treeId: string }) => void;
   complete_cutting_tree: (data: { treeId: string }) => void;
   cancel_cutting_tree: (data: { treeId: string }) => void;
-  sell_logs: () => void;
+  sell_logs: (data?: { logCount?: number; orbsReceived?: number }) => void;
 }
 
 // Socket Events - Server to Client

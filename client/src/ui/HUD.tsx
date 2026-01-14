@@ -190,6 +190,14 @@ export function HUD({ onLeaveRoom }: HUDProps) {
     } else if (currentOrbs < previousOrbsRef.current) {
       // If orbs decreased (e.g., purchase), update immediately
       setDisplayedOrbs(currentOrbs);
+      // Cancel any running animation
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    } else if (currentOrbs !== previousOrbsRef.current && !animationRef.current) {
+      // If orbs changed but no animation is running (e.g., from external update), sync immediately
+      setDisplayedOrbs(currentOrbs);
     }
     
     previousOrbsRef.current = currentOrbs;

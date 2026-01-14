@@ -168,6 +168,12 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     // Create player with data from Firebase
     const player = players.createPlayerFromFirebase(playerId, playerName, roomId, orbs || 0, equippedItems || [], roomMapType);
     
+    // Sync server's local database with Firebase orb balance (source of truth)
+    // This ensures shrine checks and other operations use the correct balance
+    if (orbs !== undefined && orbs !== null) {
+      await players.updatePlayerOrbs(playerId, orbs);
+    }
+    
     // Check if player is already in room (from another socket)
     const existingPlayer = rooms.getPlayerInRoom(roomId, player.id);
     if (existingPlayer) {
@@ -310,7 +316,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle orb collection
-  socket.on('collect_orb', ({ orbId }) => {
+  socket.on('collect_orb', async ({ orbId }) => {
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
 
@@ -318,9 +324,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const orb = rooms.collectOrb(roomId, orbId, playerId);
     
     if (orb) {
-      // Get player's current orbs from room state
+      // Get player's current orbs from database (source of truth) instead of room state
+      const currentOrbs = players.getPlayerOrbs(playerId);
+      
+      // Get player from room state for multiplier calculation
       const player = rooms.getPlayerInRoom(roomId, playerId);
-      const currentOrbs = player?.orbs || 0;
       
       // Calculate orb multiplier from equipped items
       let orbMultiplier = 1.0;
@@ -339,23 +347,29 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const actualOrbValue = Math.floor(orb.value * orbMultiplier);
       const newBalance = currentOrbs + actualOrbValue;
       
-      // Update player in room
+      // Update database (source of truth)
+      await players.updatePlayerOrbs(playerId, newBalance);
+      
+      // Update player in room state to keep it in sync
       if (player) {
         player.orbs = newBalance;
       }
       
-      // Broadcast collection - client will update Firebase
+      // Broadcast collection and orb balance update to all players
       io.to(roomId).emit('orb_collected', { 
         orbId, 
         playerId, 
         newBalance,
         orbValue: actualOrbValue  // Send multiplied orb value so client can update Firebase
       });
+      
+      // Also emit player_orbs_updated to ensure all clients see the updated balance
+      io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newBalance });
     }
   });
 
   // Handle item purchase (client does Firebase update, server just validates and updates room state)
-  socket.on('purchase_item', (data: { itemId: string; newOrbs?: number; newInventory?: string[] }) => {
+  socket.on('purchase_item', async (data: { itemId: string; newOrbs?: number; newInventory?: string[] }) => {
     const { itemId, newOrbs } = data;
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
@@ -364,8 +378,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const player = rooms.getPlayerInRoom(roomId, playerId);
     
     if (player) {
-      // Update player's orbs in room state (client already updated Firebase)
+      // Update player's orbs in room state and database (client already updated Firebase)
       if (typeof newOrbs === 'number') {
+        // Update database to keep it in sync
+        await players.updatePlayerOrbs(playerId, newOrbs);
+        // Update room state
         player.orbs = newOrbs;
         // Broadcast orb update to all players in the room
         io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newOrbs });
@@ -376,7 +393,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle loot box purchase (client does Firebase update, server just validates and updates room state)
-  socket.on('purchase_lootbox', (data: { lootBoxId: string; itemId: string; newOrbs?: number; newInventory?: string[]; alreadyOwned?: boolean }) => {
+  socket.on('purchase_lootbox', async (data: { lootBoxId: string; itemId: string; newOrbs?: number; newInventory?: string[]; alreadyOwned?: boolean }) => {
     const { itemId, newOrbs } = data;
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
@@ -385,8 +402,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const player = rooms.getPlayerInRoom(roomId, playerId);
     
     if (player) {
-      // Update player's orbs in room state (client already updated Firebase)
+      // Update player's orbs in room state and database (client already updated Firebase)
       if (typeof newOrbs === 'number') {
+        // Update database to keep it in sync
+        await players.updatePlayerOrbs(playerId, newOrbs);
+        // Update room state
         player.orbs = newOrbs;
         // Broadcast orb update to all players in the room
         io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newOrbs });
@@ -615,7 +635,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle selling logs
-  socket.on('sell_logs', async () => {
+  socket.on('sell_logs', async (data) => {
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
 
@@ -623,28 +643,41 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const player = rooms.getPlayerInRoom(roomId, playerId);
     if (!player) return;
 
-    // Get player inventory and count logs
-    const inventory = await players.getPlayerInventory(playerId);
-    const logs = inventory.filter(item => item.item_id === 'log');
-    const logCount = logs.length;
+    // Client already handles removing logs from Firebase and updating orbs
+    // Server just needs to broadcast the update
+    // Get current orbs from Firebase to ensure accuracy
+    const { getUserData } = await import('./firebase');
+    const userData = await getUserData(playerId);
+    const newBalance = userData?.orbs || player.orbs;
+    
+    // Use client-provided values if available, otherwise check Firebase (fallback)
+    let logCount = data?.logCount;
+    let orbsReceived = data?.orbsReceived;
 
-    if (logCount === 0) {
+    if (logCount === undefined || orbsReceived === undefined) {
+      // Fallback: check Firebase if client didn't provide data
+      const { getUserInventory } = await import('./firebase');
+      const firebaseInventory = await getUserInventory(playerId);
+      const logs = firebaseInventory.filter(itemId => itemId === 'log');
+      logCount = logs.length;
+
+      if (logCount === 0) {
+        socket.emit('error', { message: 'You have no logs to sell' });
+        return;
+      }
+
+      // Calculate orbs to receive (100 per log)
+      const orbsPerLog = 100;
+      orbsReceived = logCount * orbsPerLog;
+    } else if (logCount === 0) {
+      // Client sent 0 logs - show error
       socket.emit('error', { message: 'You have no logs to sell' });
       return;
     }
-
-    // Calculate orbs to receive (100 per log)
-    const orbsPerLog = 100;
-    const orbsReceived = logCount * orbsPerLog;
-
-    // Remove all logs from inventory and add orbs
-    for (const log of logs) {
-      await players.removeFromInventory(playerId, 'log');
-    }
-
-    // Update player orbs
-    const newBalance = player.orbs + orbsReceived;
+    
+    // Update database to keep it in sync
     await players.updatePlayerOrbs(playerId, newBalance);
+    // Update room state
     player.orbs = newBalance;
 
     // Broadcast updates

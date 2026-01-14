@@ -4,7 +4,7 @@ import { useSocket } from '../hooks/useSocket';
 import { playClickSound, playCloseSound, playPurchaseSound } from '../utils/sounds';
 
 const LOG_PRICE = 100; // Orbs per log
-const AXE_PRICE = 5000; // Orbs for axe
+const AXE_PRICE = 1000; // Orbs for axe
 const AXE_ITEM_ID = 'tool_axe';
 
 export function LogDealerModal() {
