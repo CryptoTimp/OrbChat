@@ -3,7 +3,7 @@ import { useGameStore } from '../state/gameStore';
 import { useSocket } from '../hooks/useSocket';
 import { ShopItem, RARITY_COLORS, ItemRarity } from '../types';
 import { ItemPreview } from './ItemPreview';
-import { playClickSound, playCloseSound, playPurchaseSound } from '../utils/sounds';
+import { playClickSound, playCloseSound, playPurchaseSound, playBuyOrbsSound, playLevelUpSound } from '../utils/sounds';
 
 const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 
@@ -15,6 +15,16 @@ const RARITY_BORDER_COLORS: Record<ItemRarity, string> = {
   epic: '#a855f7',         // purple-500
   legendary: '#fbbf24',    // amber-400
 };
+
+// Format price with K or M suffix
+function formatPrice(price: number): string {
+  if (price >= 1000000) {
+    return `${(price / 1000000).toFixed(1)}M`;
+  } else if (price >= 1000) {
+    return `${(price / 1000).toFixed(1)}K`;
+  }
+  return price.toString();
+}
 
 export interface LootBox {
   id: string;
@@ -36,7 +46,113 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   const localPlayer = useGameStore(state => state.localPlayer);
   const shopItems = useGameStore(state => state.shopItems);
   const inventory = useGameStore(state => state.inventory);
+  const toggleShop = useGameStore(state => state.toggleShop);
+  const setSelectedLootBox = useGameStore(state => state.setSelectedLootBox);
+  const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
   const { purchaseLootBox } = useSocket();
+  
+  // Generate all available loot boxes
+  const allLootBoxes = useMemo(() => {
+    const categories: Array<'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'> = [
+      'hats', 'shirts', 'legs', 'capes', 'wings', 'accessories', 'boosts', 'pets'
+    ];
+    
+    const boxes = categories.map(category => {
+      const categoryItems = shopItems.filter(item => {
+        if (item.id === 'tool_axe') return false;
+        // Exclude common items from all cases
+        if ((item.rarity || 'common') === 'common') return false;
+        if (category === 'hats') return item.spriteLayer === 'hat';
+        if (category === 'shirts') return item.spriteLayer === 'shirt';
+        if (category === 'legs') return item.spriteLayer === 'legs';
+        if (category === 'capes') return item.spriteLayer === 'cape';
+        if (category === 'wings') return item.spriteLayer === 'wings';
+        if (category === 'accessories') return item.spriteLayer === 'accessory';
+        if (category === 'boosts') return item.spriteLayer === 'boost';
+        if (category === 'pets') return item.spriteLayer === 'pet';
+        return false;
+      });
+      
+      if (categoryItems.length === 0) return null;
+      
+      const itemsByRarity: Record<ItemRarity, ShopItem[]> = {
+        common: [],
+        uncommon: [],
+        rare: [],
+        epic: [],
+        legendary: [],
+      };
+      
+      categoryItems.forEach(item => {
+        const rarity = item.rarity || 'common';
+        itemsByRarity[rarity].push(item);
+      });
+      
+      // Adjusted odds: removed common (62%), redistributed proportionally to remaining rarities
+      // Original: uncommon 25%, rare 10%, epic 2.5%, legendary 0.5% = 38% total
+      // New: scaled to 100% maintaining proportions
+      const rarityTotals: Record<ItemRarity, number> = {
+        common: 0,
+        uncommon: 65.78947368421053,  // 25/38 * 100
+        rare: 26.31578947368421,      // 10/38 * 100
+        epic: 6.578947368421053,       // 2.5/38 * 100
+        legendary: 1.3157894736842105, // 0.5/38 * 100
+      };
+      
+      let itemsWithChances;
+      if (category === 'pets') {
+        itemsWithChances = categoryItems.map(item => {
+          let chance = 0;
+          if (item.id === 'pet_golden' || item.id === 'pet_phoenix' || item.id === 'pet_void') {
+            chance = 20.0;
+          } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
+            chance = 13.3;
+          }
+          return { item, chance };
+        });
+      } else {
+        itemsWithChances = categoryItems.map(item => {
+          const rarity = item.rarity || 'common';
+          const itemsInRarity = itemsByRarity[rarity].length;
+          const chancePerItem = itemsInRarity > 0 ? rarityTotals[rarity] / itemsInRarity : 0;
+          return { item, chance: chancePerItem };
+        });
+      }
+      
+      const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
+      let price = 1000;
+      if (category === 'wings') {
+        price = 100000;
+      } else if (category === 'pets') {
+        price = 900000;
+      } else if (onlyLegendary) {
+        price = 200000;
+      }
+      
+      return {
+        id: `lootbox_${category}`,
+        name: `${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
+        category,
+        price,
+        items: itemsWithChances,
+      } as LootBox;
+    }).filter((box): box is LootBox => box !== null);
+    
+    return boxes.sort((a, b) => b.price - a.price);
+  }, [shopItems]);
+  
+  // Close shop when loot box modal opens
+  useEffect(() => {
+    if (lootBox) {
+      const shopOpen = useGameStore.getState().shopOpen;
+      if (shopOpen) {
+        // Use setTimeout to ensure the modal renders before closing shop
+        setTimeout(() => {
+          toggleShop();
+        }, 0);
+      }
+    }
+  }, [lootBox, toggleShop]);
   
   const [isOpening, setIsOpening] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
@@ -76,8 +192,22 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   useEffect(() => {
     if (lootBox && normalizedItems.length > 0 && !selectedItem && !isOpening) {
       const itemWidth = 144; // 128px + 16px gap
-      // Start at 2 full sets of items to show items to the left
-      const initialPosition = normalizedItems.length * itemWidth * 2;
+      
+      // Find the first legendary item index in the normalized items (for spinner)
+      // Note: sortedItems is for display only, spinner uses normalizedItems order
+      const firstLegendaryIndex = normalizedItems.findIndex(item => (item.item.rarity || 'common') === 'legendary');
+      
+      // If legendary items exist, start at the first legendary item
+      // Otherwise, start at 2 full sets of items
+      let initialPosition;
+      if (firstLegendaryIndex >= 0) {
+        // Start at the first legendary item in the 2nd set (so it's visible)
+        initialPosition = normalizedItems.length * itemWidth + (firstLegendaryIndex * itemWidth);
+      } else {
+        // Fallback: Start at 2 full sets of items
+        initialPosition = normalizedItems.length * itemWidth * 2;
+      }
+      
       // Only set if it's different to avoid unnecessary updates
       setScrollPosition(prev => {
         if (Math.abs(prev - initialPosition) > 1) {
@@ -115,7 +245,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   const isItemOwned = selectedItem ? itemAlreadyOwnedRef.current : false;
   const refundAmount = (lootBox && isItemOwned) ? Math.floor(lootBox.price / 2) : 0;
   
-  // Sort items by rarity (common to legendary) for display
+  // Sort items by rarity (legendary to common) for display - highest rarity at top
   const sortedItems = useMemo(() => {
     if (!normalizedItems.length) return [];
     return [...normalizedItems].sort((a, b) => {
@@ -123,7 +253,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       const bRarity = b.item.rarity || 'common';
       const aIndex = RARITY_ORDER.indexOf(aRarity);
       const bIndex = RARITY_ORDER.indexOf(bRarity);
-      return aIndex - bIndex;
+      return bIndex - aIndex; // Reverse order: legendary first
     });
   }, [normalizedItems]);
   
@@ -328,6 +458,12 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             pendingSelectedItemRef.current = item;
             setSelectedItem(item);
             
+            // Play level-up sound for rare, epic, or legendary items
+            const rarity = item.rarity || 'common';
+            if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary') {
+              playLevelUpSound();
+            }
+            
             // If item is already owned, add refund immediately (optimistic)
             if (itemAlreadyOwnedRef.current) {
               const refundAmount = Math.floor(lootBox.price / 2);
@@ -426,7 +562,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             opacity: 1;
           }
           100% {
-            transform: translateY(-30px) scale(0);
+            transform: translateY(-100px) scale(0);
             opacity: 0;
           }
         }
@@ -484,8 +620,70 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           animation: crate-wobble 1.5s ease-in-out infinite;
         }
       `}</style>
-      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-full max-h-[90vh] overflow-hidden flex flex-col mx-4">
+      <div className="fixed inset-0 flex items-center justify-start z-50 p-4 pointer-events-none">
+        <div 
+          className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-[800px] max-h-[85vh] overflow-hidden flex flex-col pointer-events-auto ml-4 relative" 
+          style={{ boxShadow: '0 0 30px rgba(251, 191, 36, 0.5), 0 0 60px rgba(0, 0, 0, 0.8)' }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {/* Rising particle effects for the modal - from all four sides */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
+            {[...Array(40)].map((_, i) => {
+              const side = i % 4; // 0: bottom, 1: top, 2: left, 3: right
+              const colorIndex = i % 3;
+              const backgroundColor = colorIndex === 0 
+                ? 'rgba(251, 191, 36, 0.6)' // amber
+                : colorIndex === 1
+                ? 'rgba(249, 115, 22, 0.6)' // orange
+                : 'rgba(251, 191, 36, 0.4)'; // lighter amber
+              
+              let positionStyle: { left?: string; right?: string; top?: string; bottom?: string } = {};
+              
+              if (side === 0) {
+                // Bottom edge
+                positionStyle = {
+                  left: `${Math.random() * 100}%`,
+                  bottom: '-10px',
+                };
+              } else if (side === 1) {
+                // Top edge
+                positionStyle = {
+                  left: `${Math.random() * 100}%`,
+                  top: '-10px',
+                };
+              } else if (side === 2) {
+                // Left edge
+                positionStyle = {
+                  left: '-10px',
+                  top: `${Math.random() * 100}%`,
+                };
+              } else {
+                // Right edge
+                positionStyle = {
+                  right: '-10px',
+                  top: `${Math.random() * 100}%`,
+                };
+              }
+              
+              return (
+                <div
+                  key={i}
+                  className="absolute rounded-full"
+                  style={{
+                    width: `${3 + Math.random() * 3}px`,
+                    height: `${3 + Math.random() * 3}px`,
+                    backgroundColor: backgroundColor,
+                    ...positionStyle,
+                    animation: `particle-rise ${2 + Math.random() * 2}s ease-out infinite`,
+                    animationDelay: `${Math.random() * 2}s`,
+                    boxShadow: `0 0 4px rgba(251, 191, 36, 0.8), 0 0 8px rgba(251, 191, 36, 0.4)`,
+                    zIndex: 1,
+                  }}
+                />
+              );
+            })}
+          </div>
+          
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-700 shrink-0">
             <h2 className="text-2xl font-pixel text-amber-400 flex items-center gap-2">
@@ -523,7 +721,25 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               <span className="text-gray-400 font-pixel text-sm">orbs</span>
               <span className="text-gray-500 font-pixel text-xs">({lootBox.price.toLocaleString()} per case)</span>
               {!canAfford && (
-                <span className="text-red-400 font-pixel text-sm ml-4">Not enough orbs!</span>
+                <button
+                  onClick={() => {
+                    playBuyOrbsSound();
+                    toggleBuyOrbs();
+                  }}
+                  className="relative overflow-hidden ml-4 px-4 py-2 rounded-lg font-pixel text-sm 
+                             bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 
+                             text-white shadow-lg shadow-amber-500/40 hover:shadow-amber-500/60
+                             transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  {/* Small particle effects */}
+                  <span className="absolute w-1 h-1 bg-yellow-300 rounded-full animate-btn-particle-1 opacity-60" />
+                  <span className="absolute w-0.5 h-0.5 bg-amber-200 rounded-full animate-btn-particle-2 opacity-50" />
+                  <span className="absolute w-1 h-1 bg-orange-300 rounded-full animate-btn-particle-3 opacity-60" />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="relative z-10">Buy Orbs</span>
+                </button>
               )}
               </div>
             </div>
@@ -598,7 +814,21 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                       
                       if (normalizedItems.length > 0) {
                         const itemWidth = 144;
-                        const initialPosition = normalizedItems.length * itemWidth * 2;
+                        
+                        // Find the first legendary item index in the normalized items (for spinner)
+                        const firstLegendaryIndex = normalizedItems.findIndex(item => (item.item.rarity || 'common') === 'legendary');
+                        
+                        // If legendary items exist, start at the first legendary item
+                        // Otherwise, start at 2 full sets of items
+                        let initialPosition;
+                        if (firstLegendaryIndex >= 0) {
+                          // Start at the first legendary item in the 2nd set (so it's visible)
+                          initialPosition = normalizedItems.length * itemWidth + (firstLegendaryIndex * itemWidth);
+                        } else {
+                          // Fallback: Start at 2 full sets of items
+                          initialPosition = normalizedItems.length * itemWidth * 2;
+                        }
+                        
                         // Smoothly transition back to initial position
                         setScrollPosition(initialPosition);
                       }
@@ -637,30 +867,56 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             {/* Unlock button below crate when waiting */}
             {!selectedItem && (
               <div className="flex justify-center mb-4">
-                <button
-                  onClick={handleOpen}
-                  disabled={!canAfford || isOpening}
-                  className={`
-                    px-8 py-3 rounded-lg font-pixel text-lg transition-all flex items-center justify-center gap-2
-                    ${canAfford && !isOpening
-                      ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-500/30'
-                      : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'
-                    }
-                  `}
-                >
-                  {canAfford && !isOpening ? (
-                    <>
-                      <span>🔓</span>
-                      <span>Unlock</span>
-                      <span className="text-cyan-300">●</span>
-                      <span>{lootBox.price.toLocaleString()}</span>
-                    </>
-                  ) : isOpening ? (
-                    'Opening...'
-                  ) : (
-                    'Not Enough Orbs'
-                  )}
-                </button>
+                {canAfford ? (
+                  <button
+                    onClick={(e) => {
+                      // Double-check guards before allowing click - ref check is synchronous
+                      if (isOpeningRef.current || isOpening) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                      }
+                      handleOpen();
+                    }}
+                    disabled={isOpening}
+                    className={`px-8 py-3 rounded-lg font-pixel text-lg transition-all flex items-center justify-center gap-2
+                               ${isOpening
+                                 ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60 pointer-events-none' 
+                                 : 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-500/30'
+                               }`}
+                    style={isOpening ? { pointerEvents: 'none' } : undefined}
+                  >
+                    <span>🔓</span>
+                    <span>Unlock</span>
+                    <span className={isOpening ? "text-gray-500" : "text-cyan-300"}>●</span>
+                    <span>{lootBox.price.toLocaleString()}</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-3 px-8 py-3 rounded-lg bg-gray-700">
+                    <span className="text-gray-500 font-pixel text-lg">Not Enough Orbs</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        playBuyOrbsSound();
+                        toggleBuyOrbs();
+                      }}
+                      className="relative overflow-hidden px-4 py-2 rounded font-pixel text-sm 
+                                 bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 
+                                 text-white shadow-md shadow-amber-500/40 hover:shadow-amber-500/60
+                                 transition-all duration-200 flex items-center gap-2"
+                    >
+                      {/* Small particle effects */}
+                      <span className="absolute w-1 h-1 bg-yellow-300 rounded-full animate-btn-particle-1 opacity-60" />
+                      <span className="absolute w-0.5 h-0.5 bg-amber-200 rounded-full animate-btn-particle-2 opacity-50" />
+                      <span className="absolute w-1 h-1 bg-orange-300 rounded-full animate-btn-particle-3 opacity-60" />
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="relative z-10">Buy Orbs</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             
@@ -690,6 +946,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                 const rarity = item.rarity || 'common';
                 const isHighRarity = rarity === 'epic' || rarity === 'legendary';
                 const glowColor = rarityColor.glow;
+                const borderColor = RARITY_BORDER_COLORS[rarity];
                 
                 return (
                   <div
@@ -702,16 +959,15 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                       }
                     `}
                     style={{
-                      borderColor: isSelected ? '#fbbf24' : rarityColor.border,
+                      borderColor: isSelected ? '#fbbf24' : borderColor,
                       backgroundColor: isSelected ? 'rgba(251, 191, 36, 0.1)' : 'rgba(17, 24, 39, 0.8)',
                       boxShadow: isHighRarity ? `0 0 10px ${glowColor}, 0 0 20px ${glowColor}, 0 0 30px ${glowColor}` : undefined,
-                      animation: isHighRarity ? 'glow-pulse 2s ease-in-out infinite' : undefined,
                       overflow: 'visible',
                       zIndex: isHighRarity ? 5 : 1,
                     }}
                   >
                     <div className="w-full h-full bg-gray-900 rounded flex items-center justify-center relative" style={{ overflow: 'visible' }}>
-                      <ItemPreview item={item} size={80} />
+                      <ItemPreview item={item} size={80} animate={false} />
                       {isHighRarity && (
                         <>
                           {/* Particle effects going up */}
@@ -756,55 +1012,75 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               {sortedItems.map(({ item, normalizedChance }) => {
                 const rarityColor = RARITY_COLORS[item.rarity || 'common'];
                 const rarity = item.rarity || 'common';
-                const isHighRarity = rarity === 'epic' || rarity === 'legendary';
-                const glowColor = rarityColor.glow;
+                const borderColor = RARITY_BORDER_COLORS[rarity];
                 
                 return (
                   <div
                     key={item.id}
-                    className={`bg-gray-800 rounded p-1.5 border relative ${isHighRarity ? 'overflow-visible' : ''}`}
+                    className="bg-gray-800 rounded p-1.5 border relative"
                     style={{ 
-                      borderColor: rarityColor.border,
-                      boxShadow: isHighRarity ? `0 0 8px ${glowColor}, 0 0 16px ${glowColor}` : undefined,
-                      animation: isHighRarity ? 'glow-pulse 2s ease-in-out infinite' : undefined,
+                      borderColor: borderColor,
+                      willChange: 'auto',
                     }}
                   >
-                    <div className="w-full aspect-square bg-gray-900 rounded mb-1 flex items-center justify-center relative" style={{ overflow: 'visible' }}>
-                      <ItemPreview item={item} size={40} />
-                      {isHighRarity && (
-                        <>
-                          {/* Particle effects going up */}
-                          {[...Array(6)].map((_, i) => (
-                            <div
-                              key={i}
-                              className="absolute rounded-full pointer-events-none"
-                              style={{
-                                width: '3px',
-                                height: '3px',
-                                backgroundColor: glowColor,
-                                left: `${20 + (i * 15)}%`,
-                                bottom: '-6px',
-                                animation: `particle-rise ${1.2 + (i * 0.12)}s ease-out infinite`,
-                                animationDelay: `${i * 0.08}s`,
-                                boxShadow: `0 0 4px ${glowColor}, 0 0 8px ${glowColor}`,
-                                zIndex: 50,
-                              }}
-                            />
-                          ))}
-                        </>
-                      )}
+                    <div className="w-full aspect-square bg-gray-900 rounded mb-1 flex items-center justify-center relative" style={{ willChange: 'auto' }}>
+                      <ItemPreview item={item} size={40} animate={false} />
                     </div>
                     <p className={`font-pixel text-[9px] text-center mb-0.5 truncate ${rarityColor.text}`} title={item.name}>
                       {item.name}
                     </p>
-                    <div className={`text-center px-1 py-0.5 rounded ${rarityColor.bg} ${rarityColor.text}`}>
+                    <div className={`text-center px-1 py-0.5 rounded mb-0.5 ${rarityColor.bg} ${rarityColor.text}`}>
                       <p className="font-pixel text-[8px]">
                         {normalizedChance.toFixed(2)}%
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="font-pixel text-[8px] text-gray-400">
+                        {formatPrice(item.price || 0)}
                       </p>
                     </div>
                   </div>
                 );
               })}
+              </div>
+            </div>
+            
+            {/* Case selector menu at bottom */}
+            <div className="mt-4 pt-4 border-t border-gray-700 shrink-0">
+              <p className="text-gray-300 font-pixel text-sm mb-2">Switch Case:</p>
+              <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+                {allLootBoxes.map(box => {
+                  const isSelected = lootBox?.id === box.id;
+                  const canAffordBox = playerOrbs >= box.price;
+                  return (
+                    <button
+                      key={box.id}
+                      onClick={() => {
+                        if (!isSelected) {
+                          playClickSound();
+                          setSelectedLootBox(box);
+                        }
+                      }}
+                      className={`
+                        flex-shrink-0 px-4 py-2 rounded-lg border-2 font-pixel text-xs transition-all
+                        ${isSelected
+                          ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                          : canAffordBox
+                          ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-700 hover:border-gray-500'
+                          : 'bg-gray-800/50 border-gray-700 text-gray-500 opacity-60'
+                        }
+                      `}
+                    >
+                      <div className="text-center">
+                        <div className="text-lg mb-1">📦</div>
+                        <div className="font-bold truncate max-w-[100px]">{box.name}</div>
+                        <div className={`text-[10px] ${canAffordBox ? 'text-cyan-300' : 'text-gray-500'}`}>
+                          {box.price.toLocaleString()}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

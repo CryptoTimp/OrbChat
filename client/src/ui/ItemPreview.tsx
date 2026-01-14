@@ -5,9 +5,10 @@ import { drawPetPreview } from '../game/renderer';
 interface ItemPreviewProps {
   item: ShopItem;
   size?: number;
+  animate?: boolean; // Whether to continuously animate (default: true)
 }
 
-export function ItemPreview({ item, size = 48 }: ItemPreviewProps) {
+export function ItemPreview({ item, size = 48, animate = true }: ItemPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number>();
   
@@ -20,7 +21,7 @@ export function ItemPreview({ item, size = 48 }: ItemPreviewProps) {
     
     let time = Date.now();
     
-    const animate = () => {
+    const draw = (currentTime: number) => {
       // Clear canvas
       ctx.clearRect(0, 0, size, size);
       ctx.imageSmoothingEnabled = false;
@@ -28,10 +29,6 @@ export function ItemPreview({ item, size = 48 }: ItemPreviewProps) {
       const p = size / 24; // Scale factor
       const centerX = size / 2;
       const centerY = size / 2;
-      
-      const currentTime = Date.now();
-      const deltaTime = currentTime - time;
-      time = currentTime;
       
       // Draw item based on type
       if (item.spriteLayer === 'hat') {
@@ -56,18 +53,31 @@ export function ItemPreview({ item, size = 48 }: ItemPreviewProps) {
       } else if (item.spriteLayer === 'pet') {
         drawPetPreview(ctx, item.id, centerX, centerY, p, currentTime);
       }
-      
-      animationFrameRef.current = requestAnimationFrame(animate);
     };
     
-    animate();
+    if (animate) {
+      const animateLoop = () => {
+        const currentTime = Date.now();
+        const deltaTime = currentTime - time;
+        time = currentTime;
+        
+        draw(currentTime);
+        animationFrameRef.current = requestAnimationFrame(animateLoop);
+      };
+      
+      animateLoop();
+    } else {
+      // Just draw once, no animation loop
+      draw(Date.now());
+    }
     
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
       }
     };
-  }, [item, size]);
+  }, [item, size, animate]);
   
   return (
     <canvas 

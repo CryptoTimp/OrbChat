@@ -23,7 +23,8 @@ export function ShopModal() {
   
   const [previewItem, setPreviewItem] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<'all' | 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | 'lootboxes'>('all');
-  const [selectedLootBox, setSelectedLootBox] = useState<LootBox | null>(null);
+  const selectedLootBox = useGameStore(state => state.selectedLootBox);
+  const setSelectedLootBox = useGameStore(state => state.setSelectedLootBox);
   const [rarityFilter, setRarityFilter] = useState<ItemRarity | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   
@@ -38,6 +39,8 @@ export function ShopModal() {
       const categoryItems = shopItems.filter(item => {
         // Exclude axe from all lootboxes
         if (item.id === 'tool_axe') return false;
+        // Exclude common items from all cases
+        if ((item.rarity || 'common') === 'common') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';
@@ -65,13 +68,15 @@ export function ShopModal() {
         itemsByRarity[rarity].push(item);
       });
       
-      // Improved lootbox odds - much more obtainable items
+      // Adjusted odds: removed common (62%), redistributed proportionally to remaining rarities
+      // Original: uncommon 25%, rare 10%, epic 2.5%, legendary 0.5% = 38% total
+      // New: scaled to 100% maintaining proportions
       const rarityTotals: Record<ItemRarity, number> = {
-        common: 62.0,       // Common items - still most common but reduced
-        uncommon: 25.0,     // Uncommon items - significantly increased
-        rare: 10.0,         // Rare items - much more obtainable
-        epic: 2.5,          // Epic items - much more obtainable
-        legendary: 0.5,     // Legendary items - slightly increased from 0.26%
+        common: 0,
+        uncommon: 65.78947368421053,  // 25/38 * 100
+        rare: 26.31578947368421,      // 10/38 * 100
+        epic: 6.578947368421053,       // 2.5/38 * 100
+        legendary: 1.3157894736842105, // 0.5/38 * 100
       };
       
       // Create items with chances distributed evenly within each rarity
@@ -627,6 +632,10 @@ export function ShopModal() {
     }
   };
   
+  if (!shopOpen) {
+    return null;
+  }
+  
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-2">
       <div className="bg-gray-900 rounded-xl border border-gray-700 shadow-2xl w-[95vw] h-[95vh] overflow-hidden flex flex-col">
@@ -944,12 +953,6 @@ export function ShopModal() {
           </div>
         </div>
       </div>
-      
-      {/* Loot Box Modal */}
-      <LootBoxModal 
-        lootBox={selectedLootBox} 
-        onClose={() => setSelectedLootBox(null)} 
-      />
     </div>
   );
 }
@@ -970,6 +973,8 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
       const categoryItems = shopItems.filter(item => {
         // Exclude axe from all lootboxes
         if (item.id === 'tool_axe') return false;
+        // Exclude common items from all cases
+        if ((item.rarity || 'common') === 'common') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';
@@ -997,13 +1002,15 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
         itemsByRarity[rarity].push(item);
       });
       
-      // Improved lootbox odds - much more obtainable items
+      // Adjusted odds: removed common (62%), redistributed proportionally to remaining rarities
+      // Original: uncommon 25%, rare 10%, epic 2.5%, legendary 0.5% = 38% total
+      // New: scaled to 100% maintaining proportions
       const rarityTotals: Record<ItemRarity, number> = {
-        common: 62.0,       // Common items - still most common but reduced
-        uncommon: 25.0,     // Uncommon items - significantly increased
-        rare: 10.0,         // Rare items - much more obtainable
-        epic: 2.5,          // Epic items - much more obtainable
-        legendary: 0.5,     // Legendary items - slightly increased from 0.26%
+        common: 0,
+        uncommon: 65.78947368421053,  // 25/38 * 100
+        rare: 26.31578947368421,      // 10/38 * 100
+        epic: 6.578947368421053,       // 2.5/38 * 100
+        legendary: 1.3157894736842105, // 0.5/38 * 100
       };
       
       // Create items with chances distributed evenly within each rarity
@@ -1036,7 +1043,7 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
         });
       }
       
-      // Items are already normalized to sum to 100% (79.92 + 15.98 + 3.2 + 0.64 + 0.26 = 100)
+      // Items are already normalized to sum to 100% (uncommon ~65.79% + rare ~26.32% + epic ~6.58% + legendary ~1.32% = 100%)
       const normalizedItems = itemsWithChances;
       
       // Check if case only contains legendary items

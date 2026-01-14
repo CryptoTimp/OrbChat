@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { useGameStore } from '../state/gameStore';
 import { useSocket } from '../hooks/useSocket';
 import { playClickSound, playShopBellSound, playInventoryOpenSound, playCloseSound, playBuyOrbsSound } from '../utils/sounds';
@@ -38,6 +38,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   const toggleSettings = useGameStore(state => state.toggleSettings);
   const buyOrbsOpen = useGameStore(state => state.buyOrbsOpen);
   const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
+  const setSelectedLootBox = useGameStore(state => state.setSelectedLootBox);
   const connected = useGameStore(state => state.connected);
   const roomId = useGameStore(state => state.roomId);
   const players = useGameStore(state => state.players);
@@ -46,6 +47,102 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   const inventory = useGameStore(state => state.inventory);
   const lastOrbValue = useGameStore(state => state.lastOrbValue);
   const { leaveRoom: socketLeaveRoom } = useSocket();
+  
+  // Generate first available loot box to open
+  const getFirstLootBox = useMemo(() => {
+    const categories: Array<'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'> = [
+      'hats', 'shirts', 'legs', 'capes', 'wings', 'accessories', 'boosts', 'pets'
+    ];
+    
+    for (const category of categories) {
+      const categoryItems = shopItems.filter(item => {
+        if (item.id === 'tool_axe') return false;
+        // Exclude common items from all cases
+        if ((item.rarity || 'common') === 'common') return false;
+        if (category === 'hats') return item.spriteLayer === 'hat';
+        if (category === 'shirts') return item.spriteLayer === 'shirt';
+        if (category === 'legs') return item.spriteLayer === 'legs';
+        if (category === 'capes') return item.spriteLayer === 'cape';
+        if (category === 'wings') return item.spriteLayer === 'wings';
+        if (category === 'accessories') return item.spriteLayer === 'accessory';
+        if (category === 'boosts') return item.spriteLayer === 'boost';
+        if (category === 'pets') return item.spriteLayer === 'pet';
+        return false;
+      });
+      
+      if (categoryItems.length === 0) continue;
+      
+      const itemsByRarity: Record<string, any[]> = {
+        common: [],
+        uncommon: [],
+        rare: [],
+        epic: [],
+        legendary: [],
+      };
+      
+      categoryItems.forEach(item => {
+        const rarity = item.rarity || 'common';
+        itemsByRarity[rarity].push(item);
+      });
+      
+      // Adjusted odds: removed common (62%), redistributed proportionally to remaining rarities
+      // Original: uncommon 25%, rare 10%, epic 2.5%, legendary 0.5% = 38% total
+      // New: scaled to 100% maintaining proportions
+      const rarityTotals: Record<string, number> = {
+        common: 0,
+        uncommon: 65.78947368421053,  // 25/38 * 100
+        rare: 26.31578947368421,      // 10/38 * 100
+        epic: 6.578947368421053,       // 2.5/38 * 100
+        legendary: 1.3157894736842105, // 0.5/38 * 100
+      };
+      
+      let itemsWithChances;
+      if (category === 'pets') {
+        itemsWithChances = categoryItems.map(item => {
+          let chance = 0;
+          if (item.id === 'pet_golden' || item.id === 'pet_phoenix' || item.id === 'pet_void') {
+            chance = 20.0;
+          } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
+            chance = 13.3;
+          }
+          return { item, chance };
+        });
+      } else {
+        itemsWithChances = categoryItems.map(item => {
+          const rarity = item.rarity || 'common';
+          const itemsInRarity = itemsByRarity[rarity].length;
+          const chancePerItem = itemsInRarity > 0 ? rarityTotals[rarity] / itemsInRarity : 0;
+          return { item, chance: chancePerItem };
+        });
+      }
+      
+      const onlyLegendary = categoryItems.every(item => (item.rarity || 'common') === 'legendary');
+      let price = 1000;
+      if (category === 'wings') {
+        price = 100000;
+      } else if (category === 'pets') {
+        price = 900000;
+      } else if (onlyLegendary) {
+        price = 200000;
+      }
+      
+      return {
+        id: `lootbox_${category}`,
+        name: `${category.charAt(0).toUpperCase() + category.slice(1)} Case`,
+        category,
+        price,
+        items: itemsWithChances,
+      };
+    }
+    return null;
+  }, [shopItems]);
+  
+  const handleOpenLootBoxes = () => {
+    playBuyOrbsSound();
+    if (getFirstLootBox) {
+      setSelectedLootBox(getFirstLootBox);
+    }
+  };
   
   // Animated orb count
   const currentOrbs = localPlayer?.orbs || 0;
@@ -530,6 +627,25 @@ export function HUD({ onLeaveRoom }: HUDProps) {
             </svg>
             Shop
           </button> */}
+          
+          {/* Loot Boxes button */}
+          <button
+            onClick={handleOpenLootBoxes}
+            className="relative overflow-hidden bg-gradient-to-br from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 
+                       text-white font-pixel text-sm px-6 py-3 rounded-lg 
+                       shadow-lg shadow-purple-500/50 hover:shadow-purple-500/70
+                       transition-all duration-200 flex items-center gap-3 w-full justify-center"
+          >
+            {/* Particle effects inside button */}
+            <span className="absolute w-1.5 h-1.5 bg-purple-300 rounded-full animate-btn-particle-1 opacity-70" />
+            <span className="absolute w-1 h-1 bg-pink-200 rounded-full animate-btn-particle-2 opacity-60" />
+            <span className="absolute w-1.5 h-1.5 bg-purple-300 rounded-full animate-btn-particle-3 opacity-70" />
+            <span className="absolute w-1 h-1 bg-pink-200 rounded-full animate-btn-particle-4 opacity-60" />
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+            <span className="relative z-10">Loot Boxes</span>
+          </button>
           
           <button
             onClick={() => { playBuyOrbsSound(); toggleBuyOrbs(); }}

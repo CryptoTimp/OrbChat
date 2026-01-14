@@ -38,6 +38,7 @@ interface GameState {
   shopOpen: boolean;
   shopInitialTab?: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | 'lootboxes';
   shopInitialRarity?: ItemRarity;
+  selectedLootBox: any | null; // LootBox type from LootBoxModal
   inventoryOpen: boolean;
   settingsOpen: boolean;
   buyOrbsOpen: boolean;
@@ -83,6 +84,7 @@ interface GameState {
   setInventory: (items: InventoryItem[], orbs: number) => void;
   toggleShop: () => void;
   openShopWithFilter: (tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | 'lootboxes', rarity?: ItemRarity) => void;
+  setSelectedLootBox: (lootBox: any | null) => void;
   toggleInventory: () => void;
   toggleSettings: () => void;
   toggleBuyOrbs: () => void;
@@ -164,6 +166,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
   },
   shopOpen: false,
+  selectedLootBox: null,
   inventoryOpen: false,
   settingsOpen: false,
   buyOrbsOpen: false,
@@ -462,6 +465,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         shopInitialRarity: rarity, // Optional - if not provided, no filter is applied
       });
     },
+    setSelectedLootBox: (lootBox) => set({ selectedLootBox: lootBox }),
   toggleInventory: () => set({ inventoryOpen: !get().inventoryOpen }),
   toggleSettings: () => set({ settingsOpen: !get().settingsOpen }),
   toggleBuyOrbs: () => set({ buyOrbsOpen: !get().buyOrbsOpen }),

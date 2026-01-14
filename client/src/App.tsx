@@ -7,6 +7,7 @@ import { ShopModal } from './ui/ShopModal';
 import { InventoryModal } from './ui/InventoryModal';
 import { SettingsModal } from './ui/SettingsModal';
 import { LogDealerModal } from './ui/LogDealerModal';
+import { LootBoxModal } from './ui/LootBoxModal';
 import { JoinScreen } from './ui/JoinScreen';
 import { AuthScreen } from './ui/AuthScreen';
 import { Notifications } from './ui/Notifications';
@@ -26,6 +27,8 @@ function App() {
   const localPlayer = useGameStore(state => state.localPlayer);
   const roomId = useGameStore(state => state.roomId);
   const playerName = useGameStore(state => state.playerName);
+  const selectedLootBox = useGameStore(state => state.selectedLootBox);
+  const setSelectedLootBox = useGameStore(state => state.setSelectedLootBox);
   
   // Listen to Firebase auth state
   useEffect(() => {
@@ -102,6 +105,12 @@ function App() {
       
       {/* Shop modal */}
       <ShopModal />
+      
+      {/* Loot Box Modal - rendered independently */}
+      <LootBoxModal 
+        lootBox={selectedLootBox} 
+        onClose={() => setSelectedLootBox(null)} 
+      />
       
       {/* Inventory modal */}
       <InventoryModal />

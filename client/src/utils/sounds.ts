@@ -155,3 +155,15 @@ export const playChoppingSound = () => {
     console.log('Chopping sound disabled - sfxEnabled:', state.sfxEnabled);
   }
 };
+
+// Play the level-up sound for rare/epic/legendary case rewards
+export const playLevelUpSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/level-up-08-402152.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch((err) => {
+      console.error('Failed to play level-up sound:', err);
+    });
+  }
+};

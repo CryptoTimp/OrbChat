@@ -847,7 +847,7 @@ export function useSocket() {
         const lootBoxName = lootBoxCategory.charAt(0).toUpperCase() + lootBoxCategory.slice(1) + ' Case';
         
           // Format message with item name wrapped in special markers for coloring and square brackets
-          const message = `opened a ${lootBoxName} and received [ITEM:${item.rarity || 'common'}][${item.name}][/ITEM]!`;
+          const message = `opened a ${lootBoxName} and received[ITEM:${item.rarity || 'common'}][${item.name}][/ITEM] !`;
         console.log('Sending loot box chat message:', message);
         sendChat(message);
       } else {

@@ -3,11 +3,11 @@
     "ZqlLG9gh1odb9nNy6QEpHuIJofd2": {
       "id": "ZqlLG9gh1odb9nNy6QEpHuIJofd2",
       "name": "Unknown",
-      "orbs": 6789,
+      "orbs": 797,
       "sprite_body": "default",
       "sprite_outfit": "[]",
       "created_at": "2026-01-14T19:15:59.446Z",
-      "last_seen": "2026-01-14T20:13:51.866Z",
+      "last_seen": "2026-01-14T20:46:05.464Z",
       "logs": 1
     }
   },
@@ -531,30 +531,6 @@
       "sprite_layer": "accessory",
       "sprite_path": "/sprites/acc_necklace.png",
       "rarity": "uncommon"
-    },
-    "acc_wings_angel": {
-      "id": "acc_wings_angel",
-      "name": "Angel Wings",
-      "price": 25000,
-      "sprite_layer": "wings",
-      "sprite_path": "/sprites/acc_wings_angel.png",
-      "rarity": "epic"
-    },
-    "acc_wings_devil": {
-      "id": "acc_wings_devil",
-      "name": "Devil Wings",
-      "price": 25000,
-      "sprite_layer": "wings",
-      "sprite_path": "/sprites/acc_wings_devil.png",
-      "rarity": "epic"
-    },
-    "acc_wings_fairy": {
-      "id": "acc_wings_fairy",
-      "name": "Fairy Wings",
-      "price": 9000,
-      "sprite_layer": "wings",
-      "sprite_path": "/sprites/acc_wings_fairy.png",
-      "rarity": "rare"
     },
     "acc_backpack": {
       "id": "acc_backpack",
