@@ -1452,7 +1452,7 @@
     "pet_mini_me": {
       "id": "pet_mini_me",
       "name": "Mini Me",
-      "price": 500000,
+      "price": 20000,
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_mini_me.png",
       "rarity": "epic"

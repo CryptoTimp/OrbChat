@@ -10536,6 +10536,7 @@ export function drawMiniMePet(
   
   // Create a mini player object with the same outfit (excluding the pet itself)
   // Use a unique ID for the mini me pet to avoid animation state conflicts
+  // IMPORTANT: Use a fixed position to prevent animation glitches from smooth following
   const miniPlayer: PlayerWithChat = {
     ...player,
     id: `${player.id}_mini_me`, // Unique ID to prevent animation state conflicts
@@ -10547,6 +10548,34 @@ export function drawMiniMePet(
       outfit: player.sprite.outfit.filter(itemId => !itemId.startsWith('pet_')) // Remove pet items
     }
   };
+  
+  // Lock the mini me pet's animation state to always be idle
+  // The pet position updates every frame (smooth following), which would trigger movement animation
+  // We prevent this by pre-setting the animation state before drawPlayer calls getPlayerAnimation
+  const miniMeAnimId = miniPlayer.id;
+  let miniAnim = extendedPlayerAnimations.get(miniMeAnimId);
+  if (!miniAnim) {
+    miniAnim = {
+      lastX: unscaledX,
+      lastY: unscaledY,
+      frame: 0,
+      lastFrameTime: time,
+      isMoving: false,
+      idleTime: time,
+      idleBobPhase: 0,
+      distanceTraveled: 0,
+      isChopping: false,
+      chopFrame: 0,
+      chopStartTime: 0
+    };
+    extendedPlayerAnimations.set(miniMeAnimId, miniAnim);
+  }
+  // Force idle state - update last position to current to prevent movement detection
+  miniAnim.lastX = unscaledX;
+  miniAnim.lastY = unscaledY;
+  miniAnim.isMoving = false;
+  miniAnim.frame = 0; // Always idle pose
+  miniAnim.lastFrameTime = time;
   
   // Apply scale transform to make the player half size
   // The key insight: drawPlayer expects unscaled coordinates and scales them internally
