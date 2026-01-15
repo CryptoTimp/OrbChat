@@ -52,7 +52,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
   const { purchaseLootBox } = useSocket();
   
-  // Generate all available loot boxes
+  // Generate all available loot boxes (with correct filtering)
   const allLootBoxes = useMemo(() => {
     const categories: Array<'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'> = [
       'hats', 'shirts', 'legs', 'capes', 'wings', 'accessories', 'boosts', 'pets'
@@ -181,9 +181,20 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     return [...boxes, ...godlikeBoxes].sort((a, b) => b.price - a.price);
   }, [shopItems]);
   
+  // Use the correctly filtered loot box from allLootBoxes instead of the prop
+  // This ensures godlike items are excluded from regular cases even on first load
+  const currentLootBox = useMemo(() => {
+    if (!lootBox) return null;
+    // Find the matching box from allLootBoxes (which has correct filtering)
+    const matchingBox = allLootBoxes.find(box => box.id === lootBox.id);
+    return matchingBox || lootBox; // Fallback to prop if not found (shouldn't happen)
+  }, [lootBox, allLootBoxes]);
+  
+  // Use currentLootBox throughout the component instead of the prop
+  
   // Close shop when loot box modal opens
   useEffect(() => {
-    if (lootBox) {
+    if (currentLootBox) {
       const shopOpen = useGameStore.getState().shopOpen;
       if (shopOpen) {
         // Use setTimeout to ensure the modal renders before closing shop
@@ -230,7 +241,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   
   // Handle Escape key to close modal
   useEffect(() => {
-    if (!lootBox) return;
+    if (!currentLootBox) return;
     
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in an input
@@ -250,44 +261,44 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [lootBox, onClose, cleanup]);
+  }, [currentLootBox, onClose, cleanup]);
   
   // Get orbs directly from store so it updates when purchase completes
   const playerOrbs = useGameStore(state => state.localPlayer?.orbs || 0);
-  const canAfford = lootBox ? playerOrbs >= lootBox.price : false;
+  const canAfford = currentLootBox ? playerOrbs >= currentLootBox.price : false;
   
   // Calculate normalized chances (memoized to prevent recalculation on every render)
   // Must be defined before any useEffect that uses it
   // Note: Chances from ShopModal should already sum to 100%, but we normalize to ensure accuracy
   // EXCEPTION: Godlike cases keep their original 0.05% chances (not normalized to 100%)
   const normalizedItems = useMemo(() => {
-    if (!lootBox) return [];
+    if (!currentLootBox) return [];
     
     // Check if this is a godlike case (only contains godlike items)
-    const isGodlikeCase = lootBox.category?.startsWith('godlike_') || 
-      lootBox.items.every(item => (item.item.rarity || 'common') === 'godlike');
+    const isGodlikeCase = currentLootBox.category?.startsWith('godlike_') || 
+      currentLootBox.items.every(item => (item.item.rarity || 'common') === 'godlike');
     
     // For godlike cases, keep original chances (0.05% each, not normalized)
     if (isGodlikeCase) {
-      return lootBox.items.map(item => ({
+      return currentLootBox.items.map(item => ({
         ...item,
         normalizedChance: item.chance, // Keep original 0.05% chance
       }));
     }
     
     // Regular cases: normalize to ensure they sum to exactly 100 (handles floating point errors)
-    const totalChance = lootBox.items.reduce((sum, i) => sum + i.chance, 0);
-    return lootBox.items.map(item => ({
+    const totalChance = currentLootBox.items.reduce((sum, i) => sum + i.chance, 0);
+    return currentLootBox.items.map(item => ({
       ...item,
       normalizedChance: totalChance > 0 ? (item.chance / totalChance) * 100 : 0,
     }));
-  }, [lootBox?.id, lootBox?.items]);
+  }, [currentLootBox?.id, currentLootBox?.items]);
   
   // Calculate initial scroll position when items are available (only on mount or when loot box changes)
   // Don't reset when selectedItem changes - that's handled by the animation
   // IMPORTANT: Don't reset when isOpening is true, as that would interfere with the animation
   useEffect(() => {
-    if (lootBox && normalizedItems.length > 0 && !selectedItem && !isOpening) {
+    if (currentLootBox && normalizedItems.length > 0 && !selectedItem && !isOpening) {
       const itemWidth = 144; // 128px + 16px gap
       
       // Find the first legendary item index in the normalized items (for spinner)
@@ -313,7 +324,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         return prev;
       });
     }
-  }, [lootBox?.id, normalizedItems.length, selectedItem, isOpening]); // Include selectedItem and isOpening to prevent interference
+  }, [currentLootBox?.id, normalizedItems.length, selectedItem, isOpening]); // Include selectedItem and isOpening to prevent interference
   
   // Track previous orbs for animation
   const [previousOrbs, setPreviousOrbs] = useState(playerOrbs);
@@ -356,12 +367,12 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   // Weighted random selection (uses original order, not sorted)
   // Returns null for exclusive cases when nothing is won (99.85% chance)
   const selectRandomItem = useCallback((): ShopItem | null => {
-    if (!lootBox || normalizedItems.length === 0) {
+    if (!currentLootBox || normalizedItems.length === 0) {
       throw new Error('No items in loot box');
     }
     
     // Check if this is a godlike case (only contains godlike items)
-    const isGodlikeCase = lootBox.category?.startsWith('godlike_') || 
+    const isGodlikeCase = currentLootBox.category?.startsWith('godlike_') || 
       normalizedItems.every(item => (item.item.rarity || 'common') === 'godlike');
     
     // Generate a fresh random number each time (0 to 100)
@@ -404,7 +415,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     // Fallback to last item (shouldn't happen if chances sum to 100)
     console.warn('Fallback to last item - random:', random, 'total cumulative:', cumulative);
     return normalizedItems[normalizedItems.length - 1].item;
-  }, [normalizedItems, lootBox]);
+  }, [normalizedItems, currentLootBox]);
   
   const handleOpen = useCallback(() => {
     // CRITICAL: Block if already opening - check ref first (synchronous)
@@ -417,7 +428,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     }
     
     // Basic validation
-    if (!lootBox || !canAfford) {
+    if (!currentLootBox || !canAfford) {
       return;
     }
     
@@ -448,7 +459,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     // Update orb balance optimistically - decrease immediately when clicking unlock
     const state = useGameStore.getState();
     const currentOrbs = state.localPlayer?.orbs || 0;
-    const optimisticOrbs = currentOrbs - lootBox.price;
+    const optimisticOrbs = currentOrbs - currentLootBox.price;
     state.updatePlayerOrbs(state.playerId || '', optimisticOrbs);
     if (state.localPlayer) {
       state.localPlayer.orbs = optimisticOrbs;
@@ -609,7 +620,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               setSelectedItem(null);
               
               // Purchase the loot box after animation completes (will sync with Firebase)
-              purchaseLootBox(lootBox.id, '', lootBox.price);
+              purchaseLootBox(currentLootBox.id, '', currentLootBox.price);
             } else {
               // Normal item result
               // Always set the selected item so it displays, even if already owned
@@ -625,7 +636,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               }
               
               // Purchase the loot box after animation completes (will sync with Firebase)
-              purchaseLootBox(lootBox.id, item.id, lootBox.price);
+              purchaseLootBox(currentLootBox.id, item.id, currentLootBox.price);
             }
             
             // NOW that animation is done and item is shown, allow opening again
@@ -640,11 +651,11 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       animationFrameId = requestAnimationFrame(animate);
       animationRef.current = animationFrameId;
     });
-  }, [lootBox, canAfford, isOpening, normalizedItems, scrollPosition, selectRandomItem, inventory, purchaseLootBox]);
+  }, [currentLootBox, canAfford, isOpening, normalizedItems, scrollPosition, selectRandomItem, inventory, purchaseLootBox]);
   
   // Reset state when loot box changes (only when switching to a different loot box)
   useEffect(() => {
-    if (lootBox) {
+    if (currentLootBox) {
       // Only reset if we're switching to a different loot box (not just an update)
       setIsOpening(false);
       isOpeningRef.current = false;
@@ -665,14 +676,14 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       activeTickSoundsRef.current = [];
       // Reset scroll position will be handled by the other effect
     }
-  }, [lootBox?.id, playerOrbs]); // Only depend on lootBox.id - this ensures it only runs when switching loot boxes
+  }, [currentLootBox?.id, playerOrbs]); // Only depend on currentLootBox.id - this ensures it only runs when switching loot boxes
   
   // Cleanup when loot box becomes null (modal closes)
   useEffect(() => {
-    if (!lootBox) {
+    if (!currentLootBox) {
       cleanup();
     }
-  }, [lootBox, cleanup]);
+  }, [currentLootBox, cleanup]);
   
   // Cleanup on unmount or when modal closes
   useEffect(() => {
@@ -691,7 +702,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     };
   }, []);
   
-  if (!lootBox) return null;
+  if (!currentLootBox) return null;
 
   return (
     <>
@@ -837,7 +848,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           {/* Header */}
           <div className="flex items-center justify-between p-2 sm:p-4 border-b border-gray-700 shrink-0">
             <h2 className="text-lg sm:text-2xl font-pixel text-amber-400 flex items-center gap-2">
-              📦 {lootBox.name}
+              📦 {currentLootBox.name}
             </h2>
             <button
               onClick={() => {
@@ -869,7 +880,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                 {playerOrbs.toLocaleString()}
               </span>
               <span className="text-gray-400 font-pixel text-sm">orbs</span>
-              <span className="text-gray-500 font-pixel text-xs">({lootBox.price.toLocaleString()} per case)</span>
+              <span className="text-gray-500 font-pixel text-xs">({currentLootBox.price.toLocaleString()} per case)</span>
               {!canAfford && (
                 <button
                   onClick={() => {
@@ -1065,7 +1076,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                     <span>🔓</span>
                     <span>Unlock</span>
                     <span className={isOpening ? "text-gray-500" : "text-cyan-300"}>●</span>
-                    <span>{lootBox.price.toLocaleString()}</span>
+                    <span>{currentLootBox.price.toLocaleString()}</span>
                   </button>
                 ) : (
                   <div className="flex items-center gap-3 px-8 py-3 rounded-lg bg-gray-700">
@@ -1116,7 +1127,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               {/* Duplicate items multiple times for seamless scrolling - need extra at start for left visibility */}
               {/* Also add empty tiles for "nothing" results in godlike cases */}
               {(() => {
-                const isGodlikeCase = lootBox?.category?.startsWith('godlike_');
+                const isGodlikeCase = currentLootBox?.category?.startsWith('godlike_');
                 const itemsToRender: Array<{ item: ShopItem | null; setIndex: number; itemIndex: number }> = [];
                 
                 // Create 7 sets of items (more sets for godlike cases so empty tile doesn't appear at the end)
@@ -1272,7 +1283,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               <p className="text-gray-300 font-pixel text-xs sm:text-sm mb-1 sm:mb-2">Switch Case:</p>
               <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
                 {allLootBoxes.map(box => {
-                  const isSelected = lootBox?.id === box.id;
+                  const isSelected = currentLootBox?.id === box.id;
                   const canAffordBox = playerOrbs >= box.price;
                   const isGodlikeCase = box.category?.startsWith('godlike_');
                   return (

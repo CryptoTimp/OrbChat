@@ -18,12 +18,10 @@ import { ItemPreview } from './ItemPreview';
 
 // Orb purchase packages (£15 ≈ multiple legendary items)
 const ORB_PACKAGES = [
-  { id: 'starter', name: 'Starter Pack', orbs: 25000, price: 1.99, popular: false, bonus: null },
-  { id: 'small', name: 'Small Pack', orbs: 75000, price: 4.99, popular: false, bonus: null },
-  { id: 'medium', name: 'Medium Pack', orbs: 175000, price: 9.99, popular: true, bonus: '+25K bonus' },
-  { id: 'large', name: 'Large Pack', orbs: 250000, price: 14.99, popular: false, bonus: '+25K bonus' },
-  { id: 'mega', name: 'Mega Pack', orbs: 600000, price: 29.99, popular: false, bonus: '+100K bonus' },
-  { id: 'ultimate', name: 'Ultimate Pack', orbs: 1250000, price: 49.99, popular: false, bonus: '+250K bonus' },
+  { id: 'medium', name: 'Medium Pack', orbs: 175000, price: 9.99, popular: false, bonus: '+25K bonus' },
+  { id: 'large', name: 'Large Pack', orbs: 200000, price: 14.99, popular: true, bonus: '+100K bonus' },
+  { id: 'mega', name: 'Mega Pack', orbs: 700000, price: 29.99, popular: false, bonus: '+100K bonus' },
+  { id: 'ultimate', name: 'Ultimate Pack', orbs: 1500000, price: 49.99, popular: false, bonus: '+250K bonus' },
 ];
 
 
@@ -59,6 +57,8 @@ export function HUD({ onLeaveRoom }: HUDProps) {
         if (item.id === 'tool_axe') return false;
         // Exclude common items from all cases
         if ((item.rarity || 'common') === 'common') return false;
+        // Exclude godlike items from regular cases (only available in godlike cases)
+        if ((item.rarity || 'common') === 'godlike') return false;
         if (category === 'hats') return item.spriteLayer === 'hat';
         if (category === 'shirts') return item.spriteLayer === 'shirt';
         if (category === 'legs') return item.spriteLayer === 'legs';
@@ -530,6 +530,14 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                     />
                   ))}
                   <style>{`
+                    @keyframes float {
+                      0%, 100% { transform: translateY(0px); }
+                      50% { transform: translateY(-3px); }
+                    }
+                    @keyframes shimmer {
+                      0%, 100% { opacity: 0.8; transform: scale(1); }
+                      50% { opacity: 1; transform: scale(1.2); }
+                    }
                     @keyframes rise {
                       0% {
                         transform: translateY(0) scale(1);
@@ -732,7 +740,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
             
             {/* Packages Grid */}
             <div className="p-5 pt-8 overflow-y-auto max-h-[60vh]">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 gap-5">
                 {ORB_PACKAGES.map((pkg) => (
                   <div
                     key={pkg.id}
@@ -765,14 +773,38 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                       </>
                     )}
                     
-                    {/* Orb icon */}
+                    {/* Animated Orb icon */}
                     <div className="flex justify-center mb-3 mt-1">
-                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br shadow-lg flex items-center justify-center ${
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br shadow-lg flex items-center justify-center relative overflow-visible ${
                         pkg.popular 
                           ? 'from-amber-400 to-orange-500 shadow-amber-500/50' 
                           : 'from-cyan-400 to-blue-500 shadow-cyan-500/50'
                       }`}>
-                        <span className="text-white font-bold text-lg">💎</span>
+                        {/* Animated orb */}
+                        <div className="relative w-6 h-6">
+                          {/* Outer glow */}
+                          <div className={`absolute inset-0 rounded-full ${
+                            pkg.popular 
+                              ? 'bg-amber-300/60' 
+                              : 'bg-cyan-300/60'
+                          }`} style={{
+                            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                            transform: 'scale(1.5)',
+                          }} />
+                          {/* Main orb body */}
+                          <div className={`absolute inset-0 rounded-full ${
+                            pkg.popular 
+                              ? 'bg-gradient-to-br from-amber-200 via-amber-300 to-orange-400' 
+                              : 'bg-gradient-to-br from-cyan-200 via-cyan-300 to-blue-400'
+                          }`} style={{
+                            boxShadow: `0 0 8px ${pkg.popular ? 'rgba(251, 191, 36, 0.6)' : 'rgba(34, 211, 238, 0.6)'}`,
+                            animation: 'float 3s ease-in-out infinite',
+                          }} />
+                          {/* Highlight */}
+                          <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-white/80" style={{
+                            animation: 'shimmer 2s ease-in-out infinite',
+                          }} />
+                        </div>
                       </div>
                     </div>
                     
@@ -795,16 +827,6 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                     </div>
                   </div>
                 ))}
-              </div>
-              
-              {/* Info text */}
-              <div className="mt-5 text-center">
-                <p className="text-gray-500 text-xs font-pixel">
-                  💡 Tip: 1 Legendary item costs ~45,000 orbs • Full outfit ~225,000 orbs
-                </p>
-                <p className="text-gray-600 text-[10px] mt-2">
-                  Purchases are processed securely. All sales are final.
-                </p>
               </div>
             </div>
           </div>

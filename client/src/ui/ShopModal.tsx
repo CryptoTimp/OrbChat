@@ -201,6 +201,9 @@ export function ShopModal() {
   const filterItems = (items: ShopItem[]) => {
     let filtered = items;
     
+    // Exclude godlike items from shop (only available in godlike cases)
+    filtered = filtered.filter(item => (item.rarity || 'common') !== 'godlike');
+    
     // Apply rarity filter
     if (rarityFilter) {
       filtered = filtered.filter(item => (item.rarity || 'common') === rarityFilter);

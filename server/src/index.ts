@@ -438,6 +438,14 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const player = rooms.getPlayerInRoom(roomId, playerId);
     
     if (player) {
+      // Prevent purchasing godlike items (only available in godlike cases)
+      const shopItems = shop.getShopItems();
+      const item = shopItems.find(s => s.id === itemId);
+      if (item && (item.rarity || 'common') === 'godlike') {
+        console.log(`Player ${player.name} attempted to purchase godlike item ${itemId} - blocked`);
+        return; // Silently reject the purchase
+      }
+      
       // Update player's orbs in room state and database (client already updated Firebase)
       if (typeof newOrbs === 'number') {
         // Update database to keep it in sync
