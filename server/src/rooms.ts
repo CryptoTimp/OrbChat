@@ -787,9 +787,9 @@ export async function interactWithTreasureChest(
   // Update chest cooldown
   chest.cooldownEndTime = now + COOLDOWN_DURATION;
 
-  // 80% chance to find coins, 20% chance empty
+  // 50% chance to find coins, 50% chance empty
   const roll = Math.random();
-  const foundCoins = roll < 0.80;
+  const foundCoins = roll < 0.50;
 
   if (foundCoins) {
     // Random 10-100 coins

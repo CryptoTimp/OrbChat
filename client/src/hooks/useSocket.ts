@@ -483,35 +483,59 @@ function attachListeners(sock: Socket) {
   });
   
   // Shrine interaction errors (non-critical, don't disconnect)
-  sock.on('treasure_chest_opened', ({ chestId, chest, message, coinsFound }) => {
-    console.log('[useSocket] treasure_chest_opened received:', { chestId, coinsFound, message, chest });
+  sock.on('treasure_chest_opened', async ({ chestId, chest, message, coinsFound, openedBy }) => {
+    console.log('[useSocket] treasure_chest_opened received:', { chestId, coinsFound, message, chest, openedBy });
     const state = useGameStore.getState();
+    const currentPlayerId = state.playerId;
     
-    // Update chest state
+    // Update chest state for all players
     if (chest) {
       state.updateTreasureChest(chestId, chest);
     } else {
       console.error('[useSocket] No chest object received in treasure_chest_opened event');
     }
     
-    // Store coins found in global variable as fallback (in case event fires before modal listens)
-    (window as any).__lastTreasureChestCoins = coinsFound || 0;
+    // Only show modal and coins to the player who opened it
+    const isOpener = openedBy && currentPlayerId && openedBy === currentPlayerId;
     
-    // Dispatch custom event immediately (listener is always active)
-    const event = new CustomEvent('treasureChestOpened', { 
-      detail: { coinsFound: coinsFound || 0 } 
-    });
-    console.log('[useSocket] Dispatching treasureChestOpened event:', event.detail);
-    window.dispatchEvent(event);
-    
-    // Show modal after dispatching event
-    if (chest) {
-      console.log('[useSocket] Setting selected chest and opening modal');
-      state.setSelectedTreasureChest(chest);
-      state.toggleTreasureChestModal();
-      console.log('[useSocket] Modal state after toggle:', state.treasureChestModalOpen);
+    if (isOpener) {
+      // If coins found, update Firebase gold_coins (same pattern as logs)
+      if (coinsFound && coinsFound > 0 && currentPlayerId) {
+        try {
+          const profile = await getUserProfile(currentPlayerId);
+          if (profile) {
+            const currentCoins = profile.gold_coins || 0;
+            const newCoins = currentCoins + coinsFound;
+            await updateGoldCoins(currentPlayerId, newCoins);
+            console.log(`[useSocket] Updated gold coins: ${currentCoins} + ${coinsFound} = ${newCoins}`);
+          }
+        } catch (error: any) {
+          console.error('[useSocket] Failed to update Firebase gold coins:', error);
+          // Don't fail the interaction if Firebase update fails
+        }
+      }
+      
+      // Store coins found in global variable as fallback (in case event fires before modal listens)
+      (window as any).__lastTreasureChestCoins = coinsFound || 0;
+      
+      // Dispatch custom event immediately (listener is always active)
+      const event = new CustomEvent('treasureChestOpened', { 
+        detail: { coinsFound: coinsFound || 0 } 
+      });
+      console.log('[useSocket] Dispatching treasureChestOpened event:', event.detail);
+      window.dispatchEvent(event);
+      
+      // Show modal after dispatching event
+      if (chest) {
+        console.log('[useSocket] Setting selected chest and opening modal for opener');
+        state.setSelectedTreasureChest(chest);
+        state.toggleTreasureChestModal();
+        console.log('[useSocket] Modal state after toggle:', state.treasureChestModalOpen);
+      } else {
+        console.error('[useSocket] Cannot open modal: no chest object');
+      }
     } else {
-      console.error('[useSocket] Cannot open modal: no chest object');
+      console.log('[useSocket] Not the opener, skipping modal (openedBy:', openedBy, 'currentPlayerId:', currentPlayerId, ')');
     }
     
     // Clear interaction in progress flag (use setTimeout to ensure GameCanvas can access it)
@@ -1421,7 +1445,7 @@ export function useSocket() {
           
           if (coinCount > 0) {
             // Calculate orbs to receive
-            const orbsPerCoin = 1000;
+            const orbsPerCoin = 500;
             const orbsReceived = coinCount * orbsPerCoin;
             const currentOrbs = profile.orbs || 0;
             const newOrbs = currentOrbs + orbsReceived;

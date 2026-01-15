@@ -5,6 +5,7 @@ import { RARITY_COLORS, ItemRarity } from '../types';
 import { ItemPreview } from './ItemPreview';
 import { CharacterPreview } from './CharacterPreview';
 import { playClickSound, playCloseSound, playEquipSound } from '../utils/sounds';
+import { getUserProfile } from '../firebase/auth';
 
 const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike'];
 
@@ -20,6 +21,8 @@ export function InventoryModal() {
   const [rarityFilter, setRarityFilter] = useState<ItemRarity | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [previewItem, setPreviewItem] = useState<string | undefined>(undefined);
+  const [goldCoins, setGoldCoins] = useState<number>(0);
+  const playerId = useGameStore(state => state.playerId);
 
   // Clear search and preview when modal closes
   useEffect(() => {
@@ -28,6 +31,28 @@ export function InventoryModal() {
       setPreviewItem(undefined);
     }
   }, [inventoryOpen]);
+
+  // Load gold coins from Firebase when inventory opens
+  useEffect(() => {
+    if (inventoryOpen && playerId) {
+      (async () => {
+        const profile = await getUserProfile(playerId);
+        setGoldCoins(profile?.gold_coins || 0);
+      })();
+    }
+  }, [inventoryOpen, playerId]);
+
+  // Refresh gold coins periodically while inventory is open
+  useEffect(() => {
+    if (!inventoryOpen || !playerId) return;
+    
+    const interval = setInterval(async () => {
+      const profile = await getUserProfile(playerId);
+      setGoldCoins(profile?.gold_coins || 0);
+    }, 2000); // Refresh every 2 seconds
+    
+    return () => clearInterval(interval);
+  }, [inventoryOpen, playerId]);
 
   if (!inventoryOpen) return null;
 
@@ -230,24 +255,47 @@ export function InventoryModal() {
         const allItems = sortByRarity([...hats, ...shirts, ...legs, ...capes, ...wings, ...accessories, ...boosts, ...pets]);
         return (
           <div>
-            {/* Logs section */}
-            {logCount > 0 && (
+            {/* Resources section */}
+            {(logCount > 0 || goldCoins > 0) && (
               <div className="mb-4">
                 <h3 className="text-gray-300 font-pixel text-sm mb-2">🪵 Resources</h3>
-                <div className="bg-gray-800 rounded-lg p-4 border-2 border-amber-500">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="text-4xl">🪵</div>
-                      <div>
-                        <p className="text-white font-pixel text-sm">Logs</p>
-                        <p className="text-gray-400 font-pixel text-xs">Sell to log dealer for 100 orbs each</p>
+                <div className="space-y-3">
+                  {/* Logs */}
+                  {logCount > 0 && (
+                    <div className="bg-gray-800 rounded-lg p-4 border-2 border-amber-500">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="text-4xl">🪵</div>
+                          <div>
+                            <p className="text-white font-pixel text-sm">Logs</p>
+                            <p className="text-gray-400 font-pixel text-xs">Sell to log dealer for 100 orbs each</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-amber-300 font-pixel text-lg">{logCount}</p>
+                          <p className="text-cyan-300 font-pixel text-xs">● {logCount * 100}</p>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-amber-300 font-pixel text-lg">{logCount}</p>
-                      <p className="text-cyan-300 font-pixel text-xs">● {logCount * 100}</p>
+                  )}
+                  {/* Gold Coins */}
+                  {goldCoins > 0 && (
+                    <div className="bg-gray-800 rounded-lg p-4 border-2 border-yellow-500">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="text-4xl">🪙</div>
+                          <div>
+                            <p className="text-white font-pixel text-sm">Gold Coins</p>
+                            <p className="text-gray-400 font-pixel text-xs">Sell to treasure chest dealer for 500 orbs each</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-yellow-300 font-pixel text-lg">{goldCoins}</p>
+                          <p className="text-cyan-300 font-pixel text-xs">● {goldCoins * 500}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             )}

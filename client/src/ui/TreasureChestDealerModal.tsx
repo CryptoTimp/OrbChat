@@ -4,7 +4,7 @@ import { useSocket } from '../hooks/useSocket';
 import { playClickSound, playCloseSound, playPurchaseSound } from '../utils/sounds';
 import { getUserProfile } from '../firebase/auth';
 
-const COIN_PRICE = 1000; // Orbs per coin
+const COIN_PRICE = 500; // Orbs per coin
 
 export function TreasureChestDealerModal() {
   const treasureChestDealerOpen = useGameStore(state => state.treasureChestDealerOpen);

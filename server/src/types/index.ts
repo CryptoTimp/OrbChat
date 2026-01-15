@@ -190,6 +190,7 @@ export interface ServerToClientEvents {
     chest: TreasureChest; 
     message: string; 
     coinsFound?: number;
+    openedBy?: string; // Player ID who opened the chest
   }) => void;
   treasure_chest_interaction_error: (data: { chestId: string; message: string }) => void;
   gold_coins_sold: (data: { playerId: string; coinCount: number; orbsReceived: number; newBalance: number }) => void;

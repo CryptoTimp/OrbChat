@@ -177,3 +177,33 @@ export const playSellSound = () => {
     sound.play().catch(() => {});
   }
 };
+
+// Play the treasure chest opening sound
+export const playChestOpenSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/chest-stones-shake-46877.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch(() => {});
+  }
+};
+
+// Play the treasure chest reward sound (coins found)
+export const playChestRewardSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/level-up-08-402152.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch(() => {});
+  }
+};
+
+// Play the treasure chest empty sound (no reward)
+export const playChestEmptySound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/classic-game-action-negative-8-224414.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch(() => {});
+  }
+};

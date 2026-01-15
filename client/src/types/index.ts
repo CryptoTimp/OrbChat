@@ -119,7 +119,7 @@ export const GAME_CONSTANTS = {
   CHAT_BUBBLE_DURATION: 5000, // ms
   MOVEMENT_SPEED: 1.2, // pixels per frame (slightly faster for bigger map)
   COLLECTION_RADIUS: 24, // pixels
-  MIN_ZOOM: 0.5,
+  MIN_ZOOM: 0.7,  // Reduced from 0.5 to limit zoom out
   MAX_ZOOM: 2.0,
   DEFAULT_ZOOM: 1.0,
 };

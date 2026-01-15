@@ -682,43 +682,30 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         return;
       }
 
-      // If coins found, update Firebase gold_coins (if Firebase is available)
-      if (result.coinsFound && result.coinsFound > 0) {
-        try {
-          const { getUserData, updateGoldCoins } = await import('./firebase');
-          const userData = await getUserData(playerId);
-          if (userData !== null) {
-            // Only update if Firebase is available (getUserData returns null if Firebase isn't configured)
-            const currentCoins = userData?.gold_coins || 0;
-            const newCoins = currentCoins + result.coinsFound;
-            const updated = await updateGoldCoins(playerId, newCoins);
-            if (updated) {
-              console.log(`[TreasureChest] Player ${playerId} found ${result.coinsFound} coins, total: ${newCoins}`);
-            } else {
-              console.log(`[TreasureChest] Player ${playerId} found ${result.coinsFound} coins (Firebase not available, coins not saved)`);
-            }
-          } else {
-            console.log(`[TreasureChest] Player ${playerId} found ${result.coinsFound} coins (Firebase not configured, coins not saved)`);
-          }
-        } catch (error: any) {
-          // Don't fail the interaction if Firebase update fails
-          console.warn(`[TreasureChest] Failed to update Firebase gold coins for player ${playerId}:`, error.message);
-        }
-      }
+      // Client will handle Firebase update (same pattern as logs)
+      // Server just calculates the result and emits the event
 
-      // Emit directly to the interacting player first (most reliable)
-      const eventData = {
+      // Emit directly to the interacting player with full data (including coinsFound for modal)
+      const eventDataForOpener = {
         chestId,
         chest,
         message: result.message,
         coinsFound: result.coinsFound || 0,
+        openedBy: playerId, // Include who opened it
       };
       console.log(`[TreasureChest] Emitting treasure_chest_opened directly to socket ${socket.id}, coinsFound: ${result.coinsFound || 0}`);
-      socket.emit('treasure_chest_opened', eventData);
+      socket.emit('treasure_chest_opened', eventDataForOpener);
       
-      // Also broadcast to all players in room (for other players to see the chest state update)
-      console.log(`[TreasureChest] Broadcasting treasure_chest_opened to room ${roomId}, coinsFound: ${result.coinsFound || 0}`);
-      io.to(roomId).emit('treasure_chest_opened', eventData);
+      // Broadcast to other players in room (without coinsFound, just state update)
+      const eventDataForOthers = {
+        chestId,
+        chest,
+        message: result.message,
+        coinsFound: undefined, // Don't show coins to other players
+        openedBy: playerId,
+      };
+      console.log(`[TreasureChest] Broadcasting treasure_chest_opened to room ${roomId} (excluding opener)`);
+      socket.to(roomId).emit('treasure_chest_opened', eventDataForOthers);
       console.log(`[TreasureChest] Event emitted successfully`);
     } catch (error: any) {
       console.error(`[TreasureChest] Error during chest interaction for player ${playerId}:`, error);
@@ -891,8 +878,8 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       return;
     }
 
-    // Calculate orbs to receive (1000 per coin)
-    const orbsPerCoin = 1000;
+    // Calculate orbs to receive (500 per coin)
+    const orbsPerCoin = 500;
     const orbsReceived = coinCount * orbsPerCoin;
     
     // Get current orbs from Firebase

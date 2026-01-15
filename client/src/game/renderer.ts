@@ -4825,14 +4825,14 @@ const DEALER_TYPES: DealerType[] = [
   {
     id: 'log_dealer',
     name: 'Log Dealer',
-    outfit: ['hat_beanie', 'vest_cowboy', 'legs_jeans_blue'],
-    messages: ['I buy logs!', 'Got any logs?', '100 orbs per log!', 'Bring me your logs!'],
+    outfit: ['hat_hardhat', 'shirt_striped', 'legs_jeans_blue'],
+    messages: ['I buy logs!', 'Got any logs?', '100 orbs per log!', 'Bring me your logs!', 'Fresh cut logs!', 'Quality timber!'],
   },
   {
     id: 'treasure_chest_dealer',
     name: 'Treasure Dealer',
-    outfit: ['hat_cap_red', 'shirt_vest_brown', 'legs_jeans_blue'],
-    messages: ['I buy gold coins!', 'Got any coins?', '1000 orbs per coin!', 'Bring me your treasure!'],
+    outfit: ['hat_pirate', 'coat_pirate', 'legs_pirate'],
+    messages: ['I buy gold coins!', 'Got any coins?', '500 orbs per coin!', 'Bring me your treasure!', 'Arr! Show me yer gold!', 'Treasure for sale!'],
   },
   {
     id: 'resource_dealer_1',
@@ -7142,8 +7142,8 @@ export function drawPlayer(
   // Front accessories (sword, staff, etc) (scaledY already includes bounceY)
   drawFrontAccessories(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, time);
   
-  // Sleepy Zs when idle
-  if (!anim.isMoving) {
+  // Sleepy Zs when idle (only for local player, not NPCs)
+  if (!anim.isMoving && isLocal) {
     drawSleepyZs(ctx, headX, headY, headW, p, time, anim.idleTime);
   }
   
@@ -11249,55 +11249,6 @@ export function getHoveredTreasureChest(worldX: number, worldY: number, chests: 
 export function drawTreasureChestSpeechBubble(ctx: CanvasRenderingContext2D, chest: TreasureChest, time: number, zoom: number = 1): void {
   // Speech bubble removed - using progress bar instead
   return;
-  
-  ctx.save();
-  
-  // Scale with zoom
-  ctx.scale(1 / zoom, 1 / zoom);
-  const scaledX = x * zoom;
-  const scaledY = y * zoom;
-  
-  // Bubble position (above chest)
-  const bubbleX = scaledX;
-  const bubbleY = scaledY - 30 * p * zoom;
-  
-  // Bubble size
-  const padding = 6 * p * zoom;
-  const fontSize = 10 * p * zoom;
-  ctx.font = `${fontSize}px monospace`;
-  const textMetrics = ctx.measureText(message);
-  const textWidth = textMetrics.width;
-  const bubbleWidth = textWidth + padding * 2;
-  const bubbleHeight = fontSize + padding * 2;
-  
-  // Draw bubble background
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-  ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
-  ctx.lineWidth = 2 * p * zoom;
-  
-  // Rounded rectangle
-  const radius = 4 * p * zoom;
-  ctx.beginPath();
-  ctx.moveTo(bubbleX - bubbleWidth / 2 + radius, bubbleY - bubbleHeight / 2);
-  ctx.lineTo(bubbleX + bubbleWidth / 2 - radius, bubbleY - bubbleHeight / 2);
-  ctx.quadraticCurveTo(bubbleX + bubbleWidth / 2, bubbleY - bubbleHeight / 2, bubbleX + bubbleWidth / 2, bubbleY - bubbleHeight / 2 + radius);
-  ctx.lineTo(bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2 - radius);
-  ctx.quadraticCurveTo(bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2, bubbleX + bubbleWidth / 2 - radius, bubbleY + bubbleHeight / 2);
-  ctx.lineTo(bubbleX - bubbleWidth / 2 + radius, bubbleY + bubbleHeight / 2);
-  ctx.quadraticCurveTo(bubbleX - bubbleWidth / 2, bubbleY + bubbleHeight / 2, bubbleX - bubbleWidth / 2, bubbleY + bubbleHeight / 2 - radius);
-  ctx.lineTo(bubbleX - bubbleWidth / 2, bubbleY - bubbleHeight / 2 + radius);
-  ctx.quadraticCurveTo(bubbleX - bubbleWidth / 2, bubbleY - bubbleHeight / 2, bubbleX - bubbleWidth / 2 + radius, bubbleY - bubbleHeight / 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  
-  // Draw text
-  ctx.fillStyle = '#FFD700';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(message, bubbleX, bubbleY);
-  
-  ctx.restore();
 }
 
 // ============ PET RENDERING ============

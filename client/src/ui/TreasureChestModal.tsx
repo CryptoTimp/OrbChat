@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useGameStore } from '../state/gameStore';
-import { playClickSound, playCloseSound } from '../utils/sounds';
+import { playClickSound, playCloseSound, playChestOpenSound, playChestRewardSound, playChestEmptySound } from '../utils/sounds';
 
 export function TreasureChestModal() {
   const treasureChestModalOpen = useGameStore(state => state.treasureChestModalOpen);
@@ -22,6 +22,20 @@ export function TreasureChestModal() {
         const found = customEvent.detail.coinsFound;
         console.log('[TreasureChestModal] Setting coinsFound to:', found);
         setCoinsFound(found);
+        
+        // Play appropriate sound based on result (after a delay to sync with chest opening animation)
+        if (found > 0) {
+          // Play reward sound when coins are found
+          setTimeout(() => {
+            playChestRewardSound();
+          }, 500);
+        } else {
+          // Play empty sound when no coins found
+          setTimeout(() => {
+            playChestEmptySound();
+          }, 500);
+        }
+        
         // Show result after a short delay to allow animation to play
         setTimeout(() => {
           setShowResult(true);
@@ -39,10 +53,13 @@ export function TreasureChestModal() {
   
   useEffect(() => {
     if (treasureChestModalOpen && selectedTreasureChest) {
-      // Reset state when modal opens
+      // Reset state when modal opens (but preserve coinsFound if already set)
       setIsOpening(true);
       setIsOpen(false);
       setShowResult(false);
+      
+      // Play chest opening sound immediately when modal opens
+      playChestOpenSound();
       
       // Check if coins were already set (from event that fired before modal opened)
       // We'll keep the coinsFound value if it was already set
@@ -56,19 +73,30 @@ export function TreasureChestModal() {
       }
       
       // Start opening animation
-      setTimeout(() => {
+      const openTimeout = setTimeout(() => {
         setIsOpen(true);
       }, 500);
       
       // Show result after animation completes (fallback if event hasn't fired yet)
-      setTimeout(() => {
+      const resultTimeout = setTimeout(() => {
         setIsOpening(false);
-        if (coinsFound === null) {
-          // Still no coins found, set to 0 (empty) as fallback
-          setCoinsFound(0);
-        }
+        // Only set to 0 if coinsFound is still null (event hasn't fired)
+        setCoinsFound(prev => {
+          if (prev === null) {
+            // Play empty sound if we're falling back to empty
+            playChestEmptySound();
+            return 0; // Empty as fallback
+          }
+          return prev; // Keep existing value
+        });
         setShowResult(true);
       }, 1500);
+      
+      // Cleanup timeouts if component unmounts or modal closes
+      return () => {
+        clearTimeout(openTimeout);
+        clearTimeout(resultTimeout);
+      };
     } else {
       // Reset when modal closes
       setIsOpening(false);
@@ -76,7 +104,7 @@ export function TreasureChestModal() {
       setCoinsFound(null);
       setShowResult(false);
     }
-  }, [treasureChestModalOpen, selectedTreasureChest, coinsFound]);
+  }, [treasureChestModalOpen, selectedTreasureChest]); // Removed coinsFound from dependencies
   
   if (!treasureChestModalOpen || !selectedTreasureChest) return null;
   
