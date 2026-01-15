@@ -393,8 +393,8 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
     return [];
   }
 
-  // Generate 13 treasure chests
-  const chestCount = 13;
+  // Generate 30 treasure chests
+  const chestCount = 30;
   
   // Minimum distance between chests (in tiles)
   const minDistance = 20;
@@ -408,9 +408,14 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
   const minDistanceFromPlaza = 50; // Chests must be at least 50 tiles from fountain center (deep in forests)
 
   // Map bounds in pixels (ensure chests stay within bounds)
+  // Use same bounds as player movement to ensure consistency
   const maxX = MAP_WIDTH * TILE_SIZE - TILE_SIZE; // Leave margin for chest size
   const maxY = MAP_HEIGHT * TILE_SIZE - TILE_SIZE;
-  const minMargin = TILE_SIZE * 2; // Minimum margin from edges to ensure visibility
+  const minMargin = TILE_SIZE * 3; // Increased margin from edges to ensure visibility (3 tiles = 48 pixels)
+  
+  // Ensure bounds match player movement bounds exactly
+  const playerMaxX = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH - GAME_CONSTANTS.PLAYER_WIDTH;
+  const playerMaxY = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT - GAME_CONSTANTS.PLAYER_HEIGHT;
   
   // Tree grid positions (trees spawn every 4-5 tiles, avoid these areas)
   // Trees are placed at: tx (every 5 tiles), ty (every 4 tiles)
@@ -437,9 +442,9 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
       let x = tile.x * TILE_SIZE + Math.random() * TILE_SIZE;
       let y = tile.y * TILE_SIZE + Math.random() * TILE_SIZE;
       
-      // Clamp to map bounds with margin
-      x = Math.max(minMargin, Math.min(maxX - minMargin, x));
-      y = Math.max(minMargin, Math.min(maxY - minMargin, y));
+      // Clamp to map bounds with margin (using player movement bounds for consistency)
+      x = Math.max(minMargin, Math.min(Math.min(maxX - minMargin, playerMaxX - minMargin), x));
+      y = Math.max(minMargin, Math.min(Math.min(maxY - minMargin, playerMaxY - minMargin), y));
       
       // Convert to tile coordinates for checks
       const tileX = x / TILE_SIZE;
@@ -467,15 +472,29 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
 
       // Check if position is too close to tree grid (trees spawn every 4-5 tiles)
       const tooCloseToTree = isTreeGridPosition(tileX, tileY);
+      
+      // Additional visibility check: ensure chest is in a "clearing" area (not completely surrounded by trees)
+      // Check if there's at least one adjacent tile that's not a tree grid position (ensures visibility)
+      const hasVisibleAdjacent = (() => {
+        const offsets = [
+          { dx: 0, dy: -1 }, { dx: 0, dy: 1 },  // Up, Down
+          { dx: -1, dy: 0 }, { dx: 1, dy: 0 },  // Left, Right
+          { dx: -1, dy: -1 }, { dx: 1, dy: -1 }, // Diagonals
+          { dx: -1, dy: 1 }, { dx: 1, dy: 1 }
+        ];
+        // Check if at least one adjacent position is not a tree grid (creates a small clearing)
+        return offsets.some(offset => !isTreeGridPosition(tileX + offset.dx, tileY + offset.dy));
+      })();
 
       // Only place if:
       // - Far from plaza (deep in forests)
       // - Not on a path (already filtered in allTiles)
       // - Not too close to shrines
       // - Not too close to other chests
-      // - Not too close to tree grid positions
+      // - Not too close to tree grid positions (but allow if has visible adjacent clearing)
+      // - Has at least one visible adjacent tile (ensures chest isn't completely hidden)
       // - Within map bounds (already clamped)
-      if (isFarEnoughFromPlaza && !tooCloseToShrine && !tooClose && !tooCloseToTree) {
+      if (isFarEnoughFromPlaza && !tooCloseToShrine && !tooClose && (!tooCloseToTree || hasVisibleAdjacent) && hasVisibleAdjacent) {
         chests.push({
           id: `treasure_chest_${roomId}_${i}`,
           x: Math.floor(x),
@@ -950,9 +969,14 @@ function findNewChestPosition(roomId: string, mapType: MapType, excludeChestId?:
   const minDistanceFromShrine = 10;
   
   // Map bounds in pixels (ensure chests stay within bounds)
+  // Use same bounds as player movement to ensure consistency
   const maxX = MAP_WIDTH * TILE_SIZE - TILE_SIZE; // Leave margin for chest size
   const maxY = MAP_HEIGHT * TILE_SIZE - TILE_SIZE;
-  const minMargin = TILE_SIZE * 2; // Minimum margin from edges to ensure visibility
+  const minMargin = TILE_SIZE * 3; // Increased margin from edges to ensure visibility (3 tiles = 48 pixels)
+  
+  // Ensure bounds match player movement bounds exactly
+  const playerMaxX = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH - GAME_CONSTANTS.PLAYER_WIDTH;
+  const playerMaxY = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT - GAME_CONSTANTS.PLAYER_HEIGHT;
   
   // Tree grid positions (trees spawn every 4-5 tiles, avoid these areas)
   const isTreeGridPosition = (tileX: number, tileY: number): boolean => {
@@ -960,7 +984,9 @@ function findNewChestPosition(roomId: string, mapType: MapType, excludeChestId?:
     const treeGridY = Math.floor(tileY / 4) * 4;
     const distFromTreeGridX = Math.abs(tileX - treeGridX);
     const distFromTreeGridY = Math.abs(tileY - treeGridY);
-    return distFromTreeGridX < 2 && distFromTreeGridY < 2;
+    // Avoid positions within 2.5 tiles of tree grid (tree canopy radius is ~2-3 tiles)
+    // This ensures chests are visible but still feel hidden in forest
+    return distFromTreeGridX < 2.5 && distFromTreeGridY < 2.5;
   };
   
   // Plaza exclusion - chests should be DEEP in forests, far from center
@@ -977,9 +1003,9 @@ function findNewChestPosition(roomId: string, mapType: MapType, excludeChestId?:
     let x = tile.x * TILE_SIZE + Math.random() * TILE_SIZE;
     let y = tile.y * TILE_SIZE + Math.random() * TILE_SIZE;
     
-    // Clamp to map bounds with margin
-    x = Math.max(minMargin, Math.min(maxX - minMargin, x));
-    y = Math.max(minMargin, Math.min(maxY - minMargin, y));
+    // Clamp to map bounds with margin (using player movement bounds for consistency)
+    x = Math.max(minMargin, Math.min(Math.min(maxX - minMargin, playerMaxX - minMargin), x));
+    y = Math.max(minMargin, Math.min(Math.min(maxY - minMargin, playerMaxY - minMargin), y));
     
     // Convert to tile coordinates for checks
     const tileX = x / TILE_SIZE;
@@ -1007,15 +1033,29 @@ function findNewChestPosition(roomId: string, mapType: MapType, excludeChestId?:
 
       // Check if position is too close to tree grid (trees spawn every 4-5 tiles)
       const tooCloseToTree = isTreeGridPosition(tileX, tileY);
+      
+      // Additional visibility check: ensure chest is in a "clearing" area (not completely surrounded by trees)
+      // Check if there's at least one adjacent tile that's not a tree grid position (ensures visibility)
+      const hasVisibleAdjacent = (() => {
+        const offsets = [
+          { dx: 0, dy: -1 }, { dx: 0, dy: 1 },  // Up, Down
+          { dx: -1, dy: 0 }, { dx: 1, dy: 0 },  // Left, Right
+          { dx: -1, dy: -1 }, { dx: 1, dy: -1 }, // Diagonals
+          { dx: -1, dy: 1 }, { dx: 1, dy: 1 }
+        ];
+        // Check if at least one adjacent position is not a tree grid (creates a small clearing)
+        return offsets.some(offset => !isTreeGridPosition(tileX + offset.dx, tileY + offset.dy));
+      })();
 
       // Only place if:
       // - Far from plaza (deep in forests)
       // - Not on a path (already filtered in allTiles)
       // - Not too close to shrines
       // - Not too close to other chests
-      // - Not too close to tree grid positions
+      // - Not too close to tree grid positions (but allow if has visible adjacent clearing)
+      // - Has at least one visible adjacent tile (ensures chest isn't completely hidden)
       // - Within map bounds (already clamped)
-      if (isFarEnoughFromPlaza && !tooCloseToShrine && !tooClose && !tooCloseToTree) {
+      if (isFarEnoughFromPlaza && !tooCloseToShrine && !tooClose && (!tooCloseToTree || hasVisibleAdjacent) && hasVisibleAdjacent) {
         return { x: Math.floor(x), y: Math.floor(y) };
       }
   }
