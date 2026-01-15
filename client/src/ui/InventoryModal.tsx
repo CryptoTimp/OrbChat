@@ -286,7 +286,7 @@ export function InventoryModal() {
                           <div className="text-4xl">🪙</div>
                           <div>
                             <p className="text-white font-pixel text-sm">Gold Coins</p>
-                            <p className="text-gray-400 font-pixel text-xs">Sell to treasure chest dealer for 500 orbs each</p>
+                            <p className="text-gray-400 font-pixel text-xs">Sell to treasure chest dealer for 250 orbs each</p>
                           </div>
                         </div>
                         <div className="text-right">

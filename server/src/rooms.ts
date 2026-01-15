@@ -393,8 +393,8 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
     return [];
   }
 
-  // Generate 30 treasure chests
-  const chestCount = 30;
+  // Generate 20 treasure chests
+  const chestCount = 20;
   
   // Minimum distance between chests (in tiles)
   const minDistance = 20;
@@ -864,13 +864,13 @@ export async function interactWithTreasureChest(
   // Update chest cooldown
   chest.cooldownEndTime = now + COOLDOWN_DURATION;
 
-  // 50% chance to find coins, 50% chance empty
+  // 30% chance to find coins, 70% chance empty
   const roll = Math.random();
-  const foundCoins = roll < 0.50;
+  const foundCoins = roll < 0.30;
 
   if (foundCoins) {
     // Random 10-100 coins
-    const coinsFound = 10 + Math.floor(Math.random() * 91); // 10-100 inclusive
+    const coinsFound = 25 + Math.floor(Math.random() * 26); // 25-50 inclusive
 
     const messages = [
       'You found gold coins!',

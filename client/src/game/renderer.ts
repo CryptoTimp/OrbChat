@@ -4832,7 +4832,7 @@ const DEALER_TYPES: DealerType[] = [
     id: 'treasure_chest_dealer',
     name: 'Treasure Dealer',
     outfit: ['hat_pirate', 'coat_pirate', 'legs_pirate'],
-    messages: ['I buy gold coins!', 'Got any coins?', '500 orbs per coin!', 'Bring me your treasure!', 'Arr! Show me yer gold!', 'Treasure for sale!'],
+          messages: ['I buy gold coins!', 'Got any coins?', '250 orbs per coin!', 'Bring me your treasure!', 'Arr! Show me yer gold!', 'Treasure for sale!'],
   },
   {
     id: 'resource_dealer_1',

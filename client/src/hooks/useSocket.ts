@@ -1508,7 +1508,7 @@ export function useSocket() {
           
           if (coinCount > 0) {
             // Calculate orbs to receive
-            const orbsPerCoin = 500;
+            const orbsPerCoin = 250;
             const orbsReceived = coinCount * orbsPerCoin;
             const currentOrbs = profile.orbs || 0;
             const newOrbs = currentOrbs + orbsReceived;
