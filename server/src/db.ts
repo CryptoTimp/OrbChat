@@ -703,31 +703,6 @@ function migrateAddIdleCollectorItems(): void {
   }
 }
 
-// Migration: Update idle collector reward rates to match 1 week = 9M scaling
-function migrateUpdateIdleCollectorRates(): void {
-  const updates: { id: string; idle_reward_rate: number }[] = [
-    { id: 'boost_idle_basic', idle_reward_rate: 0.5 },
-    { id: 'boost_idle_advanced', idle_reward_rate: 1.0 },
-    { id: 'boost_idle_elite', idle_reward_rate: 2.0 },
-    { id: 'boost_idle_master', idle_reward_rate: 4.0 },
-    { id: 'boost_idle_legendary', idle_reward_rate: 8.0 },
-    { id: 'boost_idle_divine', idle_reward_rate: 15.0 },
-  ];
-  
-  let updatedCount = 0;
-  for (const update of updates) {
-    if (data.shop_items[update.id] && data.shop_items[update.id].idle_reward_rate !== update.idle_reward_rate) {
-      data.shop_items[update.id].idle_reward_rate = update.idle_reward_rate;
-      updatedCount++;
-    }
-  }
-  
-  if (updatedCount > 0) {
-    saveData();
-    console.log(`Migration: Updated ${updatedCount} idle collector reward rates`);
-  }
-}
-
 // Migration: Add orb boost items
 function migrateAddOrbBoostItems(): void {
   const orbBoostItems: ShopItemData[] = [

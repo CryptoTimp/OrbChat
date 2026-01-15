@@ -9,27 +9,49 @@ if (!admin.apps.length) {
   try {
     // Try to load service account from file (for development)
     const serviceAccountPath = path.join(__dirname, '..', 'serviceAccountKey.json');
+    let serviceAccount: any = null;
     
     if (require('fs').existsSync(serviceAccountPath)) {
-      const serviceAccount = require(serviceAccountPath);
+      // Method 1: Load from file
+      serviceAccount = require(serviceAccountPath);
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
         databaseURL: 'https://pixelapp-c8fa3-default-rtdb.europe-west1.firebasedatabase.app',
       });
       firebaseInitialized = true;
-      console.log('Firebase Admin SDK initialized with service account');
+      console.log('Firebase Admin SDK initialized with service account file');
+    } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+      // Method 2: Construct from environment variables
+      serviceAccount = {
+        type: 'service_account',
+        project_id: process.env.FIREBASE_PROJECT_ID,
+        private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+        private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Handle escaped newlines
+        client_email: process.env.FIREBASE_CLIENT_EMAIL,
+        client_id: process.env.FIREBASE_CLIENT_ID,
+        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+        token_uri: 'https://oauth2.googleapis.com/token',
+        auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+        client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
+      };
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: 'https://pixelapp-c8fa3-default-rtdb.europe-west1.firebasedatabase.app',
+      });
+      firebaseInitialized = true;
+      console.log('Firebase Admin SDK initialized with environment variables');
     } else {
-      // Don't try to initialize with default credentials if service account doesn't exist
-      // This prevents credential warnings when Firebase isn't properly configured
-      console.warn('Firebase Admin SDK: serviceAccountKey.json not found');
+      // No credentials available
+      console.warn('Firebase Admin SDK: No credentials found');
       console.warn('Server will continue but Firebase operations will be skipped.');
-      console.warn('To enable Firebase: Download service account key from Firebase Console and save as server/serviceAccountKey.json');
+      console.warn('To enable Firebase, use one of these methods:');
+      console.warn('  1. Download service account key from Firebase Console and save as server/serviceAccountKey.json');
+      console.warn('  2. Set environment variables: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL');
       firebaseInitialized = false;
     }
   } catch (error: any) {
     console.warn('Firebase Admin SDK initialization failed:', error.message);
     console.warn('Server will continue but Firebase operations will be skipped.');
-    console.warn('To fix: Download service account key from Firebase Console and save as server/serviceAccountKey.json');
     firebaseInitialized = false;
   }
 }

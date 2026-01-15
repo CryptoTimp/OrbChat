@@ -76,14 +76,14 @@ function clearAllSocketState() {
 // Clear socket state on startup
 clearAllSocketState();
 
-// Idle reward system - check every 5 seconds and reward idle players
-console.log('[Idle Reward System] Starting idle reward interval (every 5 seconds)');
+// Idle reward system - check every 1 second and reward idle players
+console.log('[Idle Reward System] Starting idle reward interval (every 1 second)');
 let intervalRunCount = 0;
 setInterval(async () => {
   intervalRunCount++;
   const now = Date.now();
-  const IDLE_THRESHOLD = 5000; // 5 seconds of no movement to be considered idle
-  const REWARD_INTERVAL = 5000; // Reward every 5 seconds to reduce database calls
+  const IDLE_THRESHOLD = 3000; // 3 seconds of no movement to be considered idle (first reward)
+  const REWARD_INTERVAL = 5000; // Reward every 5 seconds after the first reward
   
   
   // Iterate through all rooms and check players
@@ -186,7 +186,7 @@ setInterval(async () => {
       }
     }
   }
-}, 5000); // Check every 5 seconds
+}, 1000); // Check every 1 second for more accurate timing
 
 // Socket connection handler
 io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {

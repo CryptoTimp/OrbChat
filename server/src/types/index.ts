@@ -173,7 +173,7 @@ export interface ServerToClientEvents {
   orb_spawned: (orb: Orb) => void;
   orb_collected: (data: { orbId: string; playerId: string; newBalance: number; orbValue?: number }) => void;
   fountain_next_spawn: (data: { nextSpawnTime: number }) => void;
-  player_orbs_updated: (data: { playerId: string; orbs: number }) => void;
+  player_orbs_updated: (data: { playerId: string; orbs: number; rewardAmount?: number; rewardType?: string }) => void;
   inventory_updated: (data: { items: InventoryItem[]; orbs: number }) => void;
   shop_items: (items: ShopItem[]) => void;
   shrine_interacted: (data: { 
