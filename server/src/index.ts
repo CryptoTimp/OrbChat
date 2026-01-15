@@ -142,36 +142,36 @@ setInterval(async () => {
             const orbsToReward = Math.floor(maxIdleRewardRate * rewardIntervalSeconds);
             
             if (orbsToReward > 0) {
-              // Get current orbs from Firebase (source of truth) or fallback to room state
-              const { getUserData, updateUserOrbs, firebaseAdmin } = await import('./firebase');
+              // Emit idle reward event to the player's client
+              // Client will update Firebase directly (like selling logs does)
+              // Then client will emit back with updated balance
+              const playerSocket = Array.from(io.sockets.sockets.values()).find(socket => {
+                const mapping = socketToPlayer.get(socket.id);
+                return mapping && mapping.playerId === player.id;
+              });
               
-              // Check if Firebase is initialized before attempting operations
-              let currentOrbs = player.orbs || 0;
-              if (firebaseAdmin.apps.length > 0) {
-                const userData = await getUserData(player.id);
-                currentOrbs = userData?.orbs || player.orbs || 0;
+              if (playerSocket) {
+                // Send idle reward event to client - client will update Firebase
+                playerSocket.emit('idle_reward', { 
+                  rewardAmount: orbsToReward,
+                  maxIdleRewardRate 
+                });
               }
-              
-              const newBalance = currentOrbs + orbsToReward;
-              
-              // Update Firebase (if available, otherwise continue with room state update)
-              if (firebaseAdmin.apps.length > 0) {
-                await updateUserOrbs(player.id, newBalance);
-              }
-              // If Firebase not available, continue with room state update
-              // Client will sync from Firebase when it's available
-              
-              // Update room state
-              player.orbs = newBalance;
-              await players.updatePlayerOrbs(player.id, newBalance);
               
               // Update last reward time
               playerLastIdleReward.set(player.id, now);
               
+              // Estimate new balance for immediate room state update
+              // Client will confirm the actual balance after Firebase update
+              const estimatedNewBalance = (player.orbs || 0) + orbsToReward;
+              player.orbs = estimatedNewBalance;
+              await players.updatePlayerOrbs(player.id, estimatedNewBalance);
+              
               // Broadcast update with reward amount for client-side visual feedback
+              // Client will receive this and show floating text
               io.to(roomId).emit('player_orbs_updated', { 
                 playerId: player.id, 
-                orbs: newBalance,
+                orbs: estimatedNewBalance,
                 rewardAmount: orbsToReward, // Include reward amount for idle rewards
                 rewardType: 'idle' // Mark as idle reward
               });
@@ -1171,6 +1171,23 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newBalance });
 
     console.log(`Player ${player.name} sold ${logCount} logs for ${orbsReceived} orbs, new balance: ${newBalance}`);
+  });
+
+  // Handle idle reward confirmation from client (after client updates Firebase)
+  socket.on('idle_reward_confirmed', ({ newOrbs }) => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+    
+    const { playerId, roomId } = mapping;
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    if (!player) return;
+    
+    // Update room state with confirmed balance from Firebase (source of truth)
+    player.orbs = newOrbs;
+    players.updatePlayerOrbs(playerId, newOrbs);
+    
+    // Balance was already broadcast with reward info, just sync the confirmed value
+    // No need to broadcast again to avoid duplicate floating text
   });
 
   // Handle gold coins sale

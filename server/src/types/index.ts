@@ -151,6 +151,7 @@ export interface ClientToServerEvents {
   treasure_chest_interact: (data: { chestId: string; firebaseOrbs?: number }) => void;
   treasure_chest_relocate: (data: { chestId: string }) => void;
   sell_gold_coins: (data?: { coinCount?: number; orbsReceived?: number }) => void;
+  idle_reward_confirmed: (data: { newOrbs: number }) => void;
 }
 
 // Socket Events - Server to Client
@@ -174,6 +175,7 @@ export interface ServerToClientEvents {
   orb_collected: (data: { orbId: string; playerId: string; newBalance: number; orbValue?: number }) => void;
   fountain_next_spawn: (data: { nextSpawnTime: number }) => void;
   player_orbs_updated: (data: { playerId: string; orbs: number; rewardAmount?: number; rewardType?: string }) => void;
+  idle_reward: (data: { rewardAmount: number; maxIdleRewardRate: number }) => void;
   inventory_updated: (data: { items: InventoryItem[]; orbs: number }) => void;
   shop_items: (items: ShopItem[]) => void;
   shrine_interacted: (data: { 

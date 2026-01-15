@@ -417,6 +417,37 @@ function attachListeners(sock: Socket) {
     useGameStore.getState().setShopItems(items);
   });
   
+  // Idle reward event - client updates Firebase directly (like selling logs)
+  sock.on('idle_reward', async ({ rewardAmount, maxIdleRewardRate }) => {
+    const state = useGameStore.getState();
+    const playerId = state.playerId;
+    
+    if (!playerId) return;
+    
+    try {
+      // Get current orbs from Firebase (source of truth)
+      const profile = await getUserProfile(playerId);
+      if (!profile) return;
+      
+      const currentOrbs = profile.orbs || 0;
+      const newOrbs = currentOrbs + rewardAmount;
+      
+      // Update Firebase directly (using client credentials)
+      await updateUserOrbs(playerId, newOrbs);
+      
+      // Update local state
+      state.updatePlayerOrbs(playerId, newOrbs);
+      
+      // Notify server with updated balance (so server can update room state)
+      const sock = getOrCreateSocket();
+      if (sock.connected) {
+        sock.emit('idle_reward_confirmed', { newOrbs });
+      }
+    } catch (error) {
+      console.error('Failed to process idle reward:', error);
+    }
+  });
+  
   sock.on('inventory_updated', async ({ orbs }) => {
     const state = useGameStore.getState();
     
