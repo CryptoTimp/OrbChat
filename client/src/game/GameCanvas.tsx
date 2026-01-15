@@ -1349,7 +1349,7 @@ export function GameCanvas() {
       return undefined;
     };
     
-    // Update particle trails for all players
+    // Update particle trails for all players (only visible ones for performance)
     if (currentLocalPlayer) {
       const trailColor = getTrailColor(currentLocalPlayer.sprite?.outfit || []);
       // Check if local player is pressing movement keys
@@ -1357,16 +1357,23 @@ export function GameCanvas() {
       // Don't update trail if player is chopping (to prevent ghost image)
       const isChopping = cuttingTreeRef.current !== null;
       const localIsMoving = !isChopping && (keys.up || keys.down || keys.left || keys.right);
+      // Always update local player trail (they're always "visible" to the player)
       updatePlayerTrail(currentLocalPlayer.id, currentLocalPlayer.x, currentLocalPlayer.y, trailColor, currentTime, localIsMoving);
     }
     
+    // Only update trails for visible players to improve performance when zoomed out
     interpolatedPlayers.forEach((interpolated, id) => {
-      const trailColor = getTrailColor(interpolated.sprite?.outfit || []);
-      updatePlayerTrail(id, interpolated.renderX, interpolated.renderY, trailColor, currentTime, interpolated.renderX !== interpolated.targetX || interpolated.renderY !== interpolated.targetY);
+      // Check visibility before updating trail
+      if (typeof interpolated.renderX === 'number' && typeof interpolated.renderY === 'number') {
+        if (isVisible(camera, interpolated.renderX, interpolated.renderY, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
+          const trailColor = getTrailColor(interpolated.sprite?.outfit || []);
+          updatePlayerTrail(id, interpolated.renderX, interpolated.renderY, trailColor, currentTime, interpolated.renderX !== interpolated.targetX || interpolated.renderY !== interpolated.targetY);
+        }
+      }
     });
     
-    // Draw particle trails (behind players)
-    drawParticleTrails(ctx, currentTime);
+    // Draw particle trails (behind players) - with viewport culling for performance
+    drawParticleTrails(ctx, currentTime, camera);
     
     // Draw orb collection particles
     drawOrbCollectionParticles(ctx, deltaTime);
@@ -1418,11 +1425,14 @@ export function GameCanvas() {
       
       const centurionPlayers = updateCenturionPlayers(currentTime, deltaTime);
       for (const centurion of centurionPlayers) {
-        allPlayers.push({
-          player: centurion,
-          isLocal: false,
-          renderY: centurion.y * SCALE
-        });
+        // Only add visible centurions to improve performance when zoomed out
+        if (isVisible(camera, centurion.x, centurion.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
+          allPlayers.push({
+            player: centurion,
+            isLocal: false,
+            renderY: centurion.y * SCALE
+          });
+        }
       }
     }
     

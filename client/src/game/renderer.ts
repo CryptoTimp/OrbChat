@@ -5574,12 +5574,30 @@ export function updatePlayerTrail(playerId: string, x: number, y: number, trailC
   playerTrails.set(playerId, validParticles);
 }
 
-// Draw all particle trails - simplified rendering
-export function drawParticleTrails(ctx: CanvasRenderingContext2D, time: number): void {
+// Draw all particle trails - simplified rendering with viewport culling
+export function drawParticleTrails(ctx: CanvasRenderingContext2D, time: number, camera?: Camera): void {
+  // Calculate viewport bounds for culling (particles are in scaled world coordinates)
+  const viewportLeft = camera ? camera.x : -Infinity;
+  const viewportRight = camera ? camera.x + CANVAS_WIDTH / camera.zoom : Infinity;
+  const viewportTop = camera ? camera.y : -Infinity;
+  const viewportBottom = camera ? camera.y + CANVAS_HEIGHT / camera.zoom : Infinity;
+  
+  // Add a small margin for particles that might be partially visible
+  const margin = 50;
+  const cullLeft = viewportLeft - margin;
+  const cullRight = viewportRight + margin;
+  const cullTop = viewportTop - margin;
+  const cullBottom = viewportBottom + margin;
+  
   playerTrails.forEach((particles) => {
     for (const particle of particles) {
       const age = time - particle.createdAt;
       if (age < 0 || age > TRAIL_PARTICLE_LIFETIME) continue;
+      
+      // Cull particles outside viewport for performance
+      if (camera && (particle.x < cullLeft || particle.x > cullRight || particle.y < cullTop || particle.y > cullBottom)) {
+        continue;
+      }
       
       const progress = age / TRAIL_PARTICLE_LIFETIME;
       const alpha = Math.max(0, Math.min(1, (1 - progress) * 0.6));
