@@ -8,6 +8,8 @@ import { InventoryModal } from './ui/InventoryModal';
 import { SettingsModal } from './ui/SettingsModal';
 import { LogDealerModal } from './ui/LogDealerModal';
 import { LootBoxModal } from './ui/LootBoxModal';
+import { TreasureChestModal } from './ui/TreasureChestModal';
+import { TreasureChestDealerModal } from './ui/TreasureChestDealerModal';
 import { JoinScreen } from './ui/JoinScreen';
 import { AuthScreen } from './ui/AuthScreen';
 import { Notifications } from './ui/Notifications';
@@ -121,6 +123,12 @@ function App() {
       
       {/* Log dealer modal */}
       <LogDealerModal />
+      
+      {/* Treasure chest modal */}
+      <TreasureChestModal />
+      
+      {/* Treasure chest dealer modal */}
+      <TreasureChestDealerModal />
       
       {/* Music manager */}
       <MusicManager />

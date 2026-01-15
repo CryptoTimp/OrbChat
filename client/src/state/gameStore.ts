@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { PlayerWithChat, Orb, ShopItem, InventoryItem, Direction, GAME_CONSTANTS, MapType, ItemRarity, Shrine, OrbType, TreeState } from '../types';
+import { PlayerWithChat, Orb, ShopItem, InventoryItem, Direction, GAME_CONSTANTS, MapType, ItemRarity, Shrine, TreasureChest, OrbType, TreeState } from '../types';
 
 interface GameState {
   // Connection state
@@ -13,6 +13,7 @@ interface GameState {
   players: Map<string, PlayerWithChat>;
   orbs: Orb[];
   shrines: Shrine[];
+  treasureChests: TreasureChest[];
   treeStates: Map<string, TreeState>;
   
   // Local player state
@@ -43,6 +44,9 @@ interface GameState {
   settingsOpen: boolean;
   buyOrbsOpen: boolean;
   logDealerOpen: boolean;
+  treasureChestModalOpen: boolean;
+  selectedTreasureChest: TreasureChest | null;
+  treasureChestDealerOpen: boolean;
   confirmModal: {
     isOpen: boolean;
     title: string;
@@ -68,10 +72,12 @@ interface GameState {
   setMapType: (mapType: MapType) => void;
   
   // Room actions
-  setRoomState: (players: PlayerWithChat[], orbs: Orb[], shrines: Shrine[], treeStates?: TreeState[]) => void;
-  setRoomStateWithLocalPlayer: (players: PlayerWithChat[], orbs: Orb[], shrines: Shrine[], localPlayer: PlayerWithChat | undefined, treeStates?: TreeState[]) => void;
+  setRoomState: (players: PlayerWithChat[], orbs: Orb[], shrines: Shrine[], treasureChests?: TreasureChest[], treeStates?: TreeState[]) => void;
+  setRoomStateWithLocalPlayer: (players: PlayerWithChat[], orbs: Orb[], shrines: Shrine[], localPlayer: PlayerWithChat | undefined, treasureChests?: TreasureChest[], treeStates?: TreeState[]) => void;
   setShrines: (shrines: Shrine[]) => void;
   updateShrine: (shrineId: string, updates: Partial<Shrine>) => void;
+  setTreasureChests: (chests: TreasureChest[]) => void;
+  updateTreasureChest: (chestId: string, updates: Partial<TreasureChest>) => void;
   setTreeState: (treeId: string, state: TreeState) => void;
   updateTreeStates: (treeStates: TreeState[]) => void;
   addPlayer: (player: PlayerWithChat) => void;
@@ -99,6 +105,9 @@ interface GameState {
   toggleSettings: () => void;
   toggleBuyOrbs: () => void;
   toggleLogDealer: () => void;
+  toggleTreasureChestModal: () => void;
+  setSelectedTreasureChest: (chest: TreasureChest | null) => void;
+  toggleTreasureChestDealer: () => void;
   setConfirmModal: (modal: GameState['confirmModal']) => void;
   
   // Audio actions
@@ -156,6 +165,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   players: new Map(),
   orbs: [],
   shrines: [],
+  treasureChests: [],
   treeStates: new Map(),
   localPlayer: null,
   clickTarget: null,
@@ -182,6 +192,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   settingsOpen: false,
   buyOrbsOpen: false,
   logDealerOpen: false,
+  treasureChestModalOpen: false,
+  selectedTreasureChest: null,
+  treasureChestDealerOpen: false,
   confirmModal: {
     isOpen: false,
     title: '',
@@ -213,7 +226,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setMapType: (mapType) => set({ mapType }),
   
   // Room state actions
-  setRoomState: (playersList, orbs, shrines, treeStates) => {
+  setRoomState: (playersList, orbs, shrines, treasureChests, treeStates) => {
     const currentState = get();
     const players = new Map<string, PlayerWithChat>();
     
@@ -245,10 +258,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
     
-    set({ players, orbs, shrines, treeStates: treeStatesMap });
+    set({ players, orbs, shrines, treasureChests: treasureChests || [], treeStates: treeStatesMap });
   },
   
-  setRoomStateWithLocalPlayer: (playersList, orbs, shrines, localPlayer, treeStates) => {
+  setRoomStateWithLocalPlayer: (playersList, orbs, shrines, localPlayer, treasureChests, treeStates) => {
     const currentState = get();
     const players = new Map<string, PlayerWithChat>();
     
@@ -275,7 +288,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
     
-    set({ players, orbs, shrines, treeStates: treeStatesMap, localPlayer: localPlayer || null });
+    set({ players, orbs, shrines, treasureChests: treasureChests || [], treeStates: treeStatesMap, localPlayer: localPlayer || null });
   },
   
   setShrines: (shrines) => set({ shrines }),
@@ -286,6 +299,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (index !== -1) {
       shrines[index] = { ...shrines[index], ...updates };
       set({ shrines });
+    }
+  },
+  
+  setTreasureChests: (chests) => set({ treasureChests: chests }),
+  
+  updateTreasureChest: (chestId, updates) => {
+    const chests = [...get().treasureChests];
+    const index = chests.findIndex(c => c.id === chestId);
+    if (index !== -1) {
+      chests[index] = { ...chests[index], ...updates };
+      set({ treasureChests: chests });
     }
   },
   
@@ -487,6 +511,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   toggleSettings: () => set({ settingsOpen: !get().settingsOpen }),
   toggleBuyOrbs: () => set({ buyOrbsOpen: !get().buyOrbsOpen }),
   toggleLogDealer: () => set({ logDealerOpen: !get().logDealerOpen }),
+  toggleTreasureChestModal: () => set({ treasureChestModalOpen: !get().treasureChestModalOpen }),
+  setSelectedTreasureChest: (chest) => set({ selectedTreasureChest: chest }),
+  toggleTreasureChestDealer: () => set({ treasureChestDealerOpen: !get().treasureChestDealerOpen }),
   setConfirmModal: (modal) => set({ confirmModal: modal }),
   
   // Audio actions

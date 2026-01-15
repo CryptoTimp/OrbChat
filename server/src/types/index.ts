@@ -48,6 +48,13 @@ export interface Shrine {
   cooldownEndTime?: number;
 }
 
+export interface TreasureChest {
+  id: string;
+  x: number;
+  y: number;
+  cooldownEndTime?: number;
+}
+
 export interface TreeState {
   treeId: string;
   isCut: boolean;
@@ -61,6 +68,7 @@ export interface Room {
   players: Map<string, PlayerWithChat>;
   orbs: Orb[];
   shrines: Shrine[];
+  treasureChests: TreasureChest[];
   treeStates: Map<string, TreeState>;
   mapType: MapType;
   isPrivate?: boolean;
@@ -139,6 +147,8 @@ export interface ClientToServerEvents {
     newOrbs?: number;  // Client sends updated orbs after Firebase update
     newInventory?: string[];  // Client sends updated inventory
   }) => void;
+  treasure_chest_interact: (data: { chestId: string; firebaseOrbs?: number }) => void;
+  sell_gold_coins: (data?: { coinCount?: number; orbsReceived?: number }) => void;
 }
 
 // Socket Events - Server to Client
@@ -149,6 +159,7 @@ export interface ServerToClientEvents {
     players: PlayerWithChat[];
     orbs: Orb[];
     shrines: Shrine[];
+    treasureChests?: TreasureChest[];
     treeStates?: TreeState[];
     yourPlayerId?: string;
     mapType?: MapType;
@@ -174,6 +185,14 @@ export interface ServerToClientEvents {
   tree_cut_complete: (data: { treeId: string; logCount: number }) => void;
   logs_sold: (data: { playerId: string; logCount: number; orbsReceived: number; newBalance: number }) => void;
   shrine_interaction_error: (data: { shrineId: string; message: string }) => void;
+  treasure_chest_opened: (data: { 
+    chestId: string; 
+    chest: TreasureChest; 
+    message: string; 
+    coinsFound?: number;
+  }) => void;
+  treasure_chest_interaction_error: (data: { chestId: string; message: string }) => void;
+  gold_coins_sold: (data: { playerId: string; coinCount: number; orbsReceived: number; newBalance: number }) => void;
   error: (data: { message: string }) => void;
 }
 

@@ -3,11 +3,11 @@
     "ZqlLG9gh1odb9nNy6QEpHuIJofd2": {
       "id": "ZqlLG9gh1odb9nNy6QEpHuIJofd2",
       "name": "Unknown",
-      "orbs": 797,
+      "orbs": 3117,
       "sprite_body": "default",
       "sprite_outfit": "[]",
       "created_at": "2026-01-14T19:15:59.446Z",
-      "last_seen": "2026-01-14T20:46:05.464Z",
+      "last_seen": "2026-01-15T12:07:47.239Z",
       "logs": 1
     }
   },
@@ -1603,7 +1603,7 @@
       "sprite_layer": "boost",
       "sprite_path": "/sprites/boost_godlike_void.png",
       "rarity": "godlike",
-      "speed_multiplier": 10.0,
+      "speed_multiplier": 10,
       "trail_color": "#4b0082"
     },
     "boost_godlike_chaos": {
@@ -1613,7 +1613,7 @@
       "sprite_layer": "boost",
       "sprite_path": "/sprites/boost_godlike_void.png",
       "rarity": "godlike",
-      "speed_multiplier": 10.0,
+      "speed_multiplier": 10,
       "trail_color": "#800080"
     },
     "boost_godlike_abyss": {
@@ -1623,7 +1623,7 @@
       "sprite_layer": "boost",
       "sprite_path": "/sprites/boost_godlike_abyss.png",
       "rarity": "godlike",
-      "speed_multiplier": 10.0,
+      "speed_multiplier": 10,
       "trail_color": "#9400d3"
     },
     "pet_godlike_void": {

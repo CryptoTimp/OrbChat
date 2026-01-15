@@ -16,6 +16,7 @@ export interface UserProfile {
   orbs: number;
   inventory: string[];
   equippedItems: string[];
+  gold_coins?: number;
   createdAt: number;
 }
 
@@ -36,6 +37,7 @@ export async function signUp(email: string, password: string, displayName: strin
     orbs: 100, // Starting orbs
     inventory: [],
     equippedItems: [],
+    gold_coins: 0,
     createdAt: Date.now(),
   };
   
@@ -98,6 +100,18 @@ export async function hasItem(uid: string, itemId: string): Promise<boolean> {
 export async function updateEquippedItems(uid: string, equippedItems: string[]): Promise<void> {
   const equippedRef = ref(database, `users/${uid}/equippedItems`);
   await set(equippedRef, equippedItems);
+}
+
+// Update gold coins
+export async function updateGoldCoins(uid: string, amount: number): Promise<void> {
+  const coinsRef = ref(database, `users/${uid}/gold_coins`);
+  await set(coinsRef, amount);
+}
+
+// Get gold coins
+export async function getGoldCoins(uid: string): Promise<number> {
+  const profile = await getUserProfile(uid);
+  return profile?.gold_coins || 0;
 }
 
 // Subscribe to user profile changes (real-time updates)

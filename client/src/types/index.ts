@@ -48,6 +48,13 @@ export interface Shrine {
   cooldownEndTime?: number;
 }
 
+export interface TreasureChest {
+  id: string;
+  x: number;
+  y: number;
+  cooldownEndTime?: number;
+}
+
 export interface TreeState {
   treeId: string;
   isCut: boolean;

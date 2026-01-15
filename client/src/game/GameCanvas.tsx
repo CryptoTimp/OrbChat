@@ -49,6 +49,11 @@ import {
   getClickedShrine,
   getHoveredShrine,
   isPlayerInShrineRange,
+  drawTreasureChest,
+  drawTreasureChestSpeechBubble,
+  getClickedTreasureChest,
+  getHoveredTreasureChest,
+  isPlayerInChestRange,
   updateAndDrawShrineOrbLaunches,
   isShrineOrbHidden,
   setShrineSpeechBubble,
@@ -91,9 +96,10 @@ export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { getKeys } = useKeyboard();
-  const { move, collectOrb, interactWithShrine, startCuttingTree, completeCuttingTree, cancelCuttingTree } = useSocket();
+  const { move, collectOrb, interactWithShrine, interactWithTreasureChest, startCuttingTree, completeCuttingTree, cancelCuttingTree } = useSocket();
   const toggleLogDealer = useGameStore(state => state.toggleLogDealer);
   const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
+  const toggleTreasureChestDealer = useGameStore(state => state.toggleTreasureChestDealer);
   
   // Track container size for responsive canvas
   const [canvasSize, setCanvasSize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
@@ -135,6 +141,23 @@ export function GameCanvas() {
   const pendingShrineInteractionRef = useRef<string | null>(null);
   const checkingShrineOrbsRef = useRef<boolean>(false);
   
+  // Hovered treasure chest state
+  const hoveredChestRef = useRef<string | null>(null);
+  const [hoveredChest, setHoveredChest] = useState<string | null>(null);
+  
+  useEffect(() => {
+    hoveredChestRef.current = hoveredChest;
+  }, [hoveredChest]);
+  
+  const pendingChestInteractionRef = useRef<string | null>(null);
+  const checkingChestOrbsRef = useRef<boolean>(false);
+  const chestInteractionInProgressRef = useRef<Set<string>>(new Set()); // Track chests currently being interacted with
+  
+  // Expose the ref to window so useSocket can clear it after interaction completes
+  useEffect(() => {
+    (window as any).__chestInteractionInProgress = chestInteractionInProgressRef.current;
+  }, []);
+  
   // Pending NPC stall interaction (stall to open when player gets in range)
   const pendingNPCStallInteractionRef = useRef<{ tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null>(null);
   
@@ -143,6 +166,7 @@ export function GameCanvas() {
   const pendingLogDealerInteractionRef = useRef<boolean>(false);
   const pendingLootBoxDealerInteractionRef = useRef<boolean>(false);
   const pendingOrbDealerInteractionRef = useRef<boolean>(false);
+  const pendingTreasureChestDealerInteractionRef = useRef<boolean>(false);
   
   // Hovered dealer state
   const [hoveredDealerId, setHoveredDealerId] = useState<string | null>(null);
@@ -244,7 +268,6 @@ export function GameCanvas() {
       const clickedShrine = getClickedShrine(worldXScaled, worldYScaled, currentShrines);
       
       if (clickedShrine) {
-        console.log('Shrine clicked!', clickedShrine.id, 'at world pos:', worldXScaled, worldYScaled, 'shrine pos:', clickedShrine.x * SCALE, clickedShrine.y * SCALE);
         const now = Date.now();
         // Get fresh local player from store
         const localPlayer = useGameStore.getState().localPlayer;
@@ -274,9 +297,6 @@ export function GameCanvas() {
           setClickTarget(clickedShrine.x, clickedShrine.y);
           // Store pending interaction to activate when in range
           pendingShrineInteractionRef.current = clickedShrine.id;
-          console.log('Clicked shrine, walking to:', clickedShrine.id, 'at', clickedShrine.x, clickedShrine.y);
-        } else {
-          console.log('No local player, cannot walk to shrine');
         }
         return; // Don't move to shrine via normal click handling
       }
@@ -284,6 +304,43 @@ export function GameCanvas() {
       // Clear pending shrine interaction if clicking elsewhere
       if (pendingShrineInteractionRef.current) {
         pendingShrineInteractionRef.current = null;
+      }
+      
+      // Check if clicking on a treasure chest (in scaled world coordinates)
+      const currentChests = useGameStore.getState().treasureChests;
+      const clickedChest = getClickedTreasureChest(worldXScaled, worldYScaled, currentChests);
+      
+      if (clickedChest) {
+        console.log('Treasure chest clicked!', clickedChest.id, 'at world pos:', worldXScaled, worldYScaled);
+        const now = Date.now();
+        const localPlayer = useGameStore.getState().localPlayer;
+        
+        // Check if chest is on cooldown
+        if (clickedChest.cooldownEndTime && now < clickedChest.cooldownEndTime) {
+          const remaining = Math.ceil((clickedChest.cooldownEndTime - now) / 1000);
+          addNotification(`Treasure chest is on cooldown. ${remaining}s remaining.`, 'error');
+          return;
+        }
+        
+        // Always walk to chest first, then auto-activate when in range
+        if (localPlayer) {
+          // Prevent clicking if already interacting with this chest
+          if (chestInteractionInProgressRef.current.has(clickedChest.id)) {
+            console.log('Chest interaction already in progress:', clickedChest.id);
+            return;
+          }
+          setClickTarget(clickedChest.x, clickedChest.y);
+          pendingChestInteractionRef.current = clickedChest.id;
+          console.log('Clicked treasure chest, walking to:', clickedChest.id, 'at', clickedChest.x, clickedChest.y);
+        } else {
+          console.log('No local player, cannot walk to chest');
+        }
+        return; // Don't move via normal click handling
+      }
+      
+      // Clear pending chest interaction if clicking elsewhere
+      if (pendingChestInteractionRef.current) {
+        pendingChestInteractionRef.current = null;
       }
       
       // Check if clicking on an NPC stall (in scaled world coordinates)
@@ -416,6 +473,38 @@ export function GameCanvas() {
                 // Convert dealer position to unscaled coordinates for click target
                 setClickTarget(dealerPos.x / SCALE, dealerPos.y / SCALE);
                 pendingOrbDealerInteractionRef.current = true; // Set pending interaction
+              }
+            }
+          }
+          return; // Don't move via normal click handling
+        }
+        
+        // Check if clicking on treasure chest dealer
+        if (clickedDealerId === 'treasure_chest_dealer') {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer) {
+            // Get treasure chest dealer position from dealerPositions map
+            const dealerPos = dealerPositions.get('treasure_chest_dealer');
+            if (dealerPos) {
+              // Player position is in unscaled coordinates, convert to scaled for comparison
+              const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+              const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+              const dx = dealerPos.x - playerCenterX;
+              const dy = dealerPos.y - playerCenterY;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              
+              // Use same range as NPC stalls (25 * SCALE)
+              const INTERACTION_RANGE = 25 * SCALE;
+              if (dist < INTERACTION_RANGE) {
+                // Player is near treasure chest dealer, open modal
+                playClickSound();
+                toggleTreasureChestDealer();
+                pendingTreasureChestDealerInteractionRef.current = false; // Clear pending
+              } else {
+                // Player is far away, walk to dealer first
+                // Convert dealer position to unscaled coordinates for click target
+                setClickTarget(dealerPos.x / SCALE, dealerPos.y / SCALE);
+                pendingTreasureChestDealerInteractionRef.current = true; // Set pending interaction
               }
             }
           }
@@ -595,6 +684,17 @@ export function GameCanvas() {
         setHoveredShrine(null);
       }
       
+      // Check for hover on treasure chests
+      const currentChests = useGameStore.getState().treasureChests;
+      let hoveredChestId: string | null = null;
+      if (currentMapType === 'forest' && currentChests.length > 0) {
+        const hovered = getHoveredTreasureChest(worldXScaled, worldYScaled, currentChests);
+        hoveredChestId = hovered?.id || null;
+        setHoveredChest(hoveredChestId);
+      } else {
+        setHoveredChest(null);
+      }
+      
       // Check for hover on NPC stalls
       const hoveredStall = getHoveredNPCStall(worldXScaled, worldYScaled);
       const hoveredStallData = hoveredStall ? { tab: hoveredStall.tab, rarity: hoveredStall.rarity } : null;
@@ -616,7 +716,7 @@ export function GameCanvas() {
       }
       
       // Change cursor style when hovering over shrine, NPC stall, dealer, or tree
-      if (hoveredShrineId || hoveredStall || hoveredDealerData || hoveredTreeData) {
+      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData) {
         canvas.style.cursor = 'pointer';
       } else {
         canvas.style.cursor = 'default';
@@ -909,6 +1009,9 @@ export function GameCanvas() {
         if (pendingOrbDealerInteractionRef.current) {
           pendingOrbDealerInteractionRef.current = false;
         }
+        if (pendingTreasureChestDealerInteractionRef.current) {
+          pendingTreasureChestDealerInteractionRef.current = false;
+        }
       }
       
       // Lock player position if cutting a tree
@@ -1036,6 +1139,26 @@ export function GameCanvas() {
         }
       }
       
+      // Check if player reached pending treasure chest dealer interaction
+      if (pendingTreasureChestDealerInteractionRef.current) {
+        const dealerPos = dealerPositions.get('treasure_chest_dealer');
+        if (dealerPos) {
+          const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+          const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+          const dx = dealerPos.x - playerCenterX;
+          const dy = dealerPos.y - playerCenterY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const INTERACTION_RANGE = 25 * SCALE;
+          
+          if (dist < INTERACTION_RANGE) {
+            // Player is now in range, open treasure chest dealer modal
+            playClickSound();
+            toggleTreasureChestDealer();
+            pendingTreasureChestDealerInteractionRef.current = false;
+          }
+        }
+      }
+      
       // Check if player is within range of pending tree interaction
       if (pendingTreeInteractionRef.current && !cuttingTreeRef.current) {
         const pendingTree = pendingTreeInteractionRef.current;
@@ -1114,13 +1237,11 @@ export function GameCanvas() {
                   
                   // Check cooldown
                   if (!pendingShrine.cooldownEndTime || now >= pendingShrine.cooldownEndTime) {
-                    console.log('Player in range of shrine, activating:', pendingShrineId);
                     interactWithShrine(pendingShrineId, firebaseOrbs);
                     pendingShrineInteractionRef.current = null;
                     setClickTarget(null, null); // Clear click target
                   } else {
                     // Shrine went on cooldown, clear pending interaction
-                    console.log('Shrine went on cooldown, clearing pending interaction');
                     pendingShrineInteractionRef.current = null;
                   }
                   checkingShrineOrbsRef.current = false;
@@ -1138,7 +1259,6 @@ export function GameCanvas() {
                   }
                   
                   if (!pendingShrine.cooldownEndTime || now >= pendingShrine.cooldownEndTime) {
-                    console.log('Player in range of shrine, activating:', pendingShrineId);
                     interactWithShrine(pendingShrineId);
                     pendingShrineInteractionRef.current = null;
                     setClickTarget(null, null);
@@ -1150,8 +1270,110 @@ export function GameCanvas() {
           }
         } else {
           // Shrine no longer exists, clear pending interaction
-          console.log('Pending shrine no longer exists, clearing');
           pendingShrineInteractionRef.current = null;
+        }
+      }
+      
+      // Check if player is within range of pending treasure chest interaction
+      if (pendingChestInteractionRef.current) {
+        const pendingChestId = pendingChestInteractionRef.current;
+        const currentChests = useGameStore.getState().treasureChests;
+        const pendingChest = currentChests.find(c => c.id === pendingChestId);
+        
+        if (pendingChest) {
+          const inRange = isPlayerInChestRange(x, y, pendingChest);
+          
+          if (inRange && !checkingChestOrbsRef.current) {
+            const now = Date.now();
+            const state = useGameStore.getState();
+            const playerId = state.playerId;
+            
+            if (playerId) {
+              checkingChestOrbsRef.current = true;
+              (async () => {
+                try {
+                  const { getUserProfile } = await import('../firebase/auth');
+                  const profile = await getUserProfile(playerId);
+                  const firebaseOrbs = profile?.orbs || 0;
+                  
+                  // Check if player has enough orbs (500k requirement)
+                  if (firebaseOrbs < 500000) {
+                    addNotification('You do not have enough orbs to open this chest (500k required)', 'error');
+                    pendingChestInteractionRef.current = null;
+                    setClickTarget(null, null);
+                    checkingChestOrbsRef.current = false;
+                    return;
+                  }
+                  
+                  // Check cooldown
+                  if (!pendingChest.cooldownEndTime || now >= pendingChest.cooldownEndTime) {
+                    // Prevent duplicate interactions
+                    if (chestInteractionInProgressRef.current.has(pendingChestId)) {
+                      console.log('Chest interaction already in progress, skipping:', pendingChestId);
+                      checkingChestOrbsRef.current = false;
+                      return;
+                    }
+                    
+                    console.log('Player in range of treasure chest, activating:', pendingChestId);
+                    chestInteractionInProgressRef.current.add(pendingChestId);
+                    interactWithTreasureChest(pendingChestId)
+                      .then(() => {
+                        // Success - interaction will be cleared when modal opens or error occurs
+                        console.log('Treasure chest interaction completed:', pendingChestId);
+                      })
+                      .catch(error => {
+                        console.error('Error interacting with treasure chest:', error);
+                        addNotification('Failed to open treasure chest. Please try again.', 'error');
+                        chestInteractionInProgressRef.current.delete(pendingChestId);
+                      });
+                    pendingChestInteractionRef.current = null;
+                    setClickTarget(null, null);
+                  } else {
+                    pendingChestInteractionRef.current = null;
+                  }
+                  checkingChestOrbsRef.current = false;
+                } catch (error) {
+                  console.error('Failed to check Firebase orb balance for treasure chest:', error);
+                  const localPlayer = state.localPlayer;
+                  const fallbackOrbs = localPlayer?.orbs || 0;
+                  
+                  if (fallbackOrbs < 500000) {
+                    addNotification('You do not have enough orbs to open this chest (500k required)', 'error');
+                    pendingChestInteractionRef.current = null;
+                    setClickTarget(null, null);
+                    checkingChestOrbsRef.current = false;
+                    return;
+                  }
+                  
+                  if (!pendingChest.cooldownEndTime || now >= pendingChest.cooldownEndTime) {
+                    // Prevent duplicate interactions
+                    if (chestInteractionInProgressRef.current.has(pendingChestId)) {
+                      console.log('Chest interaction already in progress, skipping:', pendingChestId);
+                      checkingChestOrbsRef.current = false;
+                      return;
+                    }
+                    
+                    chestInteractionInProgressRef.current.add(pendingChestId);
+                    interactWithTreasureChest(pendingChestId)
+                      .then(() => {
+                        // Success - interaction will be cleared when modal opens or error occurs
+                        console.log('Treasure chest interaction completed:', pendingChestId);
+                      })
+                      .catch(error => {
+                        console.error('Error interacting with treasure chest:', error);
+                        addNotification('Failed to open treasure chest. Please try again.', 'error');
+                        chestInteractionInProgressRef.current.delete(pendingChestId);
+                      });
+                    pendingChestInteractionRef.current = null;
+                    setClickTarget(null, null);
+                  }
+                  checkingChestOrbsRef.current = false;
+                }
+              })();
+            }
+          }
+        } else {
+          pendingChestInteractionRef.current = null;
         }
       }
       
@@ -1277,7 +1499,7 @@ export function GameCanvas() {
     ctx.translate(-camera.x, -camera.y);
     
     // Draw background (draws the full map, context clips to viewport)
-    drawBackground(ctx, currentMapType);
+    drawBackground(ctx, currentMapType, camera);
     
     // Draw fountain orb sprays (before orbs so they appear behind)
     if (currentMapType === 'forest') {
@@ -1304,17 +1526,6 @@ export function GameCanvas() {
     // Draw shrines (before players, only for forest map)
     if (currentMapType === 'forest') {
       if (currentShrines.length > 0) {
-        // Debug: log shrine positions
-        if (currentTime % 5000 < 100) { // Log every 5 seconds
-          console.log(`Drawing ${currentShrines.length} shrines. First shrine:`, {
-            id: currentShrines[0].id,
-            x: currentShrines[0].x,
-            y: currentShrines[0].y,
-            cameraX: camera.x,
-            cameraY: camera.y,
-            zoom: camera.zoom
-          });
-        }
         for (const shrine of currentShrines) {
           // isVisible expects unscaled world coordinates (like orb.x, orb.y)
           // Shrine size is approximately 30 pixels (unscaled)
@@ -1324,15 +1535,24 @@ export function GameCanvas() {
             drawShrine(ctx, shrine, currentTime, isHovered);
           }
         }
-      } else {
-        // Debug: log when we expect shrines but don't have any
-        if (currentTime % 5000 < 100) { // Log every 5 seconds
-          console.log('Forest map but no shrines in store. Shrines array:', currentShrines);
+      }
+      
+      // Draw treasure chests (before players, only for forest map)
+      const currentChests = useGameStore.getState().treasureChests;
+      if (currentChests.length > 0) {
+        for (const chest of currentChests) {
+          // isVisible expects unscaled world coordinates
+          // Chest size is approximately 24 pixels (unscaled)
+          if (isVisible(camera, chest.x, chest.y, 24, 24)) {
+            // Read from ref to get latest hover state
+            const isHovered = hoveredChestRef.current === chest.id;
+            drawTreasureChest(ctx, chest, currentTime, isHovered);
+          }
         }
       }
       
       // Draw tree stumps BEFORE players (so players appear on top of stumps)
-      drawForestStumps(ctx, treeStates);
+      drawForestStumps(ctx, treeStates, camera);
     }
     
     // Helper to get trail color from equipped boost items
@@ -1423,7 +1643,7 @@ export function GameCanvas() {
       //   });
       // }
       
-      const centurionPlayers = updateCenturionPlayers(currentTime, deltaTime);
+      const centurionPlayers = updateCenturionPlayers(currentTime, deltaTime, camera);
       for (const centurion of centurionPlayers) {
         // Only add visible centurions to improve performance when zoomed out
         if (isVisible(camera, centurion.x, centurion.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
@@ -1494,21 +1714,21 @@ export function GameCanvas() {
       const centerX = WORLD_WIDTH / 2;
       const centerY = WORLD_HEIGHT / 2;
       const plazaRadius = 540 * p;
-      drawFlagBunting(ctx, centerX, centerY, plazaRadius, currentTime);
+      drawFlagBunting(ctx, centerX, centerY, plazaRadius, currentTime, camera);
     }
     
     // Draw animated fountain (before foliage so it's behind trees)
     // This includes trader NPCs (bodies and speech bubbles)
     if (currentMapType === 'forest') {
-      drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId);
+      drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId, camera);
     }
     
     // Draw forest foliage on TOP of players (so they walk behind full trees)
     if (currentMapType === 'forest') {
-      drawForestFoliage(ctx, treeStates);
+      drawForestFoliage(ctx, treeStates, camera);
       
       // Draw plaza wall top AFTER players (so they walk under the wall)
-      drawPlazaWallTop(ctx);
+      drawPlazaWallTop(ctx, camera);
       
       // Draw tree cutting progress bars AFTER foliage (so it's visible on top)
       // Use ref as source of truth since state might be stale
@@ -1619,6 +1839,14 @@ export function GameCanvas() {
         // isVisible expects unscaled world coordinates
         if (isVisible(camera, shrine.x, shrine.y, 30, 30)) {
           drawShrineSpeechBubble(ctx, shrine, currentTime, camera.zoom);
+        }
+      }
+      
+      // Draw treasure chest speech bubbles (for cooldown)
+      const currentChests = useGameStore.getState().treasureChests;
+      for (const chest of currentChests) {
+        if (isVisible(camera, chest.x, chest.y, 24, 24)) {
+          drawTreasureChestSpeechBubble(ctx, chest, currentTime, camera.zoom);
         }
       }
     }

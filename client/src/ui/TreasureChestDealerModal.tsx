@@ -2,36 +2,54 @@ import { useState, useEffect } from 'react';
 import { useGameStore } from '../state/gameStore';
 import { useSocket } from '../hooks/useSocket';
 import { playClickSound, playCloseSound, playPurchaseSound } from '../utils/sounds';
+import { getUserProfile } from '../firebase/auth';
 
-const LOG_PRICE = 100; // Orbs per log
+const COIN_PRICE = 1000; // Orbs per coin
 
-export function LogDealerModal() {
-  const logDealerOpen = useGameStore(state => state.logDealerOpen);
-  const toggleLogDealer = useGameStore(state => state.toggleLogDealer);
-  const inventory = useGameStore(state => state.inventory);
+export function TreasureChestDealerModal() {
+  const treasureChestDealerOpen = useGameStore(state => state.treasureChestDealerOpen);
+  const toggleTreasureChestDealer = useGameStore(state => state.toggleTreasureChestDealer);
   const localPlayer = useGameStore(state => state.localPlayer);
-  const { sellLogs } = useSocket();
+  const playerId = useGameStore(state => state.playerId);
+  const { sellGoldCoins } = useSocket();
   
   const [isSelling, setIsSelling] = useState(false);
+  const [coinCount, setCoinCount] = useState(0);
   
-  // Count logs in inventory
-  const logCount = inventory.filter(item => item.itemId === 'log').length;
-  const totalOrbs = logCount * LOG_PRICE;
-  
+  // Load gold coins from Firebase
   useEffect(() => {
-    if (!logDealerOpen) {
+    if (treasureChestDealerOpen && playerId) {
+      (async () => {
+        const profile = await getUserProfile(playerId);
+        setCoinCount(profile?.gold_coins || 0);
+      })();
+    } else {
       setIsSelling(false);
     }
-  }, [logDealerOpen]);
+  }, [treasureChestDealerOpen, playerId]);
   
-  if (!logDealerOpen) return null;
+  // Refresh coin count periodically while modal is open
+  useEffect(() => {
+    if (!treasureChestDealerOpen || !playerId) return;
+    
+    const interval = setInterval(async () => {
+      const profile = await getUserProfile(playerId);
+      setCoinCount(profile?.gold_coins || 0);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [treasureChestDealerOpen, playerId]);
   
-  const handleSellLogs = () => {
-    if (logCount === 0 || isSelling) return;
+  if (!treasureChestDealerOpen) return null;
+  
+  const totalOrbs = coinCount * COIN_PRICE;
+  
+  const handleSellCoins = () => {
+    if (coinCount === 0 || isSelling) return;
     
     setIsSelling(true);
     playPurchaseSound();
-    sellLogs();
+    sellGoldCoins();
     
     // Reset after a short delay
     setTimeout(() => {
@@ -40,12 +58,12 @@ export function LogDealerModal() {
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={() => { playCloseSound(); toggleLogDealer(); }}>
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={() => { playCloseSound(); toggleTreasureChestDealer(); }}>
       <div className="bg-gray-900 rounded-lg p-8 border-2 border-amber-500 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-pixel text-amber-400">🪵 Log Dealer</h2>
+          <h2 className="text-2xl font-pixel text-amber-400">💎 Treasure Dealer</h2>
           <button
-            onClick={() => { playCloseSound(); toggleLogDealer(); }}
+            onClick={() => { playCloseSound(); toggleTreasureChestDealer(); }}
             className="text-gray-400 hover:text-white transition-colors"
           >
             ✕
@@ -54,13 +72,13 @@ export function LogDealerModal() {
         
         <div className="mb-6">
           <p className="text-gray-300 font-pixel text-sm mb-4">
-            I'll buy your logs for {LOG_PRICE} orbs each.
+            I'll buy your gold coins for {COIN_PRICE.toLocaleString()} orbs each.
           </p>
           
           <div className="bg-gray-800 rounded-lg p-4 mb-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-300 font-pixel text-sm">Your Logs:</span>
-              <span className="text-white font-pixel text-lg">{logCount}</span>
+              <span className="text-gray-300 font-pixel text-sm">Your Gold Coins:</span>
+              <span className="text-white font-pixel text-lg">{coinCount}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-300 font-pixel text-sm">Total Value:</span>
@@ -83,17 +101,17 @@ export function LogDealerModal() {
         </div>
         
         <button
-          onClick={handleSellLogs}
-          disabled={logCount === 0 || isSelling}
+          onClick={handleSellCoins}
+          disabled={coinCount === 0 || isSelling}
           className={`
             w-full py-3 rounded-lg font-pixel text-lg transition-all
-            ${logCount > 0 && !isSelling
+            ${coinCount > 0 && !isSelling
               ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-500/30'
               : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'
             }
           `}
         >
-          {isSelling ? 'Selling...' : logCount === 0 ? 'No Logs to Sell' : `Sell All Logs (${logCount})`}
+          {isSelling ? 'Selling...' : coinCount === 0 ? 'No Coins to Sell' : `Sell All Coins (${coinCount})`}
         </button>
       </div>
     </div>

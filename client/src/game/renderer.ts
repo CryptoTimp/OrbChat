@@ -1,4 +1,4 @@
-import { PlayerWithChat, Orb, GAME_CONSTANTS, CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, MapType, ShopItem, ItemRarity, Direction, Shrine } from '../types';
+import { PlayerWithChat, Orb, GAME_CONSTANTS, CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, MapType, ShopItem, ItemRarity, Direction, Shrine, TreasureChest } from '../types';
 import { Camera, worldToScreen, isVisible } from './Camera';
 
 const { TILE_SIZE, SCALE, MAP_WIDTH, MAP_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ORB_SIZE } = GAME_CONSTANTS;
@@ -90,6 +90,8 @@ const VILLAGER_NAMES = [
 // Track villager NPCs
 const villagerNPCs: VillagerNPC[] = [];
 let villagersInitialized = false;
+// Track last update time for each villager (for throttling off-screen updates)
+const villagerLastUpdateTime: Map<string, number> = new Map();
 
 // Seeded random function for deterministic NPC behavior across all clients
 // Improved distribution using multiple hash operations
@@ -122,6 +124,8 @@ function getVillagerRandom(villagerId: string, cycle: number, index: number): nu
 // Track centurion NPCs
 const centurionNPCs: CenturionNPC[] = [];
 let centurionsInitialized = false;
+// Track last update time for each centurion (for throttling off-screen updates)
+const centurionLastUpdateTime: Map<string, number> = new Map();
 
 // Initialize villager NPCs around the plaza
 function initializeVillagers(): void {
@@ -377,7 +381,7 @@ export function getCenturionPlayers(): PlayerWithChat[] {
 }
 
 // Update wandering villagers (returns array of player objects to be drawn with other players)
-export function updateVillagers(time: number, deltaTime: number): PlayerWithChat[] {
+export function updateVillagers(time: number, deltaTime: number, camera?: Camera): PlayerWithChat[] {
   initializeVillagers();
   
   // Plaza center in scaled pixels
@@ -480,12 +484,115 @@ export function updateVillagers(time: number, deltaTime: number): PlayerWithChat
 }
 
 // Update centurion wandering and speech bubbles
-export function updateCenturionPlayers(time: number, deltaTime: number = 16): PlayerWithChat[] {
+export function updateCenturionPlayers(time: number, deltaTime: number = 16, camera?: Camera): PlayerWithChat[] {
   initializeCenturions();
   
   const centurionPlayers: PlayerWithChat[] = [];
   
+  // Calculate viewport bounds for distance checking
+  let viewportWidth = Infinity;
+  let viewportCenterX = 0;
+  let viewportCenterY = 0;
+  if (camera) {
+    viewportWidth = CANVAS_WIDTH / camera.zoom;
+    const viewportHeight = CANVAS_HEIGHT / camera.zoom;
+    viewportCenterX = (camera.x + viewportWidth / 2) / SCALE;
+    viewportCenterY = (camera.y + viewportHeight / 2) / SCALE;
+  }
+  
   for (const centurion of centurionNPCs) {
+    // Performance optimization: throttle updates for off-screen NPCs
+    if (camera) {
+      const centurionWorldX = centurion.x;
+      const centurionWorldY = centurion.y;
+      const isVisibleNPC = isVisible(camera, centurionWorldX, centurionWorldY, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT);
+      
+      // Check distance from viewport center
+      const dx = centurionWorldX - viewportCenterX;
+      const dy = centurionWorldY - viewportCenterY;
+      const distanceFromViewport = Math.sqrt(dx * dx + dy * dy);
+      const viewportDistanceThreshold = (viewportWidth / SCALE) * 2; // 2x viewport width
+      
+      // Skip updates entirely if NPC is far from viewport
+      if (distanceFromViewport > viewportDistanceThreshold) {
+        // Still return the NPC for rendering (it might be visible from a different angle)
+        // But don't update its position
+        const lastUpdate = centurionLastUpdateTime.get(centurion.id) || time;
+        centurionLastUpdateTime.set(centurion.id, lastUpdate);
+        
+        // Create player object with current position (no update)
+        const centurionPlayer: PlayerWithChat = {
+          id: centurion.id,
+          name: centurion.name,
+          x: centurion.x,
+          y: centurion.y,
+          direction: centurion.direction,
+          orbs: 0,
+          roomId: '',
+          sprite: {
+            body: 'default',
+            outfit: centurion.outfit,
+          },
+          chatBubble: (() => {
+            const bubble = npcInteractionBubbles.get(centurion.id);
+            const now = Date.now();
+            if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
+              return {
+                text: bubble.text,
+                createdAt: bubble.createdAt,
+              };
+            }
+            if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
+              npcInteractionBubbles.delete(centurion.id);
+            }
+            return undefined;
+          })(),
+        };
+        centurionPlayers.push(centurionPlayer);
+        continue;
+      }
+      
+      // For off-screen but nearby NPCs, throttle updates to every 500ms
+      if (!isVisibleNPC) {
+        const lastUpdate = centurionLastUpdateTime.get(centurion.id) || 0;
+        const timeSinceLastUpdate = time - lastUpdate;
+        if (timeSinceLastUpdate < 500) {
+          // Skip update this frame
+          const centurionPlayer: PlayerWithChat = {
+            id: centurion.id,
+            name: centurion.name,
+            x: centurion.x,
+            y: centurion.y,
+            direction: centurion.direction,
+            orbs: 0,
+            roomId: '',
+            sprite: {
+              body: 'default',
+              outfit: centurion.outfit,
+            },
+            chatBubble: (() => {
+              const bubble = npcInteractionBubbles.get(centurion.id);
+              const now = Date.now();
+              if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
+                return {
+                  text: bubble.text,
+                  createdAt: bubble.createdAt,
+                };
+              }
+              if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
+                npcInteractionBubbles.delete(centurion.id);
+              }
+              return undefined;
+            })(),
+          };
+          centurionPlayers.push(centurionPlayer);
+          continue;
+        }
+      }
+      
+      // Update last update time
+      centurionLastUpdateTime.set(centurion.id, time);
+    }
     // Update wandering movement
     if (time >= centurion.changeDirectionTime) {
       // Pick deterministic target within the top platform circle
@@ -1352,6 +1459,30 @@ export function checkTreeCollision(
 
 // ============ BACKGROUND CACHES ============
 const backgroundCaches: Map<MapType, HTMLCanvasElement> = new Map();
+
+// ============ PLAZA RENDERING CACHES ============
+// Cache for static fountain structure (tiers, pillars, decorative stones)
+let fountainStaticCache: HTMLCanvasElement | null = null;
+let fountainStaticCacheInitialized = false;
+
+// Cache for entire static plaza (walls, podiums, flag bunting, fountain structure, etc.)
+let plazaStaticCache: HTMLCanvasElement | null = null;
+let plazaStaticCacheInitialized = false;
+
+// Cache for plaza wall top (battlements, top surface, etc.)
+let plazaWallTopCache: HTMLCanvasElement | null = null;
+let plazaWallTopCacheInitialized = false;
+
+// Pre-calculated gate angles and wall segments for drawPlazaWallTop
+interface GateSegment {
+  gateAngle: number;
+  gateStartAngle: number;
+  gateEndAngle: number;
+  wallStartAngle: number;
+  wallEndAngle: number;
+}
+let precomputedGateSegments: GateSegment[] | null = null;
+let precomputedGateRanges: Array<{ start: number; end: number }> | null = null;
 
 function drawCafeBackground(ctx: CanvasRenderingContext2D): void {
   const p = SCALE; // pixel unit
@@ -2904,7 +3035,83 @@ function drawForestBackground(ctx: CanvasRenderingContext2D): void {
 }
 
 // Draw plaza wall top and battlements (called AFTER players so they walk under it)
-export function drawPlazaWallTop(ctx: CanvasRenderingContext2D): void {
+// Pre-compute gate segments and ranges once
+function precomputeGateSegments(): void {
+  if (precomputedGateSegments !== null) return;
+  
+  const p = SCALE;
+  const plazaRadius = 540 * p;
+  const wallThickness = 24 * p;
+  const wallTopOffset = 12 * p;
+  const gateCount = 4;
+  const gateWidth = 40 * p;
+  const gateAngularWidth = gateWidth / (plazaRadius + wallThickness);
+  
+  precomputedGateSegments = [];
+  precomputedGateRanges = [];
+  
+  for (let i = 0; i < gateCount; i++) {
+    const gateAngle = (i / gateCount) * Math.PI * 2;
+    const gateStartAngle = gateAngle - gateAngularWidth / 2;
+    const gateEndAngle = gateAngle + gateAngularWidth / 2;
+    
+    const prevGateAngle = (i === 0 ? (gateCount - 1) : (i - 1)) / gateCount * Math.PI * 2;
+    const prevGateEndAngle = prevGateAngle + gateAngularWidth / 2;
+    const currentGateStartAngle = gateAngle - gateAngularWidth / 2;
+    
+    let wallStartAngle = prevGateEndAngle;
+    let wallEndAngle = currentGateStartAngle;
+    if (i === 0) {
+      if (wallEndAngle < wallStartAngle) wallEndAngle += Math.PI * 2;
+    } else {
+      if (wallEndAngle < wallStartAngle) wallEndAngle += Math.PI * 2;
+    }
+    
+    // Normalize gate angles
+    let normalizedGateStart = gateStartAngle;
+    while (normalizedGateStart < 0) normalizedGateStart += Math.PI * 2;
+    while (normalizedGateStart >= Math.PI * 2) normalizedGateStart -= Math.PI * 2;
+    let normalizedGateEnd = gateEndAngle;
+    while (normalizedGateEnd < 0) normalizedGateEnd += Math.PI * 2;
+    while (normalizedGateEnd >= Math.PI * 2) normalizedGateEnd -= Math.PI * 2;
+    
+    precomputedGateSegments.push({
+      gateAngle,
+      gateStartAngle,
+      gateEndAngle,
+      wallStartAngle,
+      wallEndAngle,
+    });
+    
+    precomputedGateRanges.push({
+      start: normalizedGateStart,
+      end: normalizedGateEnd,
+    });
+  }
+}
+
+// Optimized gate check using precomputed ranges
+function isInGate(angle: number): boolean {
+  if (precomputedGateRanges === null) return false;
+  
+  // Normalize angle once
+  let normalizedAngle = angle;
+  while (normalizedAngle < 0) normalizedAngle += Math.PI * 2;
+  while (normalizedAngle >= Math.PI * 2) normalizedAngle -= Math.PI * 2;
+  
+  // Check against precomputed ranges
+  for (const range of precomputedGateRanges) {
+    if (range.start < range.end) {
+      if (normalizedAngle >= range.start && normalizedAngle <= range.end) return true;
+    } else {
+      // Wraps around
+      if (normalizedAngle >= range.start || normalizedAngle <= range.end) return true;
+    }
+  }
+  return false;
+}
+
+export function drawPlazaWallTop(ctx: CanvasRenderingContext2D, camera?: Camera): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
@@ -2912,243 +3119,16 @@ export function drawPlazaWallTop(ctx: CanvasRenderingContext2D): void {
   const wallThickness = 24 * p;
   const wallTopOffset = 12 * p;
   const battlementHeight = 12 * p;
-  const battlementCount = 32;
-  const gateCount = 4;
-  const gateWidth = 40 * p;
   
-  // Helper to check if angle is in a gate opening
-  const isInGate = (angle: number): boolean => {
-    for (let i = 0; i < gateCount; i++) {
-      const gateAngle = (i / gateCount) * Math.PI * 2;
-      const gateStart = gateAngle - (gateWidth / (plazaRadius + wallThickness + wallTopOffset)) / 2;
-      const gateEnd = gateAngle + (gateWidth / (plazaRadius + wallThickness + wallTopOffset)) / 2;
-      // Normalize angles for comparison
-      let normalizedAngle = angle;
-      while (normalizedAngle < 0) normalizedAngle += Math.PI * 2;
-      while (normalizedAngle >= Math.PI * 2) normalizedAngle -= Math.PI * 2;
-      let normalizedStart = gateStart;
-      while (normalizedStart < 0) normalizedStart += Math.PI * 2;
-      let normalizedEnd = gateEnd;
-      while (normalizedEnd < 0) normalizedEnd += Math.PI * 2;
-      
-      if (normalizedStart < normalizedEnd) {
-        if (normalizedAngle >= normalizedStart && normalizedAngle <= normalizedEnd) return true;
-      } else {
-        // Wraps around
-        if (normalizedAngle >= normalizedStart || normalizedAngle <= normalizedEnd) return true;
-      }
-    }
-    return false;
-  };
+  // Build static wall top cache if needed
+  buildPlazaWallTopCache();
   
-  // Draw top surface of wall (with gate openings) - ONLY the wall ring, not the plaza
-  ctx.fillStyle = '#6a6a5a';
-  // Draw the wall ring segment by segment, skipping gates
-  for (let i = 0; i < gateCount; i++) {
-    const gateAngle = (i / gateCount) * Math.PI * 2;
-    const gateAngularWidth = gateWidth / (plazaRadius + wallThickness);
-    const gateStartAngle = gateAngle - gateAngularWidth / 2;
-    const gateEndAngle = gateAngle + gateAngularWidth / 2;
-    
-    // Calculate the segment from end of previous gate to start of this gate
-    const prevGateAngle = (i === 0 ? (gateCount - 1) : (i - 1)) / gateCount * Math.PI * 2;
-    const prevGateEndAngle = prevGateAngle + gateAngularWidth / 2;
-    const currentGateStartAngle = gateAngle - gateAngularWidth / 2;
-    
-    // Normalize angles
-    let startAngle = prevGateEndAngle;
-    let endAngle = currentGateStartAngle;
-    if (i === 0) {
-      // First gate: wrap around from last gate
-      if (endAngle < startAngle) endAngle += Math.PI * 2;
-    } else {
-      if (endAngle < startAngle) endAngle += Math.PI * 2;
-    }
-    
-    // Draw this wall segment as a donut arc
-    ctx.beginPath();
-    // Outer edge arc
-    ctx.arc(centerX, centerY, plazaRadius + wallThickness + wallTopOffset, startAngle, endAngle, false);
-    // Inner edge arc (reverse direction to close the donut)
-    ctx.arc(centerX, centerY, plazaRadius + wallThickness, endAngle, startAngle, true);
-    ctx.closePath();
-    ctx.fill();
-  }
-  
-  // Stone block pattern on top surface (only on wall segments, not gates)
-  ctx.strokeStyle = '#5a5a4a';
-  ctx.lineWidth = 1 * p;
-  for (let gateIdx = 0; gateIdx < gateCount; gateIdx++) {
-    const gateAngle = (gateIdx / gateCount) * Math.PI * 2;
-    const gateAngularWidth = gateWidth / (plazaRadius + wallThickness);
-    const gateStartAngle = gateAngle - gateAngularWidth / 2;
-    const gateEndAngle = gateAngle + gateAngularWidth / 2;
-    
-    // Calculate segment angles
-    const prevGateAngle = (gateIdx === 0 ? (gateCount - 1) : (gateIdx - 1)) / gateCount * Math.PI * 2;
-    const prevGateEndAngle = prevGateAngle + gateAngularWidth / 2;
-    const currentGateStartAngle = gateAngle - gateAngularWidth / 2;
-    
-    let startAngle = prevGateEndAngle;
-    let endAngle = currentGateStartAngle;
-    if (gateIdx === 0) {
-      if (endAngle < startAngle) endAngle += Math.PI * 2;
-    } else {
-      if (endAngle < startAngle) endAngle += Math.PI * 2;
-    }
-    
-    // Draw circular stone patterns on this segment
-    for (let i = 0; i < 4; i++) {
-      const radius = plazaRadius + wallThickness + (i * wallTopOffset / 4);
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
-      ctx.stroke();
-    }
-    
-    // Draw radial stone lines on this segment
-    const segmentAngularSpan = endAngle - startAngle;
-    const numLines = Math.floor(segmentAngularSpan / (Math.PI * 2) * 24);
-    for (let i = 0; i <= numLines; i++) {
-      const angle = startAngle + (i / numLines) * segmentAngularSpan;
-      const startX = centerX + Math.cos(angle) * (plazaRadius + wallThickness);
-      const startY = centerY + Math.sin(angle) * (plazaRadius + wallThickness);
-      const endX = centerX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset);
-      const endY = centerY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset);
-      
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
-    }
-  }
-  
-  // Top surface highlight (brighter edge) - only on wall segments
-  ctx.strokeStyle = '#7a7a6a';
-  ctx.lineWidth = 2 * p;
-  for (let i = 0; i < gateCount; i++) {
-    const gateAngle = (i / gateCount) * Math.PI * 2;
-    const gateAngularWidth = gateWidth / (plazaRadius + wallThickness);
-    const gateStartAngle = gateAngle - gateAngularWidth / 2;
-    const gateEndAngle = gateAngle + gateAngularWidth / 2;
-    
-    const prevGateAngle = (i === 0 ? (gateCount - 1) : (i - 1)) / gateCount * Math.PI * 2;
-    const prevGateEndAngle = prevGateAngle + gateAngularWidth / 2;
-    const currentGateStartAngle = gateAngle - gateAngularWidth / 2;
-    
-    let startAngle = prevGateEndAngle;
-    let endAngle = currentGateStartAngle;
-    if (i === 0) {
-      if (endAngle < startAngle) endAngle += Math.PI * 2;
-    } else {
-      if (endAngle < startAngle) endAngle += Math.PI * 2;
-    }
-    
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, plazaRadius + wallThickness + wallTopOffset, startAngle, endAngle, false);
-    ctx.stroke();
-  }
-  
-  // Draw battlements on outer edge (top of wall)
-  for (let i = 0; i < battlementCount; i++) {
-    const angle = (i / battlementCount) * Math.PI * 2;
-    const nextAngle = ((i + 1) / battlementCount) * Math.PI * 2;
-    
-    // Skip battlements in gate areas
-    if (isInGate(angle) || isInGate(nextAngle)) continue;
-    
-    const x1 = centerX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset);
-    const y1 = centerY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset);
-    const x2 = centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset);
-    const y2 = centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset);
-    
-    // Battlement (raised section with 3D depth)
-    if (i % 2 === 0) {
-      // Front face of battlement (facing outward)
-      ctx.fillStyle = '#7a7a6a';
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.lineTo(centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
-      ctx.lineTo(centerX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), centerY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
-      ctx.closePath();
-      ctx.fill();
-      
-      // Top of battlement (highlight)
-      ctx.fillStyle = '#8a8a7a';
-      ctx.beginPath();
-      ctx.moveTo(centerX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), centerY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
-      ctx.lineTo(centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
-      ctx.lineTo(centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset), centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset));
-      ctx.lineTo(centerX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset), centerY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset));
-      ctx.closePath();
-      ctx.fill();
-      
-      // Battlement highlight edge
-      ctx.strokeStyle = '#9a9a8a';
-      ctx.lineWidth = 1 * p;
-      ctx.beginPath();
-      ctx.moveTo(centerX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), centerY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
-      ctx.lineTo(centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
-      ctx.stroke();
-    }
-  }
-  
-  // Draw battlements on inner edge (facing plaza)
-  for (let i = 0; i < battlementCount; i++) {
-    const angle = (i / battlementCount) * Math.PI * 2;
-    const nextAngle = ((i + 1) / battlementCount) * Math.PI * 2;
-    
-    // Skip battlements in gate areas
-    if (isInGate(angle) || isInGate(nextAngle)) continue;
-    
-    const x1 = centerX + Math.cos(angle) * (plazaRadius + wallThickness);
-    const y1 = centerY + Math.sin(angle) * (plazaRadius + wallThickness);
-    const x2 = centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness);
-    const y2 = centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness);
-    
-    // Battlement on inner edge
-    if (i % 2 === 0) {
-      // Front face of battlement (facing inward)
-      ctx.fillStyle = '#6a6a5a';
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.lineTo(centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5), centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
-      ctx.lineTo(centerX + Math.cos(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5), centerY + Math.sin(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
-      ctx.closePath();
-      ctx.fill();
-      
-      // Top of inner battlement
-      ctx.fillStyle = '#7a7a6a';
-      ctx.beginPath();
-      ctx.moveTo(centerX + Math.cos(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5), centerY + Math.sin(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
-      ctx.lineTo(centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5), centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
-      ctx.lineTo(centerX + Math.cos(nextAngle) * (plazaRadius + wallThickness), centerY + Math.sin(nextAngle) * (plazaRadius + wallThickness));
-      ctx.lineTo(centerX + Math.cos(angle) * (plazaRadius + wallThickness), centerY + Math.sin(angle) * (plazaRadius + wallThickness));
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-  
-  // Draw gate archways (so players can see they can pass through)
-  for (let i = 0; i < gateCount; i++) {
-    const gateAngle = (i / gateCount) * Math.PI * 2;
-    const gateX = centerX + Math.cos(gateAngle) * (plazaRadius + wallThickness / 2);
-    const gateY = centerY + Math.sin(gateAngle) * (plazaRadius + wallThickness / 2);
-    
-    // Gate arch (semi-circular top)
-    ctx.strokeStyle = '#5a5a4a';
-    ctx.lineWidth = 3 * p;
-    ctx.beginPath();
-    ctx.arc(gateX, gateY, gateWidth / 2, gateAngle + Math.PI / 2, gateAngle - Math.PI / 2, false);
-    ctx.stroke();
-    
-    // Gate arch highlight
-    ctx.strokeStyle = '#6a6a5a';
-    ctx.lineWidth = 1 * p;
-    ctx.beginPath();
-    ctx.arc(gateX, gateY, gateWidth / 2 - 1 * p, gateAngle + Math.PI / 2, gateAngle - Math.PI / 2, false);
-    ctx.stroke();
+  // Draw cached static wall top
+  if (plazaWallTopCache) {
+    const cacheSize = (plazaRadius + wallThickness + wallTopOffset + battlementHeight) * 2.5;
+    const offsetX = centerX - cacheSize / 2;
+    const offsetY = centerY - cacheSize / 2;
+    ctx.drawImage(plazaWallTopCache, offsetX, offsetY);
   }
 }
 
@@ -3550,18 +3530,19 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
       traderBeamHeight
     );
     
-    // Trader beam outer glow
+    // Batch shadow operations for trader beam
     ctx.shadowBlur = 15 * p * traderPulse;
     ctx.shadowColor = `rgba(100, 200, 255, ${traderIntensity * 0.5})`;
+    
+    // Trader beam outer glow
     ctx.fillRect(
       animatedTraderBeamX - 2 * p, 
       traderBeamStartY - traderBeamHeight, 
       animatedTraderBeamWidth + 4 * p, 
       traderBeamHeight
     );
-    ctx.shadowBlur = 0;
     
-    // Trader beam inner core
+    // Trader beam inner core (reuse shadow)
     const traderCoreGradient = ctx.createLinearGradient(
       animatedTraderBeamX, 
       traderBeamStartY, 
@@ -3577,6 +3558,9 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
       animatedTraderBeamWidth - 2 * p, 
       traderBeamHeight * 0.6
     );
+    
+    // Reset shadow after trader beam operations
+    ctx.shadowBlur = 0;
     
     // Trader beam shimmer effect
     const traderShimmerOffset = ((time * 0.0015 + stall.angle) % (traderBeamHeight * 0.4));
@@ -4146,199 +4130,545 @@ export function drawGuardTower(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.fill();
 }
 
-export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, deltaTime?: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null, hoveredDealerId?: string | null): void {
+// Build static fountain cache (tiers, pillars, decorative stones - everything that doesn't animate)
+function buildFountainStaticCache(): void {
+  if (fountainStaticCacheInitialized) return;
+  
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
-  const plazaRadius = 540 * p; // Match the background plaza radius
-  
-  // Note: Podiums are drawn in the background layer so players can walk on top
-  
-  // === GRAND CENTRAL MONUMENT (Multi-tiered stone structure) ===
-  const baseRadius = 100 * p; // Larger base for grandeur
+  const baseRadius = 100 * p;
   const midRadius = 80 * p;
   const topRadius = 60 * p;
   const pillarRadius = 8 * p;
   
-  // === TIER 1: LARGE BASE PLATFORM ===
-  // Base shadow (darker at bottom to suggest height)
-  ctx.fillStyle = '#2a2a1a';
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, baseRadius + 4 * p, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Main base platform (large circular stone platform)
-  ctx.fillStyle = '#5a5a4a';
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Base rim (raised edge)
-  ctx.fillStyle = '#6a6a5a';
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, baseRadius, 0, Math.PI * 2);
-  ctx.lineWidth = 4 * p;
-  ctx.stroke();
-  
-  // Stone block pattern on base (radial lines)
-  ctx.strokeStyle = '#4a4a3a';
-  ctx.lineWidth = 2 * p;
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.lineTo(centerX + Math.cos(angle) * baseRadius, centerY + Math.sin(angle) * baseRadius);
-    ctx.stroke();
+  // Create cache canvas (large enough for entire fountain structure)
+  const cacheSize = 300 * p; // Large enough for fountain + some margin
+  fountainStaticCache = document.createElement('canvas');
+  fountainStaticCache.width = cacheSize;
+  fountainStaticCache.height = cacheSize;
+  const cacheCtx = fountainStaticCache.getContext('2d');
+  if (!cacheCtx) {
+    fountainStaticCacheInitialized = true;
+    return;
   }
   
-  // Circular stone rings on base
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  // Offset to center the fountain in the cache
+  const offsetX = cacheSize / 2;
+  const offsetY = cacheSize / 2;
+  
+  // === TIER 1: LARGE BASE PLATFORM ===
+  cacheCtx.fillStyle = '#2a2a1a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, baseRadius + 4 * p, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  cacheCtx.fillStyle = '#5a5a4a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, baseRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  cacheCtx.fillStyle = '#6a6a5a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, baseRadius, 0, Math.PI * 2);
+  cacheCtx.lineWidth = 4 * p;
+  cacheCtx.stroke();
+  
+  cacheCtx.strokeStyle = '#4a4a3a';
+  cacheCtx.lineWidth = 2 * p;
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(offsetX, offsetY);
+    cacheCtx.lineTo(offsetX + Math.cos(angle) * baseRadius, offsetY + Math.sin(angle) * baseRadius);
+    cacheCtx.stroke();
+  }
+  
   for (let ring = 1; ring <= 3; ring++) {
-    ctx.strokeStyle = '#4a4a3a';
-    ctx.lineWidth = 2 * p;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, baseRadius * (ring / 4), 0, Math.PI * 2);
-    ctx.stroke();
+    cacheCtx.strokeStyle = '#4a4a3a';
+    cacheCtx.lineWidth = 2 * p;
+    cacheCtx.beginPath();
+    cacheCtx.arc(offsetX, offsetY, baseRadius * (ring / 4), 0, Math.PI * 2);
+    cacheCtx.stroke();
   }
   
   // === TIER 2: MIDDLE PLATFORM WITH PILLARS ===
-  const midPlatformY = centerY - 20 * p;
+  const midPlatformY = offsetY - 20 * p;
   
-  // Middle platform shadow
-  ctx.fillStyle = '#3a3a2a';
-  ctx.beginPath();
-  ctx.arc(centerX, midPlatformY, midRadius + 3 * p, 0, Math.PI * 2);
-  ctx.fill();
+  cacheCtx.fillStyle = '#3a3a2a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, midPlatformY, midRadius + 3 * p, 0, Math.PI * 2);
+  cacheCtx.fill();
   
-  // Middle platform
-  ctx.fillStyle = '#6a6a5a';
-  ctx.beginPath();
-  ctx.arc(centerX, midPlatformY, midRadius, 0, Math.PI * 2);
-  ctx.fill();
+  cacheCtx.fillStyle = '#6a6a5a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, midPlatformY, midRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
   
-  // Decorative pillars around middle platform (8 pillars)
   const pillarCount = 8;
   for (let i = 0; i < pillarCount; i++) {
     const angle = (i / pillarCount) * Math.PI * 2;
-    const pillarX = centerX + Math.cos(angle) * (midRadius * 0.7);
+    const pillarX = offsetX + Math.cos(angle) * (midRadius * 0.7);
     const pillarY = midPlatformY + Math.sin(angle) * (midRadius * 0.7);
     const pillarHeight = 30 * p;
     
-    // Pillar shadow
-    ctx.fillStyle = '#3a3a2a';
-    ctx.beginPath();
-    ctx.arc(pillarX, pillarY, pillarRadius + 1 * p, 0, Math.PI * 2);
-    ctx.fill();
+    cacheCtx.fillStyle = '#3a3a2a';
+    cacheCtx.beginPath();
+    cacheCtx.arc(pillarX, pillarY, pillarRadius + 1 * p, 0, Math.PI * 2);
+    cacheCtx.fill();
     
-    // Pillar base
-    ctx.fillStyle = '#5a5a4a';
-    ctx.beginPath();
-    ctx.arc(pillarX, pillarY, pillarRadius + 2 * p, 0, Math.PI * 2);
-    ctx.fill();
+    cacheCtx.fillStyle = '#5a5a4a';
+    cacheCtx.beginPath();
+    cacheCtx.arc(pillarX, pillarY, pillarRadius + 2 * p, 0, Math.PI * 2);
+    cacheCtx.fill();
     
-    // Pillar column
-    ctx.fillStyle = '#7a7a6a';
-    ctx.fillRect(pillarX - pillarRadius, pillarY - pillarHeight, pillarRadius * 2, pillarHeight);
+    cacheCtx.fillStyle = '#7a7a6a';
+    cacheCtx.fillRect(pillarX - pillarRadius, pillarY - pillarHeight, pillarRadius * 2, pillarHeight);
     
-    // Pillar capital (top decorative element)
-    ctx.fillStyle = '#8a8a7a';
-    ctx.fillRect(pillarX - pillarRadius - 2 * p, pillarY - pillarHeight - 4 * p, (pillarRadius + 2 * p) * 2, 4 * p);
+    cacheCtx.fillStyle = '#8a8a7a';
+    cacheCtx.fillRect(pillarX - pillarRadius - 2 * p, pillarY - pillarHeight - 4 * p, (pillarRadius + 2 * p) * 2, 4 * p);
     
-    // Pillar detail lines
-    ctx.strokeStyle = '#6a6a5a';
-    ctx.lineWidth = 1 * p;
-    ctx.beginPath();
-    ctx.moveTo(pillarX - pillarRadius, pillarY - pillarHeight);
-    ctx.lineTo(pillarX + pillarRadius, pillarY - pillarHeight);
-    ctx.stroke();
+    cacheCtx.strokeStyle = '#6a6a5a';
+    cacheCtx.lineWidth = 1 * p;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pillarX - pillarRadius, pillarY - pillarHeight);
+    cacheCtx.lineTo(pillarX + pillarRadius, pillarY - pillarHeight);
+    cacheCtx.stroke();
   }
   
   // === TIER 3: TOP PLATFORM WITH FOUNTAIN ===
   const topPlatformY = midPlatformY - 35 * p;
   
-  // Top platform shadow
-  ctx.fillStyle = '#4a4a3a';
-  ctx.beginPath();
-  ctx.arc(centerX, topPlatformY, topRadius + 2 * p, 0, Math.PI * 2);
-  ctx.fill();
+  cacheCtx.fillStyle = '#4a4a3a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, topPlatformY, topRadius + 2 * p, 0, Math.PI * 2);
+  cacheCtx.fill();
   
-  // Top platform
-  ctx.fillStyle = '#7a7a6a';
-  ctx.beginPath();
-  ctx.arc(centerX, topPlatformY, topRadius, 0, Math.PI * 2);
-  ctx.fill();
+  cacheCtx.fillStyle = '#7a7a6a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, topPlatformY, topRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
   
-  // Top platform rim
-  ctx.strokeStyle = '#8a8a7a';
-  ctx.lineWidth = 3 * p;
-  ctx.beginPath();
-  ctx.arc(centerX, topPlatformY, topRadius, 0, Math.PI * 2);
-  ctx.stroke();
+  cacheCtx.strokeStyle = '#8a8a7a';
+  cacheCtx.lineWidth = 3 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, topPlatformY, topRadius, 0, Math.PI * 2);
+  cacheCtx.stroke();
   
   // === CENTRAL FOUNTAIN PILLAR ===
   const fountainBaseRadius = 25 * p;
   const fountainPillarHeight = 40 * p;
   const fountainTopY = topPlatformY - fountainPillarHeight;
   
-  // Fountain base
-  ctx.fillStyle = '#6a6a5a';
-  ctx.beginPath();
-  ctx.arc(centerX, topPlatformY, fountainBaseRadius, 0, Math.PI * 2);
-  ctx.fill();
+  cacheCtx.fillStyle = '#6a6a5a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, topPlatformY, fountainBaseRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
   
-  // Fountain pillar (octagonal)
-  ctx.fillStyle = '#5a5a4a';
-  ctx.beginPath();
+  cacheCtx.fillStyle = '#5a5a4a';
+  cacheCtx.beginPath();
   for (let i = 0; i < 8; i++) {
     const angle = (i * Math.PI / 4) - Math.PI / 8;
-    const px = centerX + Math.cos(angle) * (fountainBaseRadius - 2 * p);
+    const px = offsetX + Math.cos(angle) * (fountainBaseRadius - 2 * p);
     const py = topPlatformY + Math.sin(angle) * (fountainBaseRadius - 2 * p);
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
+    if (i === 0) cacheCtx.moveTo(px, py);
+    else cacheCtx.lineTo(px, py);
   }
-  ctx.closePath();
-  ctx.fill();
+  cacheCtx.closePath();
+  cacheCtx.fill();
   
-  // Fountain pillar body
-  ctx.fillStyle = '#6a6a5a';
-  ctx.fillRect(centerX - (fountainBaseRadius - 4 * p), topPlatformY - fountainPillarHeight, (fountainBaseRadius - 4 * p) * 2, fountainPillarHeight);
+  cacheCtx.fillStyle = '#6a6a5a';
+  cacheCtx.fillRect(offsetX - (fountainBaseRadius - 4 * p), topPlatformY - fountainPillarHeight, (fountainBaseRadius - 4 * p) * 2, fountainPillarHeight);
   
-  // Fountain pillar details (horizontal bands)
   for (let i = 0; i < 3; i++) {
     const bandY = topPlatformY - (i * fountainPillarHeight / 4);
-    ctx.fillStyle = '#4a4a3a';
-    ctx.fillRect(centerX - (fountainBaseRadius - 4 * p), bandY - 1 * p, (fountainBaseRadius - 4 * p) * 2, 2 * p);
+    cacheCtx.fillStyle = '#4a4a3a';
+    cacheCtx.fillRect(offsetX - (fountainBaseRadius - 4 * p), bandY - 1 * p, (fountainBaseRadius - 4 * p) * 2, 2 * p);
   }
   
-  // Fountain top bowl (larger and more impressive)
   const bowlRadius = 20 * p;
-  ctx.fillStyle = '#8a8a7a';
-  ctx.beginPath();
-  ctx.arc(centerX, fountainTopY, bowlRadius, 0, Math.PI * 2);
-  ctx.fill();
+  cacheCtx.fillStyle = '#8a8a7a';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, fountainTopY, bowlRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
   
-  // Bowl rim
-  ctx.strokeStyle = '#9a9a8a';
-  ctx.lineWidth = 2 * p;
-  ctx.beginPath();
-  ctx.arc(centerX, fountainTopY, bowlRadius, 0, Math.PI * 2);
-  ctx.stroke();
+  cacheCtx.strokeStyle = '#9a9a8a';
+  cacheCtx.lineWidth = 2 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, fountainTopY, bowlRadius, 0, Math.PI * 2);
+  cacheCtx.stroke();
   
-  // Decorative stone carvings around fountain base
+  // Decorative stone carvings
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
-    const stoneX = centerX + Math.cos(angle) * (topRadius * 0.7);
+    const stoneX = offsetX + Math.cos(angle) * (topRadius * 0.7);
     const stoneY = topPlatformY + Math.sin(angle) * (topRadius * 0.7);
     
-    // Carved stone block
-    ctx.fillStyle = '#4a4a3a';
-    ctx.fillRect(stoneX - 6 * p, stoneY - 6 * p, 12 * p, 12 * p);
+    cacheCtx.fillStyle = '#4a4a3a';
+    cacheCtx.fillRect(stoneX - 6 * p, stoneY - 6 * p, 12 * p, 12 * p);
     
-    // Stone block highlight
-    ctx.fillStyle = '#5a5a4a';
-    ctx.fillRect(stoneX - 5 * p, stoneY - 5 * p, 10 * p, 2 * p);
+    cacheCtx.fillStyle = '#5a5a4a';
+    cacheCtx.fillRect(stoneX - 5 * p, stoneY - 5 * p, 10 * p, 2 * p);
+  }
+  
+  fountainStaticCacheInitialized = true;
+}
+
+// Build static plaza cache (flag bunting, walls, etc. - everything that doesn't animate)
+function buildPlazaStaticCache(): void {
+  if (plazaStaticCacheInitialized) return;
+  
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 540 * p;
+  const npcRadius = plazaRadius * 0.7;
+  
+  // Create cache canvas (large enough for entire plaza)
+  const cacheSize = plazaRadius * 2.5; // Large enough for plaza + walls + margin
+  plazaStaticCache = document.createElement('canvas');
+  plazaStaticCache.width = cacheSize;
+  plazaStaticCache.height = cacheSize;
+  const cacheCtx = plazaStaticCache.getContext('2d');
+  if (!cacheCtx) {
+    plazaStaticCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  // Offset to center the plaza in the cache
+  const offsetX = cacheSize / 2;
+  const offsetY = cacheSize / 2;
+  
+  // === FLAG BUNTING ===
+  const monumentTopY = offsetY - 26 * p;
+  const monumentTopRadius = 60 * p;
+  const buntingStartHeight = monumentTopY - 10 * p;
+  
+  const stalls: Array<{
+    angle: number;
+    tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | undefined;
+  }> = [
+    { angle: 0, tab: 'hats' },
+    { angle: Math.PI / 4, tab: 'shirts' },
+    { angle: Math.PI / 2, tab: 'legs' },
+    { angle: 3 * Math.PI / 4, tab: 'capes' },
+    { angle: Math.PI, tab: 'wings' },
+    { angle: 5 * Math.PI / 4, tab: 'accessories' },
+    { angle: 3 * Math.PI / 2, tab: 'boosts' },
+    { angle: 7 * Math.PI / 4, tab: 'pets' },
+  ];
+  
+  for (const stall of stalls) {
+    if (!stall.tab) continue;
+    
+    const npcX = offsetX + Math.cos(stall.angle) * npcRadius;
+    const npcY = offsetY + Math.sin(stall.angle) * npcRadius;
+    
+    // Calculate top platform Y position (elevated above base)
+    const topPlatformElevation = 14 * SCALE;
+    const npcTopY = npcY - topPlatformElevation;
+    
+    // Wooden pole on trader podium (at the edge of the top platform, facing center)
+    const poleHeight = 40 * p;
+    const poleRadius = 2 * p;
+    const poleTopY = npcTopY - poleHeight;
+    
+    // Position pole at the edge of the platform, facing the center
+    const poleOffsetFromCenter = 30 * p;
+    const poleX = npcX + Math.cos(stall.angle + Math.PI) * poleOffsetFromCenter;
+    const poleY = npcTopY;
+    
+    // Draw wooden pole
+    cacheCtx.fillStyle = '#3a2a1a';
+    cacheCtx.fillRect(poleX - poleRadius, poleY - poleHeight, poleRadius * 2, poleHeight);
+    
+    // Pole top (decorative)
+    cacheCtx.fillStyle = '#4a3a2a';
+    cacheCtx.beginPath();
+    cacheCtx.arc(poleX, poleTopY, poleRadius + 1 * p, 0, Math.PI * 2);
+    cacheCtx.fill();
+    
+    // Calculate bunting start position (from edge of monument top platform)
+    const buntingStartX = offsetX + Math.cos(stall.angle) * monumentTopRadius;
+    const buntingStartY = buntingStartHeight;
+    
+    // Calculate bunting end position (top of wooden pole)
+    const buntingEndX = poleX;
+    const buntingEndY = poleTopY;
+    
+    // Draw bunting line (rope/string)
+    cacheCtx.strokeStyle = '#2a1a0a';
+    cacheCtx.lineWidth = 1 * p;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(buntingStartX, buntingStartY);
+    cacheCtx.lineTo(buntingEndX, buntingEndY);
+    cacheCtx.stroke();
+    
+    // Draw flags along the bunting line
+    const distance = Math.sqrt(
+      Math.pow(buntingEndX - buntingStartX, 2) + 
+      Math.pow(buntingEndY - buntingStartY, 2)
+    );
+    const flagCount = Math.floor(distance / (12 * p));
+    const flagSpacing = distance / flagCount;
+    
+    for (let i = 1; i < flagCount; i++) {
+      const t = i / flagCount;
+      const flagX = buntingStartX + (buntingEndX - buntingStartX) * t;
+      const flagY = buntingStartY + (buntingEndY - buntingStartY) * t;
+      
+      // Alternate between red and blue flags
+      const isRed = i % 2 === 0;
+      const flagColor = isRed ? '#8b0000' : '#1a4a8a';
+      
+      // Flag size
+      const flagWidth = 8 * p;
+      const flagHeight = 6 * p;
+      
+      // Draw flag (triangle shape hanging downward from the rope)
+      cacheCtx.fillStyle = flagColor;
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(flagX, flagY);
+      cacheCtx.lineTo(flagX - flagWidth / 2, flagY + flagHeight);
+      cacheCtx.lineTo(flagX + flagWidth / 2, flagY + flagHeight);
+      cacheCtx.closePath();
+      cacheCtx.fill();
+      
+      // Flag border
+      cacheCtx.strokeStyle = '#ffffff';
+      cacheCtx.lineWidth = 0.5 * p;
+      cacheCtx.stroke();
+    }
+  }
+  
+  plazaStaticCacheInitialized = true;
+}
+
+// Build static plaza wall top cache (battlements, top surface, stone patterns - everything that doesn't animate)
+function buildPlazaWallTopCache(): void {
+  if (plazaWallTopCacheInitialized) return;
+  
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 540 * p;
+  const wallThickness = 24 * p;
+  const wallTopOffset = 12 * p;
+  const battlementHeight = 12 * p;
+  const battlementCount = 32;
+  
+  // Pre-compute gate segments if needed
+  precomputeGateSegments();
+  
+  if (precomputedGateSegments === null) return;
+  
+  // Create cache canvas (large enough for entire wall top)
+  const cacheSize = (plazaRadius + wallThickness + wallTopOffset + battlementHeight) * 2.5;
+  plazaWallTopCache = document.createElement('canvas');
+  plazaWallTopCache.width = cacheSize;
+  plazaWallTopCache.height = cacheSize;
+  const cacheCtx = plazaWallTopCache.getContext('2d');
+  if (!cacheCtx) {
+    plazaWallTopCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  // Offset to center the wall in the cache
+  const offsetX = cacheSize / 2;
+  const offsetY = cacheSize / 2;
+  
+  // Draw top surface of wall (with gate openings) - ONLY the wall ring, not the plaza
+  cacheCtx.fillStyle = '#6a6a5a';
+  // Draw the wall ring segment by segment, skipping gates (using precomputed segments)
+  for (const segment of precomputedGateSegments) {
+    // Draw this wall segment as a donut arc
+    cacheCtx.beginPath();
+    // Outer edge arc
+    cacheCtx.arc(offsetX, offsetY, plazaRadius + wallThickness + wallTopOffset, segment.wallStartAngle, segment.wallEndAngle, false);
+    // Inner edge arc (reverse direction to close the donut)
+    cacheCtx.arc(offsetX, offsetY, plazaRadius + wallThickness, segment.wallEndAngle, segment.wallStartAngle, true);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+  }
+  
+  // Stone block pattern on top surface (only on wall segments, not gates)
+  cacheCtx.strokeStyle = '#5a5a4a';
+  cacheCtx.lineWidth = 1 * p;
+  for (const segment of precomputedGateSegments) {
+    // Draw circular stone patterns on this segment
+    for (let i = 0; i < 4; i++) {
+      const radius = plazaRadius + wallThickness + (i * wallTopOffset / 4);
+      cacheCtx.beginPath();
+      cacheCtx.arc(offsetX, offsetY, radius, segment.wallStartAngle, segment.wallEndAngle, false);
+      cacheCtx.stroke();
+    }
+    
+    // Draw radial stone lines on this segment
+    const segmentAngularSpan = segment.wallEndAngle - segment.wallStartAngle;
+    const numLines = Math.floor(segmentAngularSpan / (Math.PI * 2) * 24);
+    for (let i = 0; i <= numLines; i++) {
+      const angle = segment.wallStartAngle + (i / numLines) * segmentAngularSpan;
+      const startX = offsetX + Math.cos(angle) * (plazaRadius + wallThickness);
+      const startY = offsetY + Math.sin(angle) * (plazaRadius + wallThickness);
+      const endX = offsetX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset);
+      const endY = offsetY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset);
+      
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(startX, startY);
+      cacheCtx.lineTo(endX, endY);
+      cacheCtx.stroke();
+    }
+  }
+  
+  // Top surface highlight (brighter edge) - only on wall segments
+  cacheCtx.strokeStyle = '#7a7a6a';
+  cacheCtx.lineWidth = 2 * p;
+  for (const segment of precomputedGateSegments) {
+    cacheCtx.beginPath();
+    cacheCtx.arc(offsetX, offsetY, plazaRadius + wallThickness + wallTopOffset, segment.wallStartAngle, segment.wallEndAngle, false);
+    cacheCtx.stroke();
+  }
+  
+  // Draw battlements on outer edge (top of wall)
+  for (let i = 0; i < battlementCount; i++) {
+    const angle = (i / battlementCount) * Math.PI * 2;
+    const nextAngle = ((i + 1) / battlementCount) * Math.PI * 2;
+    
+    // Skip battlements in gate areas
+    if (isInGate(angle) || isInGate(nextAngle)) continue;
+    
+    const x1 = offsetX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset);
+    const y1 = offsetY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset);
+    const x2 = offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset);
+    const y2 = offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset);
+    
+    // Battlement (raised section with 3D depth)
+    if (i % 2 === 0) {
+      // Front face of battlement (facing outward)
+      cacheCtx.fillStyle = '#7a7a6a';
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(x1, y1);
+      cacheCtx.lineTo(x2, y2);
+      cacheCtx.lineTo(offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
+      cacheCtx.lineTo(offsetX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), offsetY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
+      cacheCtx.closePath();
+      cacheCtx.fill();
+      
+      // Top of battlement (highlight)
+      cacheCtx.fillStyle = '#8a8a7a';
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(offsetX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), offsetY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
+      cacheCtx.lineTo(offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
+      cacheCtx.lineTo(offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset), offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset));
+      cacheCtx.lineTo(offsetX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset), offsetY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset));
+      cacheCtx.closePath();
+      cacheCtx.fill();
+      
+      // Battlement highlight edge
+      cacheCtx.strokeStyle = '#9a9a8a';
+      cacheCtx.lineWidth = 1 * p;
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(offsetX + Math.cos(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), offsetY + Math.sin(angle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
+      cacheCtx.lineTo(offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight), offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness + wallTopOffset + battlementHeight));
+      cacheCtx.stroke();
+    }
+  }
+  
+  // Draw battlements on inner edge (facing plaza)
+  for (let i = 0; i < battlementCount; i++) {
+    const angle = (i / battlementCount) * Math.PI * 2;
+    const nextAngle = ((i + 1) / battlementCount) * Math.PI * 2;
+    
+    // Skip battlements in gate areas
+    if (isInGate(angle) || isInGate(nextAngle)) continue;
+    
+    const x1 = offsetX + Math.cos(angle) * (plazaRadius + wallThickness);
+    const y1 = offsetY + Math.sin(angle) * (plazaRadius + wallThickness);
+    const x2 = offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness);
+    const y2 = offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness);
+    
+    // Battlement on inner edge
+    if (i % 2 === 0) {
+      // Front face of battlement (facing inward)
+      cacheCtx.fillStyle = '#6a6a5a';
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(x1, y1);
+      cacheCtx.lineTo(x2, y2);
+      cacheCtx.lineTo(offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5), offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
+      cacheCtx.lineTo(offsetX + Math.cos(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5), offsetY + Math.sin(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
+      cacheCtx.closePath();
+      cacheCtx.fill();
+      
+      // Top of inner battlement
+      cacheCtx.fillStyle = '#7a7a6a';
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(offsetX + Math.cos(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5), offsetY + Math.sin(angle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
+      cacheCtx.lineTo(offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5), offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness - battlementHeight * 0.5));
+      cacheCtx.lineTo(offsetX + Math.cos(nextAngle) * (plazaRadius + wallThickness), offsetY + Math.sin(nextAngle) * (plazaRadius + wallThickness));
+      cacheCtx.lineTo(offsetX + Math.cos(angle) * (plazaRadius + wallThickness), offsetY + Math.sin(angle) * (plazaRadius + wallThickness));
+      cacheCtx.closePath();
+      cacheCtx.fill();
+    }
+  }
+  
+  // Draw gate archways (so players can see they can pass through)
+  const gateWidth = 40 * p;
+  for (const segment of precomputedGateSegments) {
+    const gateX = offsetX + Math.cos(segment.gateAngle) * (plazaRadius + wallThickness / 2);
+    const gateY = offsetY + Math.sin(segment.gateAngle) * (plazaRadius + wallThickness / 2);
+    
+    // Gate arch (semi-circular top)
+    cacheCtx.strokeStyle = '#5a5a4a';
+    cacheCtx.lineWidth = 3 * p;
+    cacheCtx.beginPath();
+    cacheCtx.arc(gateX, gateY, gateWidth / 2, segment.gateAngle + Math.PI / 2, segment.gateAngle - Math.PI / 2, false);
+    cacheCtx.stroke();
+    
+    // Gate arch highlight
+    cacheCtx.strokeStyle = '#6a6a5a';
+    cacheCtx.lineWidth = 1 * p;
+    cacheCtx.beginPath();
+    cacheCtx.arc(gateX, gateY, gateWidth / 2 - 1 * p, segment.gateAngle + Math.PI / 2, segment.gateAngle - Math.PI / 2, false);
+    cacheCtx.stroke();
+  }
+  
+  plazaWallTopCacheInitialized = true;
+}
+
+export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, deltaTime?: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null, hoveredDealerId?: string | null, camera?: Camera): void {
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 540 * p; // Match the background plaza radius
+  
+  // Build static fountain cache if needed
+  buildFountainStaticCache();
+  
+  // Draw cached static fountain structure
+  if (fountainStaticCache) {
+    const cacheSize = 300 * p;
+    const offsetX = centerX - cacheSize / 2;
+    const offsetY = centerY - cacheSize / 2;
+    ctx.drawImage(fountainStaticCache, offsetX, offsetY);
   }
   
   // === SPINNING ORBS WITH LIGHTBEAM ===
+  // Calculate fountain top position (needed for lightbeam and orbs)
+  const baseRadius = 100 * p;
+  const midRadius = 80 * p;
+  const topRadius = 60 * p;
+  const midPlatformY = centerY - 20 * p;
+  const topPlatformY = midPlatformY - 35 * p;
+  const fountainBaseRadius = 25 * p;
+  const fountainPillarHeight = 40 * p;
+  const fountainTopY = topPlatformY - fountainPillarHeight;
+  
   const orbRadius = 45 * p; // Distance from center for orbs (increased for larger structure)
   const orbTypes: Array<keyof typeof ORB_RARITY_CONFIG> = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
   const orbCount = orbTypes.length;
@@ -4350,7 +4680,6 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
   // Draw animated lightbeam shooting into sky
   const beamHeight = 200 * p;
   const baseBeamWidth = 12 * p;
-  const beamX = centerX - baseBeamWidth / 2;
   const beamStartY = fountainTopY;
   
   // Animate beam (pulsing width and intensity)
@@ -4359,7 +4688,8 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
   const beamWidth = baseBeamWidth * pulse;
   const animatedBeamX = centerX - beamWidth / 2;
   
-  // Animated lightbeam gradient (brighter at bottom, fades to top, with pulsing intensity)
+  // Optimized: Create gradients once per frame (positions change but structure is similar)
+  // Main beam gradient
   const beamGradient = ctx.createLinearGradient(animatedBeamX, beamStartY, animatedBeamX, beamStartY - beamHeight);
   beamGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity})`);
   beamGradient.addColorStop(0.2, `rgba(200, 230, 255, ${intensity * 0.8})`);
@@ -4371,19 +4701,23 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
   ctx.fillStyle = beamGradient;
   ctx.fillRect(animatedBeamX, beamStartY - beamHeight, beamWidth, beamHeight);
   
-  // Animated lightbeam outer glow (pulsing)
+  // Batch shadow operations: set once, use multiple times, reset once
   const glowIntensity = intensity * 0.6;
   ctx.shadowBlur = 30 * p * pulse;
   ctx.shadowColor = `rgba(100, 200, 255, ${glowIntensity})`;
-  ctx.fillRect(animatedBeamX - 3 * p, beamStartY - beamHeight, beamWidth + 6 * p, beamHeight);
-  ctx.shadowBlur = 0;
   
-  // Additional inner bright core (animated)
+  // Animated lightbeam outer glow (pulsing)
+  ctx.fillRect(animatedBeamX - 3 * p, beamStartY - beamHeight, beamWidth + 6 * p, beamHeight);
+  
+  // Additional inner bright core (animated) - reuse shadow
   const coreGradient = ctx.createLinearGradient(animatedBeamX, beamStartY, animatedBeamX, beamStartY - beamHeight * 0.7);
   coreGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.8})`);
   coreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = coreGradient;
   ctx.fillRect(animatedBeamX + 2 * p, beamStartY - beamHeight * 0.7, beamWidth - 4 * p, beamHeight * 0.7);
+  
+  // Reset shadow after all beam operations
+  ctx.shadowBlur = 0;
   
   // Shimmer effect (moving highlight)
   const shimmerOffset = (time * 0.001) % (beamHeight * 0.5);
@@ -4400,6 +4734,7 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
   ctx.fillRect(animatedBeamX, beamStartY - beamHeight, beamWidth, beamHeight);
   
   // Draw spinning orbs around the fountain (in front of decorative stones)
+  // Optimized: Batch arc operations where possible
   orbTypes.forEach((orbType, index) => {
     const angle = baseAngle + (index / orbCount) * Math.PI * 2;
     const x = centerX + Math.cos(angle) * orbRadius;
@@ -4410,7 +4745,7 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
     const pulse = Math.sin(time / config.pulseSpeed + index) * 0.2 + 1;
     const currentSize = baseSize * pulse;
     
-    // Draw orb glow
+    // Draw orb glow (optimized: create gradient once per orb)
     const glowGradient = ctx.createRadialGradient(x, y, 0, x, y, currentSize * 2.5);
     glowGradient.addColorStop(0, config.colors.outer);
     glowGradient.addColorStop(0.5, config.colors.outerGlow);
@@ -4420,7 +4755,7 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
     ctx.arc(x, y, currentSize * 2.5, 0, Math.PI * 2);
     ctx.fill();
     
-    // Draw orb main body
+    // Draw orb main body (optimized: create gradient once per orb)
     const orbGradient = ctx.createRadialGradient(
       x - currentSize * 0.3, 
       y - currentSize * 0.3, 
@@ -4439,7 +4774,7 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
     ctx.arc(x, y, currentSize, 0, Math.PI * 2);
     ctx.fill();
     
-    // Highlight
+    // Highlight (simple fill, no gradient needed)
     ctx.fillStyle = config.colors.highlight;
     ctx.beginPath();
     ctx.arc(x - currentSize * 0.3, y - currentSize * 0.3, currentSize * 0.4, 0, Math.PI * 2);
@@ -4459,115 +4794,19 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
   // so they appear on top and players walk behind them
 }
 
-// Draw flag bunting from central monument to trader podiums
-export function drawFlagBunting(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, plazaRadius: number, time: number): void {
+// Draw flag bunting from central monument to trader podiums (now uses static cache)
+export function drawFlagBunting(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, plazaRadius: number, time: number, camera?: Camera): void {
   const p = SCALE;
-  const npcRadius = plazaRadius * 0.7;
   
-  // Central monument top position (where bunting starts)
-  // Top platform is at centerY - 20p (midPlatformY) - 6p (top platform elevation) = centerY - 26p
-  const monumentTopY = centerY - 26 * p;
-  const monumentTopRadius = 60 * p; // Top platform radius
-  // Bunting starts from the edge of the top platform
-  const buntingStartHeight = monumentTopY - 10 * p; // Slightly above the platform
+  // Build static plaza cache if needed
+  buildPlazaStaticCache();
   
-  // Trader podium positions
-  const stalls: Array<{
-    angle: number;
-    tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | undefined;
-  }> = [
-    { angle: 0, tab: 'hats' },
-    { angle: Math.PI / 4, tab: 'shirts' },
-    { angle: Math.PI / 2, tab: 'legs' },
-    { angle: 3 * Math.PI / 4, tab: 'capes' },
-    { angle: Math.PI, tab: 'wings' },
-    { angle: 5 * Math.PI / 4, tab: 'accessories' },
-    { angle: 3 * Math.PI / 2, tab: 'boosts' },
-    { angle: 7 * Math.PI / 4, tab: 'pets' },
-  ];
-  
-  for (const stall of stalls) {
-    if (!stall.tab) continue;
-    
-    const npcX = centerX + Math.cos(stall.angle) * npcRadius;
-    const npcY = centerY + Math.sin(stall.angle) * npcRadius;
-    
-    // Calculate top platform Y position (elevated above base)
-    const topPlatformElevation = 14 * SCALE; // Total elevation of top platform
-    const npcTopY = npcY - topPlatformElevation; // Y position of top platform center
-    
-    // Wooden pole on trader podium (at the edge of the top platform, facing center)
-    const poleHeight = 40 * p;
-    const poleRadius = 2 * p;
-    const poleTopY = npcTopY - poleHeight;
-    
-    // Position pole at the edge of the platform, facing the center
-    const poleOffsetFromCenter = 30 * p; // Distance from podium center to pole
-    const poleX = npcX + Math.cos(stall.angle + Math.PI) * poleOffsetFromCenter; // Facing center
-    const poleY = npcTopY;
-    
-    // Draw wooden pole
-    ctx.fillStyle = '#3a2a1a'; // Dark brown wood
-    ctx.fillRect(poleX - poleRadius, poleY - poleHeight, poleRadius * 2, poleHeight);
-    
-    // Pole top (decorative)
-    ctx.fillStyle = '#4a3a2a'; // Darker brown
-    ctx.beginPath();
-    ctx.arc(poleX, poleTopY, poleRadius + 1 * p, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Calculate bunting start position (from edge of monument top platform)
-    const buntingStartX = centerX + Math.cos(stall.angle) * monumentTopRadius;
-    const buntingStartY = buntingStartHeight;
-    
-    // Calculate bunting end position (top of wooden pole)
-    const buntingEndX = poleX;
-    const buntingEndY = poleTopY;
-    
-    // Draw bunting line (rope/string)
-    ctx.strokeStyle = '#2a1a0a'; // Dark brown rope
-    ctx.lineWidth = 1 * p;
-    ctx.beginPath();
-    ctx.moveTo(buntingStartX, buntingStartY);
-    ctx.lineTo(buntingEndX, buntingEndY);
-    ctx.stroke();
-    
-    // Draw flags along the bunting line
-    const distance = Math.sqrt(
-      Math.pow(buntingEndX - buntingStartX, 2) + 
-      Math.pow(buntingEndY - buntingStartY, 2)
-    );
-    const flagCount = Math.floor(distance / (12 * p)); // One flag every 12 pixels
-    const flagSpacing = distance / flagCount;
-    
-    for (let i = 1; i < flagCount; i++) {
-      const t = i / flagCount;
-      const flagX = buntingStartX + (buntingEndX - buntingStartX) * t;
-      const flagY = buntingStartY + (buntingEndY - buntingStartY) * t;
-      
-      // Alternate between red and blue flags
-      const isRed = i % 2 === 0;
-      const flagColor = isRed ? '#8b0000' : '#1a4a8a';
-      
-      // Flag size
-      const flagWidth = 8 * p;
-      const flagHeight = 6 * p;
-      
-      // Draw flag (triangle shape hanging downward from the rope)
-      // Point attaches to rope, base hangs down (no animation)
-      ctx.fillStyle = flagColor;
-      ctx.beginPath();
-      ctx.moveTo(flagX, flagY); // Attachment point on rope
-      ctx.lineTo(flagX - flagWidth / 2, flagY + flagHeight); // Left base corner
-      ctx.lineTo(flagX + flagWidth / 2, flagY + flagHeight); // Right base corner
-      ctx.closePath();
-      ctx.fill();
-      
-      // Flag border
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 0.5 * p;
-      ctx.stroke();
-    }
+  // Draw cached static flag bunting
+  if (plazaStaticCache) {
+    const cacheSize = plazaRadius * 2.5;
+    const offsetX = centerX - cacheSize / 2;
+    const offsetY = centerY - cacheSize / 2;
+    ctx.drawImage(plazaStaticCache, offsetX, offsetY);
   }
 }
 
@@ -4588,6 +4827,12 @@ const DEALER_TYPES: DealerType[] = [
     name: 'Log Dealer',
     outfit: ['hat_beanie', 'vest_cowboy', 'legs_jeans_blue'],
     messages: ['I buy logs!', 'Got any logs?', '100 orbs per log!', 'Bring me your logs!'],
+  },
+  {
+    id: 'treasure_chest_dealer',
+    name: 'Treasure Dealer',
+    outfit: ['hat_cap_red', 'shirt_vest_brown', 'legs_jeans_blue'],
+    messages: ['I buy gold coins!', 'Got any coins?', '1000 orbs per coin!', 'Bring me your treasure!'],
   },
   {
     id: 'resource_dealer_1',
@@ -4787,6 +5032,23 @@ function drawDealers(ctx: CanvasRenderingContext2D, centerX: number, centerY: nu
     // Draw orb dealer NPC (with hover effect)
     const isHovered = hoveredDealerId === 'orb_dealer';
     drawSingleDealer(ctx, orbDealerType, dealerX, dealerY, time, isHovered);
+  }
+  
+  // Show treasure chest dealer
+  const treasureChestDealerType = DEALER_TYPES.find(d => d.id === 'treasure_chest_dealer');
+  if (treasureChestDealerType) {
+    // Position treasure chest dealer at fourth position
+    const treasureChestDealerIndex = 3;
+    const angle = ((treasureChestDealerIndex + 0.5) / flagCount) * Math.PI * 2;
+    const dealerX = centerX + Math.cos(angle) * dealerRadius;
+    const dealerY = centerY + Math.sin(angle) * dealerRadius;
+    
+    // Store position for click detection
+    dealerPositions.set(treasureChestDealerType.id, { x: dealerX, y: dealerY });
+    
+    // Draw treasure chest dealer NPC (with hover effect)
+    const isHovered = hoveredDealerId === 'treasure_chest_dealer';
+    drawSingleDealer(ctx, treasureChestDealerType, dealerX, dealerY, time, isHovered);
   }
 }
 
@@ -4999,7 +5261,7 @@ export function isPlayerInTreeRange(playerX: number, playerY: number, tree: Tree
 
 // Draw tree stumps (called BEFORE players so players appear on top)
 // Note: Camera transform is already applied to ctx, so we draw in world coordinates
-export function drawForestStumps(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>): void {
+export function drawForestStumps(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>, camera?: Camera): void {
   if (forestTrees.length === 0) return;
   
   const p = SCALE;
@@ -5008,6 +5270,16 @@ export function drawForestStumps(ctx: CanvasRenderingContext2D, treeStates?: Map
     const treeId = getTreeId(tree);
     const treeState = treeStates?.get(treeId);
     const s = tree.scale;
+    
+    // Viewport culling: skip trees outside viewport
+    if (camera) {
+      const treeBounds = tree.canopyRadius * 2; // Approximate tree size
+      const treeWorldX = tree.canopyX / SCALE;
+      const treeWorldY = tree.canopyY / SCALE;
+      if (!isVisible(camera, treeWorldX, treeWorldY, treeBounds / SCALE, treeBounds / SCALE)) {
+        continue; // Skip this tree
+      }
+    }
     
     // Only draw stumps for cut trees
     if (treeState?.isCut) {
@@ -5029,7 +5301,7 @@ export function drawForestStumps(ctx: CanvasRenderingContext2D, treeStates?: Map
 
 // Draw forest tree foliage (called AFTER players to create depth effect)
 // Note: Camera transform is already applied to ctx, so we draw in world coordinates
-export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>): void {
+export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Map<string, { treeId: string; isCut: boolean; cutBy: string | null; respawnAt: number }>, camera?: Camera): void {
   if (forestTrees.length === 0) return;
   
   const p = SCALE;
@@ -5042,6 +5314,16 @@ export function drawForestFoliage(ctx: CanvasRenderingContext2D, treeStates?: Ma
     // Skip cut trees (stumps are drawn separately before players)
     if (treeState?.isCut) {
       continue;
+    }
+    
+    // Viewport culling: skip trees outside viewport
+    if (camera) {
+      const treeBounds = tree.canopyRadius * 2; // Approximate tree size
+      const treeWorldX = tree.canopyX / SCALE;
+      const treeWorldY = tree.canopyY / SCALE;
+      if (!isVisible(camera, treeWorldX, treeWorldY, treeBounds / SCALE, treeBounds / SCALE)) {
+        continue; // Skip this tree
+      }
     }
     
     // Draw TRUNK (only if tree is not cut)
@@ -5162,7 +5444,7 @@ export function clearBackgroundCache(mapType?: MapType): void {
   }
 }
 
-export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType): void {
+export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType, camera?: Camera): void {
   // Ensure we have a valid map type
   const map = mapType || currentMapType || 'cafe';
   
@@ -5226,8 +5508,30 @@ export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType)
     backgroundCaches.set(map, cache);
   }
   
-  // Draw the cached background (camera transform is already applied)
-  ctx.drawImage(cache, 0, 0);
+  // Draw the cached background with viewport clipping for performance
+  if (camera) {
+    // Calculate visible bounds in world coordinates (scaled pixels)
+    const viewportWidth = CANVAS_WIDTH / camera.zoom;
+    const viewportHeight = CANVAS_HEIGHT / camera.zoom;
+    
+    // Source rectangle in cache (world coordinates)
+    const sx = Math.max(0, camera.x);
+    const sy = Math.max(0, camera.y);
+    const sw = Math.min(viewportWidth, WORLD_WIDTH - sx);
+    const sh = Math.min(viewportHeight, WORLD_HEIGHT - sy);
+    
+    // Destination rectangle (same as source since camera transform is already applied)
+    const dx = sx;
+    const dy = sy;
+    
+    // Only draw if there's something visible
+    if (sw > 0 && sh > 0) {
+      ctx.drawImage(cache, sx, sy, sw, sh, dx, dy, sw, sh);
+    }
+  } else {
+    // Fallback: draw entire cache if no camera provided
+    ctx.drawImage(cache, 0, 0);
+  }
 }
 
 // Legacy function name for compatibility
@@ -10758,6 +11062,242 @@ export function getHoveredShrine(worldX: number, worldY: number, shrines: Shrine
     }
   }
   return null;
+}
+
+// ============ TREASURE CHEST RENDERING ============
+
+// Draw treasure chest
+export function drawTreasureChest(
+  ctx: CanvasRenderingContext2D,
+  chest: TreasureChest,
+  time: number,
+  isHovered: boolean = false
+): void {
+  const p = SCALE;
+  const x = chest.x * SCALE;
+  const y = chest.y * SCALE;
+  const now = time;
+  
+  ctx.save();
+  
+  // Hover glow effect
+  if (isHovered) {
+    ctx.globalAlpha = 0.6;
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, 25 * p);
+    gradient.addColorStop(0, 'rgba(245, 158, 11, 0.8)');
+    gradient.addColorStop(0.5, 'rgba(245, 158, 11, 0.4)');
+    gradient.addColorStop(1, 'rgba(245, 158, 11, 0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, 25 * p, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+    ctx.lineWidth = 3 * p;
+    ctx.beginPath();
+    ctx.arc(x, y, 20 * p, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 25 * p;
+    ctx.shadowColor = 'rgba(245, 158, 11, 1.0)';
+  }
+  
+  // Cooldown indicator
+  const isOnCooldown = chest.cooldownEndTime && now < chest.cooldownEndTime;
+  if (isOnCooldown) {
+    ctx.globalAlpha = 0.5;
+  }
+  
+  // Draw chest base (brown wooden box)
+  ctx.fillStyle = '#8B4513'; // Brown
+  ctx.fillRect(x - 12 * p, y - 8 * p, 24 * p, 16 * p);
+  
+  // Draw chest lid (slightly lighter brown, with slight angle for 3D effect)
+  ctx.fillStyle = '#A0522D'; // Sienna
+  ctx.beginPath();
+  ctx.moveTo(x - 12 * p, y - 8 * p);
+  ctx.lineTo(x - 10 * p, y - 12 * p);
+  ctx.lineTo(x + 10 * p, y - 12 * p);
+  ctx.lineTo(x + 12 * p, y - 8 * p);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Draw chest lock (golden)
+  ctx.fillStyle = '#FFD700'; // Gold
+  ctx.beginPath();
+  ctx.arc(x, y - 2 * p, 3 * p, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw lock keyhole
+  ctx.fillStyle = '#654321'; // Dark brown
+  ctx.beginPath();
+  ctx.arc(x, y - 2 * p, 1.5 * p, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw chest straps (dark brown)
+  ctx.strokeStyle = '#654321';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.moveTo(x - 10 * p, y - 4 * p);
+  ctx.lineTo(x + 10 * p, y - 4 * p);
+  ctx.stroke();
+  
+  ctx.beginPath();
+  ctx.moveTo(x - 10 * p, y + 2 * p);
+  ctx.lineTo(x + 10 * p, y + 2 * p);
+  ctx.stroke();
+  
+  // Draw vertical straps
+  ctx.beginPath();
+  ctx.moveTo(x - 6 * p, y - 8 * p);
+  ctx.lineTo(x - 6 * p, y + 8 * p);
+  ctx.stroke();
+  
+  ctx.beginPath();
+  ctx.moveTo(x + 6 * p, y - 8 * p);
+  ctx.lineTo(x + 6 * p, y + 8 * p);
+  ctx.stroke();
+  
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  
+  // Draw progress bar if on cooldown
+  drawTreasureChestProgressBar(ctx, chest, x, y, now);
+  
+  ctx.restore();
+}
+
+// Draw treasure chest progress bar
+function drawTreasureChestProgressBar(ctx: CanvasRenderingContext2D, chest: TreasureChest, x: number, y: number, time: number): void {
+  const p = SCALE;
+  const now = time;
+  
+  if (!chest.cooldownEndTime || now >= chest.cooldownEndTime) {
+    return; // No cooldown, don't draw progress bar
+  }
+  
+  const cooldownDuration = 60000; // 60 seconds
+  const elapsed = now - (chest.cooldownEndTime - cooldownDuration);
+  const progress = Math.max(0, Math.min(1, elapsed / cooldownDuration));
+  
+  const barWidth = 40 * p;
+  const barHeight = 4 * p;
+  const barX = x - barWidth / 2;
+  const barY = y + 20 * p; // Below chest
+  
+  // Background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(barX, barY, barWidth, barHeight);
+  
+  // Progress fill (amber to gold gradient)
+  const gradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
+  gradient.addColorStop(0, '#f59e0b'); // Amber
+  gradient.addColorStop(1, '#fbbf24'); // Gold
+  ctx.fillStyle = gradient;
+  ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+  
+  // Border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.lineWidth = 1 * p;
+  ctx.strokeRect(barX, barY, barWidth, barHeight);
+}
+
+// Check if a click is on a treasure chest
+export function getClickedTreasureChest(worldX: number, worldY: number, chests: TreasureChest[]): TreasureChest | null {
+  const p = SCALE;
+  const clickRadius = 20 * p; // Click detection radius
+  
+  for (const chest of chests) {
+    const chestX = chest.x * SCALE;
+    const chestY = chest.y * SCALE;
+    const dx = worldX - chestX;
+    const dy = worldY - chestY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < clickRadius) {
+      return chest;
+    }
+  }
+  return null;
+}
+
+// Check if player is within activation range of a treasure chest
+export function isPlayerInChestRange(playerX: number, playerY: number, chest: TreasureChest): boolean {
+  const p = SCALE;
+  const activationRadius = 20 * p;
+  
+  const chestX = chest.x * SCALE;
+  const chestY = chest.y * SCALE;
+  
+  const scaledPlayerX = playerX * SCALE;
+  const scaledPlayerY = playerY * SCALE;
+  
+  const dx = scaledPlayerX - chestX;
+  const dy = scaledPlayerY - chestY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  return dist < activationRadius;
+}
+
+// Check if mouse is hovering over a treasure chest
+export function getHoveredTreasureChest(worldX: number, worldY: number, chests: TreasureChest[]): TreasureChest | null {
+  return getClickedTreasureChest(worldX, worldY, chests);
+}
+
+// Draw treasure chest speech bubble (for cooldown messages)
+export function drawTreasureChestSpeechBubble(ctx: CanvasRenderingContext2D, chest: TreasureChest, time: number, zoom: number = 1): void {
+  // Speech bubble removed - using progress bar instead
+  return;
+  
+  ctx.save();
+  
+  // Scale with zoom
+  ctx.scale(1 / zoom, 1 / zoom);
+  const scaledX = x * zoom;
+  const scaledY = y * zoom;
+  
+  // Bubble position (above chest)
+  const bubbleX = scaledX;
+  const bubbleY = scaledY - 30 * p * zoom;
+  
+  // Bubble size
+  const padding = 6 * p * zoom;
+  const fontSize = 10 * p * zoom;
+  ctx.font = `${fontSize}px monospace`;
+  const textMetrics = ctx.measureText(message);
+  const textWidth = textMetrics.width;
+  const bubbleWidth = textWidth + padding * 2;
+  const bubbleHeight = fontSize + padding * 2;
+  
+  // Draw bubble background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+  ctx.lineWidth = 2 * p * zoom;
+  
+  // Rounded rectangle
+  const radius = 4 * p * zoom;
+  ctx.beginPath();
+  ctx.moveTo(bubbleX - bubbleWidth / 2 + radius, bubbleY - bubbleHeight / 2);
+  ctx.lineTo(bubbleX + bubbleWidth / 2 - radius, bubbleY - bubbleHeight / 2);
+  ctx.quadraticCurveTo(bubbleX + bubbleWidth / 2, bubbleY - bubbleHeight / 2, bubbleX + bubbleWidth / 2, bubbleY - bubbleHeight / 2 + radius);
+  ctx.lineTo(bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2 - radius);
+  ctx.quadraticCurveTo(bubbleX + bubbleWidth / 2, bubbleY + bubbleHeight / 2, bubbleX + bubbleWidth / 2 - radius, bubbleY + bubbleHeight / 2);
+  ctx.lineTo(bubbleX - bubbleWidth / 2 + radius, bubbleY + bubbleHeight / 2);
+  ctx.quadraticCurveTo(bubbleX - bubbleWidth / 2, bubbleY + bubbleHeight / 2, bubbleX - bubbleWidth / 2, bubbleY + bubbleHeight / 2 - radius);
+  ctx.lineTo(bubbleX - bubbleWidth / 2, bubbleY - bubbleHeight / 2 + radius);
+  ctx.quadraticCurveTo(bubbleX - bubbleWidth / 2, bubbleY - bubbleHeight / 2, bubbleX - bubbleWidth / 2 + radius, bubbleY - bubbleHeight / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  
+  // Draw text
+  ctx.fillStyle = '#FFD700';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(message, bubbleX, bubbleY);
+  
+  ctx.restore();
 }
 
 // ============ PET RENDERING ============

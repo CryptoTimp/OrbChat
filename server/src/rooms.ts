@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
-import { Room, PlayerWithChat, Orb, GAME_CONSTANTS, MapType, OrbType, RoomInfo, Shrine, TreeState } from './types';
+import { Room, PlayerWithChat, Orb, GAME_CONSTANTS, MapType, OrbType, RoomInfo, Shrine, TreasureChest, TreeState } from './types';
 import * as players from './players';
 
 // Global room IDs that persist even when empty
@@ -19,6 +19,7 @@ export function createRoom(roomId: string, mapType: MapType = 'cafe', isPrivate:
     players: new Map(),
     orbs: [],
     shrines: mapType === 'forest' ? generateShrinesForRoom(roomId, mapType) : [],
+    treasureChests: mapType === 'forest' ? generateTreasureChestsForRoom(roomId, mapType) : [],
     treeStates: new Map(),
     mapType,
     isPrivate,
@@ -43,11 +44,22 @@ export function getOrCreateRoom(roomId: string, mapType?: MapType, isPrivate: bo
       } else if (mapType !== 'forest') {
         room.shrines = [];
       }
+      // Regenerate treasure chests if switching to/from forest
+      if (mapType === 'forest' && (!room.treasureChests || room.treasureChests.length === 0)) {
+        room.treasureChests = generateTreasureChestsForRoom(roomId, mapType);
+      } else if (mapType !== 'forest') {
+        room.treasureChests = [];
+      }
     }
     // Ensure existing forest rooms have shrines (in case they were created before shrine code was added)
     if (room.mapType === 'forest' && (!room.shrines || room.shrines.length === 0)) {
       room.shrines = generateShrinesForRoom(roomId, room.mapType);
       console.log(`Generated ${room.shrines.length} shrines for existing forest room: ${roomId}`);
+    }
+    // Ensure existing forest rooms have treasure chests
+    if (room.mapType === 'forest' && (!room.treasureChests || room.treasureChests.length === 0)) {
+      room.treasureChests = generateTreasureChestsForRoom(roomId, room.mapType);
+      console.log(`Generated ${room.treasureChests.length} treasure chests for existing forest room: ${roomId}`);
     }
     // Never change privacy settings of existing room - they are set once on creation
   }
@@ -343,6 +355,84 @@ export function generateShrinesForRoom(roomId: string, mapType: MapType): Shrine
   return shrines;
 }
 
+// Generate treasure chests for a forest room (deep in forests, far from center)
+export function generateTreasureChestsForRoom(roomId: string, mapType: MapType): TreasureChest[] {
+  if (mapType !== 'forest') {
+    return [];
+  }
+
+  const TILE_SIZE = GAME_CONSTANTS.TILE_SIZE;
+  const chests: TreasureChest[] = [];
+  
+  // Get forest path tiles
+  const pathTiles = generateForestSpawnZones();
+  const pathList = Array.from(pathTiles).map(s => {
+    const [x, y] = s.split(',').map(Number);
+    return { x, y };
+  });
+
+  if (pathList.length === 0) {
+    return [];
+  }
+
+  // Generate 3-6 random treasure chests (fewer than shrines)
+  const chestCount = 3 + Math.floor(Math.random() * 4); // 3-6 chests
+  
+  // Minimum distance between chests (in tiles)
+  const minDistance = 20;
+  const placedPositions: Array<{ x: number; y: number }> = [];
+  
+  // Plaza exclusion - chests should be DEEP in forests, far from center
+  const fountainCenterTileX = GAME_CONSTANTS.MAP_WIDTH / 2;
+  const fountainCenterTileY = GAME_CONSTANTS.MAP_HEIGHT / 2;
+  const minDistanceFromPlaza = 50; // Chests must be at least 50 tiles from fountain center (deep in forests)
+
+  for (let i = 0; i < chestCount && i < pathList.length; i++) {
+    let attempts = 0;
+    let placed = false;
+
+    while (attempts < 100 && !placed) {
+      // Pick a random path tile
+      const tile = pathList[Math.floor(Math.random() * pathList.length)];
+      
+      // Add some randomness within the tile
+      const x = tile.x * TILE_SIZE + Math.random() * TILE_SIZE;
+      const y = tile.y * TILE_SIZE + Math.random() * TILE_SIZE;
+      
+      // Convert to tile coordinates for plaza check
+      const tileX = x / TILE_SIZE;
+      const tileY = y / TILE_SIZE;
+      
+      // Check if position is far enough from plaza (deep in forests)
+      const dx = tileX - fountainCenterTileX;
+      const dy = tileY - fountainCenterTileY;
+      const distToPlaza = Math.sqrt(dx * dx + dy * dy);
+      const isFarEnoughFromPlaza = distToPlaza >= minDistanceFromPlaza;
+
+      // Check minimum distance from other chests
+      const tooClose = placedPositions.some(pos => {
+        const dx = (x - pos.x) / TILE_SIZE;
+        const dy = (y - pos.y) / TILE_SIZE;
+        return Math.sqrt(dx * dx + dy * dy) < minDistance;
+      });
+
+      // Only place if far from plaza (deep in forests) and not too close to other chests
+      if (isFarEnoughFromPlaza && !tooClose) {
+        chests.push({
+          id: `treasure_chest_${roomId}_${i}`,
+          x: Math.floor(x),
+          y: Math.floor(y),
+        });
+        placedPositions.push({ x, y });
+        placed = true;
+      }
+      attempts++;
+    }
+  }
+
+  return chests;
+}
+
 // Cache forest spawn zones
 const forestSpawnZones = generateForestSpawnZones();
 const forestSpawnList = Array.from(forestSpawnZones).map(s => {
@@ -467,6 +557,12 @@ export function getShrine(roomId: string, shrineId: string): Shrine | null {
   const room = rooms.get(roomId);
   if (!room) return null;
   return room.shrines.find(s => s.id === shrineId) || null;
+}
+
+export function getTreasureChest(roomId: string, chestId: string): TreasureChest | null {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  return room.treasureChests.find(c => c.id === chestId) || null;
 }
 
 // Interact with a shrine
@@ -620,11 +716,129 @@ export async function interactWithShrine(
   }
 }
 
+// Interact with a treasure chest
+export async function interactWithTreasureChest(
+  roomId: string,
+  chestId: string,
+  playerId: string,
+  firebaseOrbs?: number
+): Promise<{ success: boolean; message: string; coinsFound?: number }> {
+  const room = rooms.get(roomId);
+  if (!room) {
+    return { success: false, message: 'Room not found' };
+  }
+
+  const chest = room.treasureChests.find(c => c.id === chestId);
+  if (!chest) {
+    return { success: false, message: 'Treasure chest not found' };
+  }
+
+  // Check if player has enough orbs (500k requirement)
+  const player = room.players.get(playerId);
+  if (!player) {
+    return { success: false, message: 'Player not found' };
+  }
+
+  const MIN_ORBS_REQUIRED = 500000;
+  // Use Firebase balance from client if provided
+  let playerOrbs = player.orbs || 0;
+  let usedFirebase = false;
+  
+  if (firebaseOrbs !== undefined && firebaseOrbs !== null) {
+    playerOrbs = firebaseOrbs;
+    usedFirebase = true;
+    player.orbs = playerOrbs;
+    console.log(`[TreasureChest] Player ${playerId} has ${playerOrbs} orbs (from client Firebase poll), required: ${MIN_ORBS_REQUIRED}`);
+  } else {
+    try {
+      const { getUserData } = await import('./firebase');
+      const userData = await getUserData(playerId);
+      if (userData?.orbs !== undefined && userData.orbs !== null) {
+        playerOrbs = userData.orbs;
+        usedFirebase = true;
+        player.orbs = playerOrbs;
+      }
+    } catch (error: any) {
+      console.warn(`[TreasureChest] Failed to get Firebase orb balance for player ${playerId}, using room state:`, error?.message || error);
+      playerOrbs = player.orbs || 0;
+    }
+    console.log(`[TreasureChest] Player ${playerId} has ${playerOrbs} orbs (${usedFirebase ? 'from server Firebase poll' : 'from room state'}), required: ${MIN_ORBS_REQUIRED}`);
+  }
+  
+  if (playerOrbs < MIN_ORBS_REQUIRED) {
+    return { 
+      success: false, 
+      message: 'You do not have enough orbs to open this chest (500k required)'
+    };
+  }
+
+  const now = Date.now();
+  const COOLDOWN_DURATION = 60000; // 60 seconds (1 minute)
+
+  // Check cooldown
+  if (chest.cooldownEndTime && now < chest.cooldownEndTime) {
+    const remaining = Math.ceil((chest.cooldownEndTime - now) / 1000);
+    return { 
+      success: false, 
+      message: `Treasure chest is on cooldown. ${remaining}s remaining.`
+    };
+  }
+
+  // Update chest cooldown
+  chest.cooldownEndTime = now + COOLDOWN_DURATION;
+
+  // 80% chance to find coins, 20% chance empty
+  const roll = Math.random();
+  const foundCoins = roll < 0.80;
+
+  if (foundCoins) {
+    // Random 10-100 coins
+    const coinsFound = 10 + Math.floor(Math.random() * 91); // 10-100 inclusive
+
+    const messages = [
+      'You found gold coins!',
+      'Treasure discovered!',
+      'Gold glimmers in the chest!',
+      'A fortune awaits!',
+      'Coins sparkle before you!',
+    ];
+    const message = messages[Math.floor(Math.random() * messages.length)];
+
+    return {
+      success: true,
+      message,
+      coinsFound,
+    };
+  } else {
+    const messages = [
+      'The chest is empty...',
+      'Nothing but dust inside...',
+      'The chest was already looted...',
+      'No treasure found...',
+      'Empty...',
+    ];
+    const message = messages[Math.floor(Math.random() * messages.length)];
+
+    return {
+      success: true,
+      message,
+      coinsFound: 0,
+    };
+  }
+}
+
 // Get shrines in a room
 export function getShrinesInRoom(roomId: string): Shrine[] {
   const room = rooms.get(roomId);
   if (!room) return [];
   return [...room.shrines];
+}
+
+// Get treasure chests in a room
+export function getTreasureChestsInRoom(roomId: string): TreasureChest[] {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  return [...room.treasureChests];
 }
 
 // Tree state management

@@ -2,7 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useGameStore } from '../state/gameStore';
 import { Direction, InventoryItem } from '../types';
-import { updateUserOrbs, getUserProfile, updateEquippedItems, addToInventory } from '../firebase/auth';
+import { updateUserOrbs, getUserProfile, updateEquippedItems, addToInventory, updateGoldCoins } from '../firebase/auth';
 import { ref, set } from 'firebase/database';
 import { database } from '../firebase/config';
 import { addNotification } from '../ui/Notifications';
@@ -108,9 +108,8 @@ function attachListeners(sock: Socket) {
   });
   
   // Room state events
-  sock.on('room_state', async ({ roomId, players, orbs, shrines, treeStates, yourPlayerId, mapType }) => {
+  sock.on('room_state', async ({ roomId, players, orbs, shrines, treasureChests, treeStates, yourPlayerId, mapType }) => {
     console.log('Received room_state:', roomId, 'players:', players?.length || 0, 'yourPlayerId:', yourPlayerId, 'map:', mapType);
-    console.log('Shrines received:', shrines?.length || 0, shrines);
     console.log('Tree states received:', treeStates?.length || 0);
     console.log('Player list:', players?.map((p: any) => `${p.name} (${p.id})`) || 'NO PLAYERS');
     
@@ -154,7 +153,7 @@ function attachListeners(sock: Socket) {
     const localPlayerToUse = yourPlayerId ? ourPlayer : (store.localPlayer || ourPlayer);
     
     // Set room state with explicit localPlayer - this should set ALL players
-    store.setRoomStateWithLocalPlayer(players, orbs, shrines || [], localPlayerToUse, treeStates);
+    store.setRoomStateWithLocalPlayer(players, orbs, shrines || [], localPlayerToUse, treasureChests || [], treeStates);
     
     // Verify players were set
     const afterState = useGameStore.getState();
@@ -484,6 +483,73 @@ function attachListeners(sock: Socket) {
   });
   
   // Shrine interaction errors (non-critical, don't disconnect)
+  sock.on('treasure_chest_opened', ({ chestId, chest, message, coinsFound }) => {
+    console.log('[useSocket] treasure_chest_opened received:', { chestId, coinsFound, message, chest });
+    const state = useGameStore.getState();
+    
+    // Update chest state
+    if (chest) {
+      state.updateTreasureChest(chestId, chest);
+    } else {
+      console.error('[useSocket] No chest object received in treasure_chest_opened event');
+    }
+    
+    // Store coins found in global variable as fallback (in case event fires before modal listens)
+    (window as any).__lastTreasureChestCoins = coinsFound || 0;
+    
+    // Dispatch custom event immediately (listener is always active)
+    const event = new CustomEvent('treasureChestOpened', { 
+      detail: { coinsFound: coinsFound || 0 } 
+    });
+    console.log('[useSocket] Dispatching treasureChestOpened event:', event.detail);
+    window.dispatchEvent(event);
+    
+    // Show modal after dispatching event
+    if (chest) {
+      console.log('[useSocket] Setting selected chest and opening modal');
+      state.setSelectedTreasureChest(chest);
+      state.toggleTreasureChestModal();
+      console.log('[useSocket] Modal state after toggle:', state.treasureChestModalOpen);
+    } else {
+      console.error('[useSocket] Cannot open modal: no chest object');
+    }
+    
+    // Clear interaction in progress flag (use setTimeout to ensure GameCanvas can access it)
+    setTimeout(() => {
+      // Access the ref through window or a global store
+      if ((window as any).__chestInteractionInProgress) {
+        (window as any).__chestInteractionInProgress.delete(chestId);
+      }
+    }, 100);
+    
+    // Don't show notification - the modal will display the result
+  });
+  
+  sock.on('treasure_chest_interaction_error', async ({ chestId, message }) => {
+    console.log(`[TreasureChest] Interaction error for chest ${chestId}:`, message);
+    addNotification(message, 'error');
+    
+    // Clear interaction in progress flag
+    setTimeout(() => {
+      if ((window as any).__chestInteractionInProgress) {
+        (window as any).__chestInteractionInProgress.delete(chestId);
+      }
+    }, 100);
+  });
+  
+  sock.on('gold_coins_sold', ({ playerId, coinCount, orbsReceived, newBalance }) => {
+    const state = useGameStore.getState();
+    
+    // Update player orbs
+    state.updatePlayerOrbs(playerId, newBalance);
+    if (state.localPlayer && state.localPlayer.id === playerId) {
+      state.localPlayer.orbs = newBalance;
+    }
+    
+    // Show notification
+    addNotification(`Sold ${coinCount} gold coins for ${orbsReceived.toLocaleString()} orbs!`, 'success');
+  });
+  
   sock.on('shrine_interaction_error', async ({ shrineId, message }) => {
     const state = useGameStore.getState();
     
@@ -495,8 +561,6 @@ function attachListeners(sock: Socket) {
     // Show error message on shrine speech bubble
     setShrineSpeechBubble(shrineId, message);
     playShrineRejectionSound();
-    
-    console.log('Shrine interaction error (non-critical):', message);
   });
   
   // Tree state events
@@ -1308,6 +1372,82 @@ export function useSocket() {
       }
     }
   }, []);
+
+  const interactWithTreasureChest = useCallback(async (chestId: string) => {
+    console.log('[interactWithTreasureChest] Called with chestId:', chestId);
+    const sock = getOrCreateSocket();
+    if (!sock.connected) {
+      console.error('Cannot interact with treasure chest: socket not connected');
+      return;
+    }
+
+    const state = useGameStore.getState();
+    const playerId = state.playerId;
+    if (!playerId) {
+      console.error('Cannot interact with treasure chest: no player ID');
+      return;
+    }
+
+    try {
+      // Poll Firebase for current orbs (source of truth)
+      const profile = await getUserProfile(playerId);
+      const firebaseOrbs = profile?.orbs || 0;
+      console.log('[interactWithTreasureChest] Firebase orbs:', firebaseOrbs, 'emitting treasure_chest_interact');
+
+      // Emit interaction with Firebase orbs
+      sock.emit('treasure_chest_interact', { chestId, firebaseOrbs });
+      console.log('[interactWithTreasureChest] Event emitted successfully');
+    } catch (error) {
+      console.error('Failed to get Firebase orbs for treasure chest interaction:', error);
+      // Still try to interact with room state orbs as fallback
+      const localPlayer = state.localPlayer;
+      const fallbackOrbs = localPlayer?.orbs || 0;
+      console.log('[interactWithTreasureChest] Using fallback orbs:', fallbackOrbs);
+      sock.emit('treasure_chest_interact', { chestId, firebaseOrbs: fallbackOrbs });
+    }
+  }, []);
+
+  const sellGoldCoins = useCallback(async () => {
+    const sock = getOrCreateSocket();
+    if (sock.connected) {
+      const state = useGameStore.getState();
+      const playerId = state.playerId;
+      
+      if (playerId) {
+        // Get current gold coins from Firebase
+        const profile = await getUserProfile(playerId);
+        if (profile) {
+          const coinCount = profile.gold_coins || 0;
+          
+          if (coinCount > 0) {
+            // Calculate orbs to receive
+            const orbsPerCoin = 1000;
+            const orbsReceived = coinCount * orbsPerCoin;
+            const currentOrbs = profile.orbs || 0;
+            const newOrbs = currentOrbs + orbsReceived;
+            
+            // Update Firebase: set gold_coins to 0, add orbs
+            await Promise.all([
+              updateUserOrbs(playerId, newOrbs),
+              updateGoldCoins(playerId, 0),
+            ]);
+            
+            // Update local state
+            state.updatePlayerOrbs(playerId, newOrbs);
+            if (state.localPlayer) {
+              state.localPlayer.orbs = newOrbs;
+            }
+            
+            // Send coin count and orbs received to server for broadcasting
+            sock.emit('sell_gold_coins', { coinCount, orbsReceived });
+          } else {
+            // No coins to sell - let server handle the error message
+            sock.emit('sell_gold_coins', { coinCount: 0, orbsReceived: 0 });
+          }
+        }
+      }
+    }
+  }, []);
   
   return {
     socket: getOrCreateSocket(),
@@ -1326,6 +1466,8 @@ export function useSocket() {
     cancelCuttingTree,
     sellItem,
     sellLogs,
+    interactWithTreasureChest,
+    sellGoldCoins,
   };
 }
 

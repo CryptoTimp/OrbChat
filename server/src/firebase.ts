@@ -19,27 +19,18 @@ if (!admin.apps.length) {
       firebaseInitialized = true;
       console.log('Firebase Admin SDK initialized with service account');
     } else {
-      // Try to initialize with application default credentials
-      admin.initializeApp({
-        projectId: 'pixelapp-c8fa3',
-        databaseURL: 'https://pixelapp-c8fa3-default-rtdb.europe-west1.firebasedatabase.app',
-      });
-      firebaseInitialized = true;
-      console.log('Firebase Admin SDK initialized (using default credentials)');
+      // Don't try to initialize with default credentials if service account doesn't exist
+      // This prevents credential warnings when Firebase isn't properly configured
+      console.warn('Firebase Admin SDK: serviceAccountKey.json not found');
+      console.warn('Server will continue but Firebase operations will be skipped.');
+      console.warn('To enable Firebase: Download service account key from Firebase Console and save as server/serviceAccountKey.json');
+      firebaseInitialized = false;
     }
   } catch (error: any) {
     console.warn('Firebase Admin SDK initialization failed:', error.message);
-    console.warn('Server will continue but Firebase operations may fail.');
+    console.warn('Server will continue but Firebase operations will be skipped.');
     console.warn('To fix: Download service account key from Firebase Console and save as server/serviceAccountKey.json');
-    // Initialize with minimal config to prevent further errors
-    try {
-      admin.initializeApp({
-        projectId: 'pixelapp-c8fa3',
-        databaseURL: 'https://pixelapp-c8fa3-default-rtdb.europe-west1.firebasedatabase.app',
-      }, 'fallback');
-    } catch (e) {
-      // Ignore if already initialized
-    }
+    firebaseInitialized = false;
   }
 }
 
@@ -65,9 +56,24 @@ export async function getUserData(uid: string) {
       console.warn('Firebase Admin SDK not initialized, cannot get user data');
       return null;
     }
-    const snapshot = await firebaseDb.ref(`users/${uid}`).once('value');
-    return snapshot.val();
+    // Check if database is actually available (not just initialized)
+    try {
+      const snapshot = await firebaseDb.ref(`users/${uid}`).once('value');
+      return snapshot.val();
+    } catch (dbError: any) {
+      // If database access fails due to credentials, return null gracefully
+      if (dbError.code === 'app/invalid-credential' || dbError.message?.includes('credential')) {
+        console.warn('Firebase credentials not available, skipping database operation');
+        return null;
+      }
+      throw dbError;
+    }
   } catch (error: any) {
+    // Don't log credential errors as errors, just warnings
+    if (error.code === 'app/invalid-credential' || error.message?.includes('credential')) {
+      console.warn('Firebase credentials not available:', error.message);
+      return null;
+    }
     console.error('Error getting user data:', error.message);
     return null;
   }
@@ -143,6 +149,64 @@ export async function updateUserEquippedItems(uid: string, equippedItems: string
   } catch (error) {
     console.error('Error updating equipped items:', error);
     return false;
+  }
+}
+
+// Update gold coins in Firebase Database
+export async function updateGoldCoins(uid: string, amount: number): Promise<boolean> {
+  try {
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot update gold coins');
+      return false;
+    }
+    try {
+      await firebaseDb.ref(`users/${uid}/gold_coins`).set(amount);
+      return true;
+    } catch (dbError: any) {
+      // If database access fails due to credentials, return false gracefully
+      if (dbError.code === 'app/invalid-credential' || dbError.message?.includes('credential')) {
+        console.warn('Firebase credentials not available, skipping gold coins update');
+        return false;
+      }
+      throw dbError;
+    }
+  } catch (error: any) {
+    // Don't log credential errors as errors, just warnings
+    if (error.code === 'app/invalid-credential' || error.message?.includes('credential')) {
+      console.warn('Firebase credentials not available:', error.message);
+      return false;
+    }
+    console.error('Error updating gold coins:', error);
+    return false;
+  }
+}
+
+// Get gold coins from Firebase Database
+export async function getGoldCoins(uid: string): Promise<number> {
+  try {
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot get gold coins');
+      return 0;
+    }
+    try {
+      const snapshot = await firebaseDb.ref(`users/${uid}/gold_coins`).once('value');
+      return snapshot.val() || 0;
+    } catch (dbError: any) {
+      // If database access fails due to credentials, return 0 gracefully
+      if (dbError.code === 'app/invalid-credential' || dbError.message?.includes('credential')) {
+        console.warn('Firebase credentials not available, skipping gold coins read');
+        return 0;
+      }
+      throw dbError;
+    }
+  } catch (error: any) {
+    // Don't log credential errors as errors, just warnings
+    if (error.code === 'app/invalid-credential' || error.message?.includes('credential')) {
+      console.warn('Firebase credentials not available:', error.message);
+      return 0;
+    }
+    console.error('Error getting gold coins:', error);
+    return 0;
   }
 }
 
