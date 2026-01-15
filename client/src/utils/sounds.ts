@@ -167,3 +167,13 @@ export const playLevelUpSound = () => {
     });
   }
 };
+
+// Play the sell item sound
+export const playSellSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/purchase-success-384963.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch(() => {});
+  }
+};

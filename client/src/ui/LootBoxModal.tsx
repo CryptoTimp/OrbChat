@@ -50,7 +50,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   const toggleShop = useGameStore(state => state.toggleShop);
   const setSelectedLootBox = useGameStore(state => state.setSelectedLootBox);
   const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
-  const { purchaseLootBox } = useSocket();
+  const { purchaseLootBox, sellItem } = useSocket();
   
   // Generate all available loot boxes (with correct filtering)
   const allLootBoxes = useMemo(() => {
@@ -653,6 +653,26 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     });
   }, [currentLootBox, canAfford, isOpening, normalizedItems, scrollPosition, selectRandomItem, inventory, purchaseLootBox]);
   
+  // Handle selling an item from the loot box result
+  const handleSell = useCallback(async (item: ShopItem) => {
+    playClickSound();
+    const sellPrice = Math.floor(item.price * 0.5);
+    const setConfirmModal = useGameStore.getState().setConfirmModal;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Sell Item',
+      message: `Sell ${item.name} for ${sellPrice.toLocaleString()} orbs (50% of ${item.price.toLocaleString()})?`,
+      onConfirm: async () => {
+        await sellItem(item.id);
+        // After selling, clear the selected item so the UI updates
+        setSelectedItem(null);
+        pendingSelectedItemRef.current = null;
+      },
+      confirmText: 'Sell',
+      confirmColor: 'red',
+    });
+  }, [sellItem]);
+  
   // Reset state when loot box changes (only when switching to a different loot box)
   useEffect(() => {
     if (currentLootBox) {
@@ -967,9 +987,18 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                         </p>
                       </div>
                       {isItemOwned ? (
-                        <p className="text-yellow-400 font-pixel text-xs mt-2 text-center">
-                          ⚠️ You already own this item!
-                        </p>
+                        <div className="mt-2 text-center">
+                          <p className="text-yellow-400 font-pixel text-xs mb-2">
+                            ⚠️ You already own this item!
+                          </p>
+                          <button
+                            onClick={() => handleSell(displayItem)}
+                            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-pixel text-xs rounded-lg transition-colors flex items-center gap-1.5 mx-auto"
+                          >
+                            <span>$</span>
+                            <span>Sell for {Math.floor(displayItem.price * 0.5).toLocaleString()} orbs</span>
+                          </button>
+                        </div>
                       ) : (
                         <p className="text-gray-300 font-pixel text-xs mt-2 text-center">
                           You received a {displayItem.rarity || 'common'} item!

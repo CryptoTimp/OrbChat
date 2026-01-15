@@ -134,6 +134,11 @@ export interface ClientToServerEvents {
   complete_cutting_tree: (data: { treeId: string }) => void;
   cancel_cutting_tree: (data: { treeId: string }) => void;
   sell_logs: (data?: { logCount?: number; orbsReceived?: number }) => void;
+  sell_item: (data: { 
+    itemId: string; 
+    newOrbs?: number;  // Client sends updated orbs after Firebase update
+    newInventory?: string[];  // Client sends updated inventory
+  }) => void;
 }
 
 // Socket Events - Server to Client

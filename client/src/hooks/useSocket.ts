@@ -6,7 +6,7 @@ import { updateUserOrbs, getUserProfile, updateEquippedItems, addToInventory } f
 import { ref, set } from 'firebase/database';
 import { database } from '../firebase/config';
 import { addNotification } from '../ui/Notifications';
-import { playPickupSound, playShrineRejectionSound, playShrineRewardSound } from '../utils/sounds';
+import { playPickupSound, playShrineRejectionSound, playShrineRewardSound, playSellSound } from '../utils/sounds';
 import { setShrineSpeechBubble } from '../game/renderer';
 
 // Socket.IO server URL
@@ -1167,6 +1167,98 @@ export function useSocket() {
     }
   }, []);
   
+  const sellItem = useCallback(async (itemId: string) => {
+    const state = useGameStore.getState();
+    const playerId = state.playerId;
+    
+    if (!playerId) {
+      console.error('Cannot sell item: no player ID');
+      return;
+    }
+    
+    // Find the shop item to get price
+    const shopItem = state.shopItems.find(item => item.id === itemId);
+    if (!shopItem) {
+      console.error('Item not found in shop:', itemId);
+      return;
+    }
+    
+    // Check if user owns the item
+    const ownsItem = state.inventory.some(inv => inv.itemId === itemId);
+    if (!ownsItem) {
+      console.log('Item not owned');
+      return;
+    }
+    
+    // Calculate sell price (50% of original price)
+    const sellPrice = Math.floor(shopItem.price * 0.5);
+    
+    try {
+      // Get current profile from Firebase
+      const profile = await getUserProfile(playerId);
+      if (!profile) {
+        console.error('User profile not found');
+        return;
+      }
+      
+      // Check if item is in Firebase inventory
+      const firebaseInventory = profile.inventory || [];
+      if (!firebaseInventory.includes(itemId)) {
+        console.log('Item not in Firebase inventory');
+        return;
+      }
+      
+      // Update Firebase: add orbs and remove from inventory
+      const firebaseOrbs = profile.orbs || 0;
+      const newOrbs = firebaseOrbs + sellPrice;
+      const newInventory = firebaseInventory.filter(id => id !== itemId);
+      
+      // Also remove from equipped items if it was equipped
+      const firebaseEquippedItems = profile.equippedItems || [];
+      const newEquippedItems = firebaseEquippedItems.filter(id => id !== itemId);
+      
+      await Promise.all([
+        updateUserOrbs(playerId, newOrbs),
+        set(ref(database, `users/${playerId}/inventory`), newInventory),
+        updateEquippedItems(playerId, newEquippedItems),
+      ]);
+      
+      // Update local state
+      const currentInventory = state.inventory;
+      const newInventoryItems: InventoryItem[] = newInventory.map(id => {
+        const existingItem = currentInventory.find(inv => inv.itemId === id);
+        return {
+          playerId,
+          itemId: id,
+          equipped: existingItem?.equipped || false,
+        };
+      });
+      
+      state.setInventory(newInventoryItems, newOrbs);
+      
+      // Update local player orbs
+      if (state.localPlayer) {
+        state.localPlayer.orbs = newOrbs;
+      }
+      
+      // Notify server with updated values so it can update room state
+      const sock = getOrCreateSocket();
+      if (sock.connected) {
+        sock.emit('sell_item', { itemId, newOrbs, newInventory });
+      }
+      
+      console.log('Item sold successfully:', itemId, 'received:', sellPrice, 'new orbs:', newOrbs);
+      
+      // Play sell sound
+      playSellSound();
+      
+      // Sync from Firebase to ensure consistency (source of truth)
+      await syncOrbsFromFirebase(playerId);
+    } catch (error) {
+      console.error('Sell failed:', error);
+    }
+  }, []);
+  
   const sellLogs = useCallback(async () => {
     const sock = getOrCreateSocket();
     if (sock.connected) {
@@ -1232,6 +1324,7 @@ export function useSocket() {
     startCuttingTree,
     completeCuttingTree,
     cancelCuttingTree,
+    sellItem,
     sellLogs,
   };
 }

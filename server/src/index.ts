@@ -460,6 +460,30 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     }
   });
 
+  // Handle item sale (client does Firebase update, server just validates and updates room state)
+  socket.on('sell_item', async (data: { itemId: string; newOrbs?: number; newInventory?: string[] }) => {
+    const { itemId, newOrbs } = data;
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+
+    const { playerId, roomId } = mapping;
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    
+    if (player) {
+      // Update player's orbs in room state and database (client already updated Firebase)
+      if (typeof newOrbs === 'number') {
+        // Update database to keep it in sync
+        await players.updatePlayerOrbs(playerId, newOrbs);
+        // Update room state
+        player.orbs = newOrbs;
+        // Broadcast orb update to all players in the room
+        io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newOrbs });
+      }
+      
+      console.log(`Player ${player.name} sold item ${itemId}, new balance: ${newOrbs}`);
+    }
+  });
+
   // Handle loot box purchase (client does Firebase update, server just validates and updates room state)
   socket.on('purchase_lootbox', async (data: { lootBoxId: string; itemId: string; newOrbs?: number; newInventory?: string[]; alreadyOwned?: boolean }) => {
     const { itemId, newOrbs } = data;

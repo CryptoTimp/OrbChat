@@ -12,6 +12,7 @@ import { JoinScreen } from './ui/JoinScreen';
 import { AuthScreen } from './ui/AuthScreen';
 import { Notifications } from './ui/Notifications';
 import { MusicManager } from './ui/MusicManager';
+import { ConfirmModal } from './ui/ConfirmModal';
 import { useSocket } from './hooks/useSocket';
 import { useGameStore } from './state/gameStore';
 import { onAuthChange, getCurrentUser } from './firebase/auth';
@@ -126,6 +127,9 @@ function App() {
       
       {/* Notifications */}
       <Notifications />
+      
+      {/* Confirm Modal */}
+      <ConfirmModal />
     </div>
   );
 }

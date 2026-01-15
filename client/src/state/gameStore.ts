@@ -43,6 +43,16 @@ interface GameState {
   settingsOpen: boolean;
   buyOrbsOpen: boolean;
   logDealerOpen: boolean;
+  confirmModal: {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+    confirmColor?: 'red' | 'green' | 'amber';
+  };
   
   // Audio state
   musicEnabled: boolean;
@@ -89,6 +99,7 @@ interface GameState {
   toggleSettings: () => void;
   toggleBuyOrbs: () => void;
   toggleLogDealer: () => void;
+  setConfirmModal: (modal: GameState['confirmModal']) => void;
   
   // Audio actions
   setMusicEnabled: (enabled: boolean) => void;
@@ -171,6 +182,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   settingsOpen: false,
   buyOrbsOpen: false,
   logDealerOpen: false,
+  confirmModal: {
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  },
   
   // Audio state (loaded from localStorage)
   ...getStoredAudioSettings(),
@@ -470,6 +487,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   toggleSettings: () => set({ settingsOpen: !get().settingsOpen }),
   toggleBuyOrbs: () => set({ buyOrbsOpen: !get().buyOrbsOpen }),
   toggleLogDealer: () => set({ logDealerOpen: !get().logDealerOpen }),
+  setConfirmModal: (modal) => set({ confirmModal: modal }),
   
   // Audio actions
   setMusicEnabled: (enabled) => {

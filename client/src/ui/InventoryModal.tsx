@@ -14,7 +14,7 @@ export function InventoryModal() {
   const shopItems = useGameStore(state => state.shopItems);
   const inventory = useGameStore(state => state.inventory);
   const localPlayer = useGameStore(state => state.localPlayer);
-  const { equipItem } = useSocket();
+  const { equipItem, sellItem } = useSocket();
   
   const [activeTab, setActiveTab] = useState<'all' | 'tools' | 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'>('all');
   const [rarityFilter, setRarityFilter] = useState<ItemRarity | null>(null);
@@ -98,6 +98,26 @@ export function InventoryModal() {
     setPreviewItem(prev => prev === itemId ? undefined : itemId);
   };
 
+  const handleSell = async (itemId: string) => {
+    playClickSound();
+    const shopItem = shopItems.find(item => item.id === itemId);
+    if (shopItem) {
+      const sellPrice = Math.floor(shopItem.price * 0.5);
+      const setConfirmModal = useGameStore.getState().setConfirmModal;
+      setConfirmModal({
+        isOpen: true,
+        title: 'Sell Item',
+        message: `Sell ${shopItem.name} for ${sellPrice.toLocaleString()} orbs (50% of ${shopItem.price.toLocaleString()})?`,
+        onConfirm: async () => {
+          await sellItem(itemId);
+        },
+        confirmText: 'Sell',
+        cancelText: 'Cancel',
+        confirmColor: 'red',
+      });
+    }
+  };
+
   const renderItem = (item: typeof ownedItems[0]) => {
     if (!item.details) return null;
     const rarityColor = RARITY_COLORS[item.details.rarity || 'common'];
@@ -164,6 +184,15 @@ export function InventoryModal() {
               `}
             >
               {item.equipped ? '✓' : 'Equip'}
+            </button>
+            
+            {/* Sell button */}
+            <button
+              onClick={() => handleSell(item.itemId)}
+              className="px-2 py-1.5 rounded font-pixel text-[10px] transition-colors bg-red-600 hover:bg-red-500 text-white"
+              title={`Sell for ${item.details ? Math.floor(item.details.price * 0.5).toLocaleString() : 0} orbs`}
+            >
+              $
             </button>
             
             {/* Preview button */}

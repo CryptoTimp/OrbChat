@@ -19,13 +19,14 @@ export function ShopModal() {
   const localPlayer = useGameStore(state => state.localPlayer);
   // Use direct selector for reactive orb balance updates
   const playerOrbs = useGameStore(state => state.localPlayer?.orbs || 0);
-  const { purchaseItem, purchaseLootBox, equipItem } = useSocket();
+  const { purchaseItem, purchaseLootBox, equipItem, sellItem } = useSocket();
   
   const [previewItem, setPreviewItem] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<'all' | 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | 'lootboxes'>('all');
   const selectedLootBox = useGameStore(state => state.selectedLootBox);
   const setSelectedLootBox = useGameStore(state => state.setSelectedLootBox);
   const [rarityFilter, setRarityFilter] = useState<ItemRarity | null>(null);
+  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'owned' | 'not-owned'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Generate loot boxes (reused from LootBoxesTab logic) - must be at top level with other hooks
@@ -191,18 +192,31 @@ export function ShopModal() {
         useGameStore.setState({ shopInitialTab: undefined, shopInitialRarity: undefined });
       }
       setSearchQuery('');
+      setOwnershipFilter('all');
     }
   }, [shopOpen, shopInitialTab, shopInitialRarity]);
   
   if (!shopOpen) return null;
   const equippedItems = inventory.filter(inv => inv.equipped).map(inv => inv.itemId);
   
-  // Filter by rarity and search query
+  // Helper functions for checking item ownership
+  const isOwned = (itemId: string) => inventory.some(inv => inv.itemId === itemId);
+  const isEquipped = (itemId: string) => inventory.some(inv => inv.itemId === itemId && inv.equipped);
+  
+  // Filter by rarity, ownership, and search query
   const filterItems = (items: ShopItem[]) => {
     let filtered = items;
     
     // Exclude godlike items from shop (only available in godlike cases)
     filtered = filtered.filter(item => (item.rarity || 'common') !== 'godlike');
+    
+    // Apply ownership filter
+    if (ownershipFilter === 'owned') {
+      filtered = filtered.filter(item => isOwned(item.id));
+    } else if (ownershipFilter === 'not-owned') {
+      filtered = filtered.filter(item => !isOwned(item.id));
+    }
+    // 'all' shows everything, no filter needed
     
     // Apply rarity filter
     if (rarityFilter) {
@@ -270,9 +284,6 @@ export function ShopModal() {
     });
   };
   
-  const isOwned = (itemId: string) => inventory.some(inv => inv.itemId === itemId);
-  const isEquipped = (itemId: string) => inventory.some(inv => inv.itemId === itemId && inv.equipped);
-  
   const handlePurchase = (item: ShopItem) => {
     if (playerOrbs >= item.price && !isOwned(item.id)) {
       playPurchaseSound();
@@ -283,6 +294,23 @@ export function ShopModal() {
   const handleEquip = (itemId: string, currentlyEquipped: boolean) => {
     playEquipSound();
     equipItem(itemId, !currentlyEquipped);
+  };
+
+  const handleSell = async (item: ShopItem) => {
+    playClickSound();
+    const sellPrice = Math.floor(item.price * 0.5);
+    const setConfirmModal = useGameStore.getState().setConfirmModal;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Sell Item',
+      message: `Sell ${item.name} for ${sellPrice.toLocaleString()} orbs (50% of ${item.price.toLocaleString()})?`,
+      onConfirm: async () => {
+        await sellItem(item.id);
+      },
+      confirmText: 'Sell',
+      cancelText: 'Cancel',
+      confirmColor: 'red',
+    });
   };
   
   const handlePreview = (itemId: string) => {
@@ -344,18 +372,27 @@ export function ShopModal() {
         {/* Action buttons */}
         <div className="flex gap-1">
           {owned ? (
-            <button
-              onClick={() => handleEquip(item.id, equipped)}
-              className={`
-                flex-1 py-1.5 rounded font-pixel text-[10px] transition-colors
-                ${equipped 
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                }
-              `}
-            >
-              {equipped ? '✓' : 'Equip'}
-            </button>
+            <>
+              <button
+                onClick={() => handleEquip(item.id, equipped)}
+                className={`
+                  flex-1 py-1.5 rounded font-pixel text-[10px] transition-colors
+                  ${equipped 
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  }
+                `}
+              >
+                {equipped ? '✓' : 'Equip'}
+              </button>
+              <button
+                onClick={() => handleSell(item)}
+                className="px-2 py-1.5 rounded font-pixel text-[10px] transition-colors bg-red-600 hover:bg-red-500 text-white"
+                title={`Sell for ${Math.floor(item.price * 0.5).toLocaleString()} orbs`}
+              >
+                $
+              </button>
+            </>
           ) : (
             <button
               onClick={() => handlePurchase(item)}
@@ -749,6 +786,41 @@ export function ShopModal() {
               />
             </div>
             
+            {/* Ownership Filters */}
+            <div className="flex flex-col gap-2 mb-6">
+              <p className="text-gray-500 font-pixel text-[10px] mb-1">Ownership</p>
+              <button
+                onClick={() => { playClickSound(); setOwnershipFilter('all'); }}
+                className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
+                  ownershipFilter === 'all'
+                    ? 'bg-amber-600 text-white' 
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                All Items
+              </button>
+              <button
+                onClick={() => { playClickSound(); setOwnershipFilter('owned'); }}
+                className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
+                  ownershipFilter === 'owned'
+                    ? 'bg-emerald-600 text-white' 
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                ✓ Owned
+              </button>
+              <button
+                onClick={() => { playClickSound(); setOwnershipFilter('not-owned'); }}
+                className={`px-3 py-2 rounded transition-all text-left text-[10px] font-pixel ${
+                  ownershipFilter === 'not-owned'
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                Not Owned
+              </button>
+            </div>
+            
             {/* Rarity Filters */}
             <div className="flex flex-col gap-2 mb-6">
               <p className="text-gray-500 font-pixel text-[10px] mb-1">Rarity</p>
@@ -938,22 +1010,30 @@ export function ShopModal() {
                       </>
                     )}
                     
-                    {owned && !equipped && (
-                      <button
-                        onClick={() => handleEquip(previewItem, false)}
-                        className="w-full py-2 rounded-lg font-pixel text-sm bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/30 transition-all"
-                      >
-                        ✓ Equip Item
-                      </button>
-                    )}
-                    
-                    {owned && equipped && (
-                      <button
-                        onClick={() => handleEquip(previewItem, true)}
-                        className="w-full py-2 rounded-lg font-pixel text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 transition-all"
-                      >
-                        Unequip Item
-                      </button>
+                    {owned && (
+                      <>
+                        {!equipped ? (
+                          <button
+                            onClick={() => handleEquip(previewItem, false)}
+                            className="w-full py-2 rounded-lg font-pixel text-sm bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/30 transition-all"
+                          >
+                            ✓ Equip Item
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleEquip(previewItem, true)}
+                            className="w-full py-2 rounded-lg font-pixel text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 transition-all"
+                          >
+                            Unequip Item
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleSell(previewingItem)}
+                          className="w-full py-2 rounded-lg font-pixel text-sm bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white shadow-lg shadow-red-500/30 transition-all"
+                        >
+                          $ Sell for {Math.floor(previewingItem.price * 0.5).toLocaleString()} orbs
+                        </button>
+                      </>
                     )}
                     
                     <button
