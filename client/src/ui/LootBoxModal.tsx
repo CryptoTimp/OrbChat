@@ -112,6 +112,8 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             chance = 20.0;
           } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
             chance = 13.3;
+          } else if (item.id === 'pet_mini_me') {
+            chance = 0.05;
           }
           return { item, chance };
         });
@@ -803,7 +805,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       `}</style>
       <div className="fixed inset-0 flex items-start justify-start z-50 p-2 sm:p-4 pointer-events-none">
         <div 
-          className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-full max-w-[800px] max-h-[95vh] h-auto overflow-hidden flex flex-col pointer-events-auto ml-2 sm:ml-4 mt-2 sm:mt-4 relative" 
+          className="bg-gray-900 rounded-xl border-2 border-amber-500 shadow-2xl w-full max-w-[1200px] max-h-[95vh] h-auto overflow-hidden flex flex-row pointer-events-auto ml-2 sm:ml-4 mt-2 sm:mt-4 relative" 
           style={{ boxShadow: '0 0 30px rgba(251, 191, 36, 0.5), 0 0 60px rgba(0, 0, 0, 0.8)' }}
           onContextMenu={(e) => e.preventDefault()}
         >
@@ -865,25 +867,121 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             })}
           </div>
           
-          {/* Header */}
-          <div className="flex items-center justify-between p-2 sm:p-4 border-b border-gray-700 shrink-0">
-            <h2 className="text-lg sm:text-2xl font-pixel text-amber-400 flex items-center gap-2">
-              📦 {currentLootBox.name}
-            </h2>
-            <button
-              onClick={() => {
-                playCloseSound();
-                cleanup();
-                onClose();
-              }}
-              className="text-gray-400 hover:text-white transition-colors text-2xl"
-            >
-              ×
-            </button>
+          {/* Left Sidebar - Case Selector */}
+          <div className="w-48 sm:w-56 border-r border-gray-700 flex flex-col shrink-0 bg-gray-950">
+            <div className="p-3 border-b border-gray-700 shrink-0">
+              <h3 className="text-gray-300 font-pixel text-xs sm:text-sm mb-2">Switch Case:</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2" style={{ scrollbarWidth: 'thin' }}>
+              {allLootBoxes.map(box => {
+                const isSelected = currentLootBox?.id === box.id;
+                const canAffordBox = playerOrbs >= box.price;
+                const isGodlikeCase = box.category?.startsWith('godlike_');
+                return (
+                  <button
+                    key={box.id}
+                    onClick={() => {
+                      if (!isSelected) {
+                        playClickSound();
+                        setSelectedLootBox(box);
+                      }
+                    }}
+                    className={`
+                      w-full px-3 py-3 rounded-lg border-2 font-pixel text-xs transition-all
+                      ${isSelected
+                        ? isGodlikeCase
+                          ? 'bg-red-500/20 border-red-500 text-red-400'
+                          : 'bg-amber-500/20 border-amber-500 text-amber-400'
+                        : isGodlikeCase
+                        ? canAffordBox
+                          ? 'bg-red-900/30 border-red-600 text-red-300 hover:bg-red-900/40 hover:border-red-500'
+                          : 'bg-red-900/20 border-red-700 text-red-500 opacity-60'
+                        : canAffordBox
+                        ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-700 hover:border-gray-500'
+                        : 'bg-gray-800/50 border-gray-700 text-gray-500 opacity-60'
+                      }
+                    `}
+                  >
+                    <div className="text-center">
+                      {/* Show highest value item preview if available */}
+                      {(() => {
+                        if (box.items.length === 0) return null;
+                        // Find the item with the highest shop value
+                        const highestValueItem = box.items.reduce((max, current) => {
+                          const maxPrice = max.item.price || 0;
+                          const currentPrice = current.item.price || 0;
+                          return currentPrice > maxPrice ? current : max;
+                        });
+                        if (!highestValueItem.item) return null;
+                        
+                        const item = highestValueItem.item;
+                        const rarity = item.rarity || 'common';
+                        const isHighRarity = rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike';
+                        const rarityColor = RARITY_COLORS[rarity];
+                        const glowColor = rarityColor.glow;
+                        
+                        return (
+                          <div className="w-12 h-12 mx-auto mb-1 bg-gray-900 rounded border border-gray-700 flex items-center justify-center relative" style={{ overflow: 'visible' }}>
+                            <ItemPreview item={item} size={32} animate={false} />
+                            {isHighRarity && (
+                              <>
+                                {/* Particle effects going up */}
+                                {[...Array(6)].map((_, i) => (
+                                  <div
+                                    key={i}
+                                    className="absolute rounded-full pointer-events-none"
+                                    style={{
+                                      width: '3px',
+                                      height: '3px',
+                                      backgroundColor: glowColor,
+                                      left: `${20 + (i * 10)}%`,
+                                      bottom: '-6px',
+                                      animation: `particle-rise ${1.5 + (i * 0.15)}s ease-out infinite`,
+                                      animationDelay: `${i * 0.1}s`,
+                                      boxShadow: `0 0 4px ${glowColor}, 0 0 8px ${glowColor}`,
+                                      zIndex: 50,
+                                    }}
+                                  />
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })() || (
+                        <div className="text-lg mb-1">📦</div>
+                      )}
+                      <div className="font-bold truncate text-[10px] sm:text-xs">{box.name}</div>
+                      <div className={`text-[9px] sm:text-[10px] mt-1 ${canAffordBox ? 'text-cyan-300' : 'text-gray-500'}`}>
+                        {box.price.toLocaleString()}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
           
-          {/* Content */}
-          <div className="flex-1 overflow-hidden flex flex-col p-3 sm:p-6 min-h-0">
+          {/* Main Content Area */}
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            {/* Header */}
+            <div className="flex items-center justify-between p-2 sm:p-4 border-b border-gray-700 shrink-0">
+              <h2 className="text-lg sm:text-2xl font-pixel text-amber-400 flex items-center gap-2">
+                📦 {currentLootBox.name}
+              </h2>
+              <button
+                onClick={() => {
+                  playCloseSound();
+                  cleanup();
+                  onClose();
+                }}
+                className="text-gray-400 hover:text-white transition-colors text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-hidden flex flex-col p-3 sm:p-6 min-h-0">
             {/* Orb balance at top */}
             <div className="mb-2 sm:mb-4 flex items-center justify-center shrink-0">
               <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
@@ -1307,58 +1405,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
               </div>
             </div>
             
-            {/* Case selector menu at bottom */}
-            <div className="mt-2 sm:mt-4 pt-2 sm:pt-4 border-t border-gray-700 shrink-0">
-              <p className="text-gray-300 font-pixel text-xs sm:text-sm mb-1 sm:mb-2">Switch Case:</p>
-              <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-                {allLootBoxes.map(box => {
-                  const isSelected = currentLootBox?.id === box.id;
-                  const canAffordBox = playerOrbs >= box.price;
-                  const isGodlikeCase = box.category?.startsWith('godlike_');
-                  return (
-                    <button
-                      key={box.id}
-                      onClick={() => {
-                        if (!isSelected) {
-                          playClickSound();
-                          setSelectedLootBox(box);
-                        }
-                      }}
-                      className={`
-                        flex-shrink-0 px-4 py-2 rounded-lg border-2 font-pixel text-xs transition-all
-                        ${isSelected
-                          ? isGodlikeCase
-                            ? 'bg-red-500/20 border-red-500 text-red-400'
-                            : 'bg-amber-500/20 border-amber-500 text-amber-400'
-                          : isGodlikeCase
-                          ? canAffordBox
-                            ? 'bg-red-900/30 border-red-600 text-red-300 hover:bg-red-900/40 hover:border-red-500'
-                            : 'bg-red-900/20 border-red-700 text-red-500 opacity-60'
-                          : canAffordBox
-                          ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-700 hover:border-gray-500'
-                          : 'bg-gray-800/50 border-gray-700 text-gray-500 opacity-60'
-                        }
-                      `}
-                    >
-                      <div className="text-center">
-                        {/* Show first item preview if available */}
-                        {box.items.length > 0 && box.items[0].item ? (
-                          <div className="w-12 h-12 mx-auto mb-1 bg-gray-900 rounded border border-gray-700 flex items-center justify-center">
-                            <ItemPreview item={box.items[0].item} size={32} animate={false} />
-                          </div>
-                        ) : (
-                          <div className="text-lg mb-1">📦</div>
-                        )}
-                        <div className="font-bold truncate max-w-[100px]">{box.name}</div>
-                        <div className={`text-[10px] ${canAffordBox ? 'text-cyan-300' : 'text-gray-500'}`}>
-                          {box.price.toLocaleString()}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          </div>
           </div>
         </div>
       </div>

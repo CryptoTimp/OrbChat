@@ -833,113 +833,119 @@ interface LegendaryParticle {
   maxLife: number;
   size: number;
   color: string;
-  type: 'sparkle' | 'flame' | 'ice' | 'star' | 'void' | 'rainbow';
+  type: 'sparkle' | 'flame' | 'ice' | 'star' | 'void' | 'rainbow' | 'godlike_beam' | 'godlike_ring' | 'godlike_circle' | 'godlike_wave' | 'godlike_wing_beam' | 'godlike_orb' | 'godlike_pulse' | 'godlike_trail' | 'godlike_hat_wisp' | 'godlike_shirt_burst' | 'godlike_legs_ground' | 'godlike_cape_flow' | 'godlike_boost_energy' | 'godlike_pet_sparkle' | 'godlike_floor_span';
+  // Additional data for godlike effects
+  angle?: number;
+  radius?: number;
+  phase?: number;
+  set?: 'void' | 'chaos' | 'abyss';
 }
 
 // Per-player legendary particles
 const legendaryParticles: Map<string, LegendaryParticle[]> = new Map();
 
 // Legendary item configurations - calm, gentle effects
-const LEGENDARY_EFFECTS: Record<string, { 
-  type: 'sparkle' | 'flame' | 'ice' | 'star' | 'void' | 'rainbow';
+const LEGENDARY_EFFECTS: Record<string, {
+  type: 'sparkle' | 'flame' | 'ice' | 'star' | 'void' | 'rainbow' | 'godlike_beam' | 'godlike_ring' | 'godlike_circle' | 'godlike_wave' | 'godlike_wing_beam' | 'godlike_orb' | 'godlike_pulse' | 'godlike_trail' | 'godlike_hat_wisp' | 'godlike_shirt_burst' | 'godlike_legs_ground' | 'godlike_cape_flow' | 'godlike_boost_energy' | 'godlike_pet_sparkle';
   colors: string[];
   spawnRate: number;
   particleCount: number;
+  set?: 'void' | 'chaos' | 'abyss';
 }> = {
   // === GOLDEN SET - gold sparkles ===
-  'hat_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.04, particleCount: 1 },
-  'armor_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.04, particleCount: 1 },
-  'legs_gold': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.04, particleCount: 1 },
-  
+  'hat_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.015, particleCount: 1 },
+  'armor_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.015, particleCount: 1 },
+  'legs_gold': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.015, particleCount: 1 },
+
   // === PHOENIX SET - rising embers ===
-  'hat_phoenix_legendary': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.05, particleCount: 2 },
-  'robe_phoenix_legendary': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.05, particleCount: 2 },
-  'legs_phoenix_legendary': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.04, particleCount: 1 },
-  'cape_phoenix': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.05, particleCount: 2 },
-  
+  'hat_phoenix_legendary': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.02, particleCount: 1 },
+  'robe_phoenix_legendary': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.02, particleCount: 1 },
+  'legs_phoenix_legendary': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.015, particleCount: 1 },
+  'cape_phoenix': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.02, particleCount: 1 },
+
   // === VOID SET - dark swirling particles ===
-  'hat_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.04, particleCount: 1 },
-  'armor_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.04, particleCount: 2 },
-  'legs_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.04, particleCount: 1 },
-  'cape_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.04, particleCount: 2 },
-  
+  'hat_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.015, particleCount: 1 },
+  'armor_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.02, particleCount: 1 },
+  'legs_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.015, particleCount: 1 },
+  'cape_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.02, particleCount: 1 },
+
   // === CELESTIAL SET - twinkling stars ===
-  'hat_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.04, particleCount: 1 },
-  'robe_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.04, particleCount: 1 },
-  'legs_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.04, particleCount: 1 },
-  'cape_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.04, particleCount: 1 },
-  
+  'hat_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.015, particleCount: 1 },
+  'robe_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.015, particleCount: 1 },
+  'legs_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.015, particleCount: 1 },
+  'cape_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.015, particleCount: 1 },
+
   // === GALAXY SET - cosmic sparkles ===
-  'hat_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.04, particleCount: 1 },
-  'armor_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.04, particleCount: 2 },
-  'legs_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.04, particleCount: 1 },
-  'cape_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.04, particleCount: 2 },
-  
+  'hat_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.015, particleCount: 1 },
+  'armor_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.02, particleCount: 1 },
+  'legs_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.015, particleCount: 1 },
+  'cape_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.02, particleCount: 1 },
+
   // === RAINBOW/PRISMATIC SET - color cycling ===
-  'hat_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.05, particleCount: 1 },
-  'robe_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.05, particleCount: 2 },
-  'legs_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.04, particleCount: 1 },
-  'cape_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.05, particleCount: 2 },
-  
+  'hat_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.02, particleCount: 1 },
+  'robe_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.02, particleCount: 1 },
+  'legs_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.015, particleCount: 1 },
+  'cape_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.02, particleCount: 1 },
+
   // === ACCESSORIES ===
   // Dragon Wings - ember/fire particles
-  'acc_wings_dragon': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ff8c00', '#ffd700'], spawnRate: 0.05, particleCount: 2 },
-  
+  'acc_wings_dragon': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ff8c00', '#ffd700'], spawnRate: 0.02, particleCount: 1 },
+
   // Fire Aura - gentle flames
-  'acc_aura_fire': { type: 'flame', colors: ['#ff0000', '#ff4500', '#ff6600', '#ffcc00'], spawnRate: 0.06, particleCount: 2 },
-  
+  'acc_aura_fire': { type: 'flame', colors: ['#ff0000', '#ff4500', '#ff6600', '#ffcc00'], spawnRate: 0.025, particleCount: 1 },
+
   // Ice Aura - gentle frost
-  'acc_aura_ice': { type: 'ice', colors: ['#00ffff', '#87ceeb', '#b0e0e6', '#ffffff'], spawnRate: 0.05, particleCount: 2 },
-  
+  'acc_aura_ice': { type: 'ice', colors: ['#00ffff', '#87ceeb', '#b0e0e6', '#ffffff'], spawnRate: 0.02, particleCount: 1 },
+
   // Legendary Set Auras
-  'acc_aura_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.05, particleCount: 2 },
-  'acc_aura_phoenix': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.06, particleCount: 2 },
-  'acc_aura_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.05, particleCount: 2 },
-  'acc_aura_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.05, particleCount: 2 },
-  'acc_aura_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.05, particleCount: 2 },
-  'acc_aura_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.06, particleCount: 2 },
-  
+  'acc_aura_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.02, particleCount: 1 },
+  'acc_aura_phoenix': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.025, particleCount: 1 },
+  'acc_aura_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.02, particleCount: 1 },
+  'acc_aura_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.02, particleCount: 1 },
+  'acc_aura_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.02, particleCount: 1 },
+  'acc_aura_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.025, particleCount: 1 },
+
   // Legendary Set Wings
-  'acc_wings_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.05, particleCount: 2 },
-  'acc_wings_phoenix': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.05, particleCount: 2 },
-  'acc_wings_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.05, particleCount: 2 },
-  'acc_wings_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.05, particleCount: 2 },
-  'acc_wings_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.05, particleCount: 2 },
-  'acc_wings_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.05, particleCount: 2 },
+  'acc_wings_golden': { type: 'sparkle', colors: ['#ffd700', '#ffec8b', '#fff8dc', '#f0e68c'], spawnRate: 0.02, particleCount: 1 },
+  'acc_wings_phoenix': { type: 'flame', colors: ['#ff4500', '#ff6600', '#ffd700', '#ffff00'], spawnRate: 0.02, particleCount: 1 },
+  'acc_wings_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000'], spawnRate: 0.02, particleCount: 1 },
+  'acc_wings_celestial': { type: 'star', colors: ['#ffffff', '#fffacd', '#f0f8ff', '#e6e6fa'], spawnRate: 0.02, particleCount: 1 },
+  'acc_wings_galaxy': { type: 'star', colors: ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4'], spawnRate: 0.02, particleCount: 1 },
+  'acc_wings_rainbow': { type: 'rainbow', colors: ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8b00ff'], spawnRate: 0.02, particleCount: 1 },
   
-  // === GODLIKE ITEMS (void/chaos themed with intense particle effects) ===
-  // Hats
-  'hat_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'hat_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'hat_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  // Shirts
-  'shirt_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'shirt_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'shirt_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  // Legs
-  'legs_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'legs_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'legs_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  // Capes
-  'cape_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'cape_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'cape_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  // Wings
-  'acc_wings_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'acc_wings_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'acc_wings_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  // Accessories
-  'acc_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'acc_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'acc_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  // Boosts
-  'boost_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'boost_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'boost_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  // Pets
-  'pet_godlike_void': { type: 'void', colors: ['#4b0082', '#800080', '#9400d3', '#000000', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
-  'pet_godlike_chaos': { type: 'void', colors: ['#8b0000', '#4b0082', '#800080', '#000000', '#ef4444', '#9400d3'], spawnRate: 0.15, particleCount: 8 },
-  'pet_godlike_abyss': { type: 'void', colors: ['#000000', '#4b0082', '#800080', '#9400d3', '#8b0000', '#ef4444'], spawnRate: 0.15, particleCount: 8 },
+  // === GODLIKE ITEMS (unique effects for each cosmetic type) ===
+  // Hats - Energy wisps shooting upward from head
+  'hat_godlike_void': { type: 'godlike_hat_wisp', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.025, particleCount: 1, set: 'void' },
+  'hat_godlike_chaos': { type: 'godlike_hat_wisp', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.025, particleCount: 1, set: 'chaos' },
+  'hat_godlike_abyss': { type: 'godlike_hat_wisp', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.025, particleCount: 1, set: 'abyss' },
+  // Shirts - Energy bursts from chest, firing outward
+  'shirt_godlike_void': { type: 'godlike_shirt_burst', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.03, particleCount: 1, set: 'void' },
+  'shirt_godlike_chaos': { type: 'godlike_shirt_burst', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.03, particleCount: 1, set: 'chaos' },
+  'shirt_godlike_abyss': { type: 'godlike_shirt_burst', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.03, particleCount: 1, set: 'abyss' },
+  // Legs - Ground energy particles rising from feet
+  'legs_godlike_void': { type: 'godlike_legs_ground', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.028, particleCount: 1, set: 'void' },
+  'legs_godlike_chaos': { type: 'godlike_legs_ground', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.028, particleCount: 1, set: 'chaos' },
+  'legs_godlike_abyss': { type: 'godlike_legs_ground', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.028, particleCount: 1, set: 'abyss' },
+  // Capes - Flowing energy from behind
+  'cape_godlike_void': { type: 'godlike_cape_flow', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.03, particleCount: 1, set: 'void' },
+  'cape_godlike_chaos': { type: 'godlike_cape_flow', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.03, particleCount: 1, set: 'chaos' },
+  'cape_godlike_abyss': { type: 'godlike_cape_flow', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.03, particleCount: 1, set: 'abyss' },
+  // Wings - Horizontal beams from wing tips (2 particles to spawn from both sides simultaneously)
+  'acc_wings_godlike_void': { type: 'godlike_wing_beam', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.022, particleCount: 2, set: 'void' },
+  'acc_wings_godlike_chaos': { type: 'godlike_wing_beam', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.022, particleCount: 2, set: 'chaos' },
+  'acc_wings_godlike_abyss': { type: 'godlike_wing_beam', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.022, particleCount: 2, set: 'abyss' },
+  // Accessories - Rotating energy orbs (already good)
+  'acc_godlike_void': { type: 'godlike_orb', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.027, particleCount: 1, set: 'void' },
+  'acc_godlike_chaos': { type: 'godlike_orb', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.027, particleCount: 1, set: 'chaos' },
+  'acc_godlike_abyss': { type: 'godlike_orb', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.027, particleCount: 1, set: 'abyss' },
+  // Boosts - Energetic bursts
+  'boost_godlike_void': { type: 'godlike_boost_energy', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.03, particleCount: 1, set: 'void' },
+  'boost_godlike_chaos': { type: 'godlike_boost_energy', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.03, particleCount: 1, set: 'chaos' },
+  'boost_godlike_abyss': { type: 'godlike_boost_energy', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.03, particleCount: 1, set: 'abyss' },
+  // Pets - Sparkling trail following pet
+  'pet_godlike_void': { type: 'godlike_pet_sparkle', colors: ['#ffffff', '#4b0082', '#800080', '#000000'], spawnRate: 0.04, particleCount: 1, set: 'void' },
+  'pet_godlike_chaos': { type: 'godlike_pet_sparkle', colors: ['#00ffff', '#0080ff', '#00bfff', '#0066cc'], spawnRate: 0.04, particleCount: 1, set: 'chaos' },
+  'pet_godlike_abyss': { type: 'godlike_pet_sparkle', colors: ['#1a0033', '#4b0082', '#000000', '#6a0dad'], spawnRate: 0.04, particleCount: 1, set: 'abyss' },
 };
 
 function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit: string[], time: number): void {
@@ -977,42 +983,68 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
         baseX = x + side * 28 + (Math.random() - 0.5) * 5; // Wing tips far to the sides
         baseY = y - 20 + (Math.random() - 0.5) * 8; // Top of wings
       }
-      // Hats - spawn to the LEFT and RIGHT sides of the head, not center
+      // Hats - spawn above head, well outside player body
       else if (itemId.startsWith('hat_')) {
-        const side = (Math.random() > 0.5) ? -1 : 1;
-        baseX = x + side * (15 + Math.random() * 8); // Spawn to sides of head
-        baseY = y - 40 - Math.random() * 10; // Well above the head
+        const angle = (Math.random() - 0.5) * Math.PI * 0.4; // Slight spread, mostly upward
+        const radius = 45 + Math.random() * 10; // 45-55 pixels from center
+        baseX = x + Math.sin(angle) * radius;
+        baseY = y - 50 - Math.random() * 10; // Well above head
       }
-      // Shirts/Armor/Robes - spawn to sides, behind shoulders
+      // Shirts/Armor/Robes - spawn around chest level, well outside player body
       else if (itemId.startsWith('armor_') || itemId.startsWith('robe_')) {
-        const side = (Math.random() > 0.5) ? -1 : 1;
-        baseX = x + side * (18 + Math.random() * 8); // Far to the sides (shoulder width)
-        baseY = y - 10 + (Math.random() - 0.5) * 10; // At shoulder level
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 50 + Math.random() * 15; // 50-65 pixels from center - well outside body
+        baseX = x + Math.cos(angle) * radius;
+        baseY = y + Math.sin(angle) * radius * 0.5;
       }
-      // Legs - spawn near feet, to the sides
+      // Legs - spawn below feet, well outside player body
       else if (itemId.startsWith('legs_')) {
-        const side = (Math.random() > 0.5) ? -1 : 1;
-        baseX = x + side * (8 + Math.random() * 5); // Near legs
-        baseY = y + 25 + Math.random() * 5; // Near feet
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 45 + Math.random() * 15; // 45-60 pixels from center
+        baseX = x + Math.cos(angle) * radius;
+        baseY = y + 40 + Math.random() * 10; // Below feet
       }
-      // Capes - spawn from behind, wide spread
+      // Capes - spawn behind player, well outside body
       else if (itemId.startsWith('cape_')) {
-        const side = (Math.random() > 0.5) ? -1 : 1;
-        baseX = x + side * (10 + Math.random() * 10); // Behind and to sides
-        baseY = y - 5 + (Math.random() - 0.5) * 15; // Cape area
+        const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.6; // Behind player with spread
+        const radius = 50 + Math.random() * 15; // 50-65 pixels from center
+        baseX = x + Math.cos(angle) * radius;
+        baseY = y + Math.sin(angle) * radius * 0.5;
       }
-      // Auras - spawn in a ring around the player
+      // Auras - spawn in all directions, well outside player body
       else if (itemId.includes('aura')) {
         const angle = Math.random() * Math.PI * 2;
-        const radius = 20 + Math.random() * 10;
+        const radius = 40 + Math.random() * 15; // 40-55 pixels from center - well outside body
         baseX = x + Math.cos(angle) * radius;
-        baseY = y + Math.sin(angle) * radius * 0.5; // Flattened for perspective
+        baseY = y + Math.sin(angle) * radius * 0.5;
       }
-      // Default - sides only
+      // Godlike accessories - spawn in all directions, well outside player body
+      else if (itemId.startsWith('acc_godlike_')) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 40 + Math.random() * 15; // 40-55 pixels from center - well outside body
+        baseX = x + Math.cos(angle) * radius;
+        baseY = y + Math.sin(angle) * radius * 0.5;
+      }
+      // Godlike boosts - spawn in all directions, well outside player body
+      else if (itemId.startsWith('boost_godlike_')) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 40 + Math.random() * 15; // 40-55 pixels from center - well outside body
+        baseX = x + Math.cos(angle) * radius;
+        baseY = y + Math.sin(angle) * radius * 0.5;
+      }
+      // Godlike pets - spawn in all directions, well outside player body
+      else if (itemId.startsWith('pet_godlike_')) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 40 + Math.random() * 15; // 40-55 pixels from center - well outside body
+        baseX = x + Math.cos(angle) * radius;
+        baseY = y + Math.sin(angle) * radius * 0.5;
+      }
+      // Default - spawn in all directions, well outside player body
       else {
-        const side = (Math.random() > 0.5) ? -1 : 1;
-        baseX = x + side * (15 + Math.random() * 10);
-        baseY = y - 20 + (Math.random() - 0.5) * 20;
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 40 + Math.random() * 15; // 40-55 pixels from center - well outside body
+        baseX = x + Math.cos(angle) * radius;
+        baseY = y + Math.sin(angle) * radius * 0.5;
       }
       
       // Slow, gentle upward velocity for all particles
@@ -1021,11 +1053,17 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
       
       switch (effect.type) {
         case 'sparkle':
+          // Calculate direction from player center to spawn position (outward)
+          const sparkleDirX = baseX - x;
+          const sparkleDirY = (baseY - y) * 2;
+          const sparkleDist = Math.sqrt(sparkleDirX * sparkleDirX + sparkleDirY * sparkleDirY);
+          const sparkleDirNormX = sparkleDist > 0 ? sparkleDirX / sparkleDist : 0;
+          const sparkleDirNormY = sparkleDist > 0 ? sparkleDirY / sparkleDist : 0;
           particle = {
             x: baseX,
             y: baseY,
-            vx: gentleSideSpeed,
-            vy: gentleUpSpeed,
+            vx: sparkleDirNormX * 0.2, // Fire outward from player
+            vy: sparkleDirNormY * 0.2 - 0.2, // Outward with slight upward bias
             life: 1,
             maxLife: 1,
             size: Math.random() * 2 + 1.5,
@@ -1035,11 +1073,17 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
           break;
           
         case 'flame':
+          // Calculate direction from player center to spawn position (outward)
+          const flameDirX = baseX - x;
+          const flameDirY = (baseY - y) * 2;
+          const flameDist = Math.sqrt(flameDirX * flameDirX + flameDirY * flameDirY);
+          const flameDirNormX = flameDist > 0 ? flameDirX / flameDist : 0;
+          const flameDirNormY = flameDist > 0 ? flameDirY / flameDist : 0;
           particle = {
             x: baseX,
             y: baseY,
-            vx: gentleSideSpeed,
-            vy: gentleUpSpeed * 1.2, // Flames rise slightly faster
+            vx: flameDirNormX * 0.25, // Fire outward from player
+            vy: flameDirNormY * 0.25 - 0.3, // Outward with upward bias
             life: 1,
             maxLife: 1,
             size: Math.random() * 3 + 2,
@@ -1049,11 +1093,17 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
           break;
           
         case 'ice':
+          // Calculate direction from player center to spawn position (outward)
+          const iceDirX = baseX - x;
+          const iceDirY = (baseY - y) * 2;
+          const iceDist = Math.sqrt(iceDirX * iceDirX + iceDirY * iceDirY);
+          const iceDirNormX = iceDist > 0 ? iceDirX / iceDist : 0;
+          const iceDirNormY = iceDist > 0 ? iceDirY / iceDist : 0;
           particle = {
             x: baseX,
             y: baseY,
-            vx: gentleSideSpeed * 1.5, // Ice drifts a bit more
-            vy: gentleUpSpeed * 0.8, // Rises slower
+            vx: iceDirNormX * 0.2, // Fire outward from player
+            vy: iceDirNormY * 0.2 - 0.15, // Outward with slight upward bias
             life: 1,
             maxLife: 1,
             size: Math.random() * 2 + 1.5,
@@ -1063,11 +1113,17 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
           break;
           
         case 'star':
+          // Calculate direction from player center to spawn position (outward)
+          const starDirX = baseX - x;
+          const starDirY = (baseY - y) * 2;
+          const starDist = Math.sqrt(starDirX * starDirX + starDirY * starDirY);
+          const starDirNormX = starDist > 0 ? starDirX / starDist : 0;
+          const starDirNormY = starDist > 0 ? starDirY / starDist : 0;
           particle = {
-            x: baseX + (Math.random() - 0.5) * 10,
-            y: baseY - Math.random() * 15, // Stars can spawn a bit higher
-            vx: 0,
-            vy: gentleUpSpeed * 0.3, // Very slow drift
+            x: baseX,
+            y: baseY,
+            vx: starDirNormX * 0.15, // Fire outward from player
+            vy: starDirNormY * 0.15 - 0.1, // Outward with slight upward bias
             life: 1,
             maxLife: 1,
             size: Math.random() * 1.5 + 1,
@@ -1077,21 +1133,296 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
           break;
           
         case 'void':
-          // Void particles - for godlike items, extend much further (100-200 pixels)
+          // Void particle balls - fire outward from spawn position
           const isGodlike = itemId.includes('godlike');
-          const voidRadius = isGodlike ? 100 + Math.random() * 100 : 5; // 100-200px for godlike, 5px for regular
-          const voidAngle = Math.random() * Math.PI * 2;
-          const voidSpeed = isGodlike ? 0.3 : 0.1;
+          // Calculate direction from player center to spawn position (outward)
+          const voidDirX = baseX - x;
+          const voidDirY = (baseY - y) * 2; // Account for perspective
+          const voidDist = Math.sqrt(voidDirX * voidDirX + voidDirY * voidDirY);
+          const voidDirNormX = voidDist > 0 ? voidDirX / voidDist : 0;
+          const voidDirNormY = voidDist > 0 ? voidDirY / voidDist : 0;
+          const voidSpeed = isGodlike ? 0.4 : 0.15;
           particle = {
-            x: baseX + Math.cos(voidAngle) * voidRadius,
-            y: baseY + Math.sin(voidAngle) * voidRadius * 0.5, // Flattened for perspective
-            vx: Math.cos(voidAngle) * voidSpeed,
-            vy: isGodlike ? gentleUpSpeed * 2 : gentleUpSpeed, // Faster for godlike
+            x: baseX,
+            y: baseY,
+            vx: voidDirNormX * voidSpeed, // Fire outward from player
+            vy: voidDirNormY * voidSpeed - (isGodlike ? 0.4 : 0.2), // Outward with upward bias
             life: 1,
             maxLife: 1,
             size: isGodlike ? Math.random() * 4 + 3 : Math.random() * 2 + 1.5, // Larger for godlike
             color,
             type: 'void'
+          };
+          break;
+          
+        case 'godlike_beam':
+          // Beam shooting upward from hat - fire outward from spawn position
+          // Calculate direction from player center to spawn position (outward)
+          const beamDirX = baseX - x;
+          const beamDirY = (baseY - y) * 2; // Account for perspective
+          const beamDist = Math.sqrt(beamDirX * beamDirX + beamDirY * beamDirY);
+          const beamDirNormX = beamDist > 0 ? beamDirX / beamDist : 0;
+          const beamDirNormY = beamDist > 0 ? beamDirY / beamDist : 0;
+          // Beam angle points outward from player
+          const beamAngle = Math.atan2(beamDirNormY, beamDirNormX) - Math.PI / 2; // Upward bias
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: beamDirNormX * 0.1, // Small outward component
+            vy: -1.2 - Math.random() * 0.6, // Strong upward movement
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 3 + 4,
+            color,
+            type: 'godlike_beam',
+            angle: beamAngle,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_ring':
+          // Particle ball (NO CIRCLES) - fire outward from spawn position
+          // Calculate direction from player center to spawn position (outward)
+          const ringDirX = baseX - x;
+          const ringDirY = (baseY - y) * 2; // Account for perspective
+          const ringDist = Math.sqrt(ringDirX * ringDirX + ringDirY * ringDirY);
+          const ringDirNormX = ringDist > 0 ? ringDirX / ringDist : 0;
+          const ringDirNormY = ringDist > 0 ? ringDirY / ringDist : 0;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: ringDirNormX * 0.4, // Fire outward from player
+            vy: ringDirNormY * 0.4 - 0.3, // Outward with upward bias
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 3 + 4, // Particle ball size
+            color,
+            type: 'godlike_ring',
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_wave':
+          // Energy wave - fire outward from spawn position
+          const waveAngle = Math.random() * Math.PI * 2;
+          // Calculate direction from player center to spawn position (outward)
+          const waveDirX = baseX - x;
+          const waveDirY = (baseY - y) * 2; // Account for perspective
+          const waveDist = Math.sqrt(waveDirX * waveDirX + waveDirY * waveDirY);
+          const waveDirNormX = waveDist > 0 ? waveDirX / waveDist : 0;
+          const waveDirNormY = waveDist > 0 ? waveDirY / waveDist : 0;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: waveDirNormX * 0.4, // Fire outward from player
+            vy: waveDirNormY * 0.4 - 0.3, // Outward with upward bias
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 3 + 4,
+            color,
+            type: 'godlike_wave',
+            angle: waveAngle,
+            phase: Math.random(),
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_wing_beam':
+          // Beam from wing tips - shoots horizontally left and right
+          // Determine direction based on spawn position relative to player center
+          const isLeftSide = baseX < x; // If spawn X is less than player X, it's on the left
+          const wingBeamAngle = isLeftSide ? Math.PI : 0; // Left (π) or Right (0)
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: Math.cos(wingBeamAngle) * 0.4,
+            vy: 0, // No vertical movement, purely horizontal
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 2 + 5,
+            color,
+            type: 'godlike_wing_beam',
+            angle: wingBeamAngle,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_orb':
+          // Rotating energy orb around accessory
+          const orbAngle = (time * 0.001 + i * Math.PI / 2) % (Math.PI * 2);
+          const orbRadius = 25 + Math.random() * 10;
+          particle = {
+            x: baseX + Math.cos(orbAngle) * orbRadius,
+            y: baseY + Math.sin(orbAngle) * orbRadius * 0.5,
+            vx: -Math.sin(orbAngle) * 0.15,
+            vy: Math.cos(orbAngle) * 0.15 * 0.5,
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 2 + 4,
+            color,
+            type: 'godlike_orb',
+            angle: orbAngle,
+            radius: orbRadius,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_pulse':
+          // Pulsing energy - fire outward from spawn position
+          // Calculate direction from player center to spawn position (outward)
+          const pulseDirX = baseX - x;
+          const pulseDirY = (baseY - y) * 2; // Account for perspective
+          const pulseDist = Math.sqrt(pulseDirX * pulseDirX + pulseDirY * pulseDirY);
+          const pulseDirNormX = pulseDist > 0 ? pulseDirX / pulseDist : 0;
+          const pulseDirNormY = pulseDist > 0 ? pulseDirY / pulseDist : 0;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: pulseDirNormX * 0.3, // Fire outward from player
+            vy: pulseDirNormY * 0.3 - 0.4, // Outward with upward bias
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 5 + 8,
+            color,
+            type: 'godlike_pulse',
+            phase: Math.random(),
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_trail':
+          // Following trail - fire outward from spawn position
+          // Calculate direction from player center to spawn position (outward)
+          const trailDirX = baseX - x;
+          const trailDirY = (baseY - y) * 2; // Account for perspective
+          const trailDist = Math.sqrt(trailDirX * trailDirX + trailDirY * trailDirY);
+          const trailDirNormX = trailDist > 0 ? trailDirX / trailDist : 0;
+          const trailDirNormY = trailDist > 0 ? trailDirY / trailDist : 0;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: trailDirNormX * 0.25, // Fire outward from player
+            vy: trailDirNormY * 0.25 - 0.3, // Outward with upward bias
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 2 + 3,
+            color,
+            type: 'godlike_trail',
+            phase: Math.random(),
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_hat_wisp':
+          // Energy wisps from hat - shoot upward and outward
+          const wispAngle = (Math.random() - 0.5) * Math.PI * 0.6; // Slight spread, mostly upward
+          particle = {
+            x: baseX + (Math.random() - 0.5) * 8,
+            y: baseY,
+            vx: Math.sin(wispAngle) * 0.2,
+            vy: Math.cos(wispAngle) * -1.0 - Math.random() * 0.5, // Strong upward with slight spread
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 2 + 3,
+            color,
+            type: 'godlike_hat_wisp',
+            angle: wispAngle,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_shirt_burst':
+          // Energy bursts from chest - fire outward in all directions
+          const burstAngle = Math.random() * Math.PI * 2;
+          const burstSpeed = 0.4 + Math.random() * 0.3;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: Math.cos(burstAngle) * burstSpeed,
+            vy: Math.sin(burstAngle) * burstSpeed * 0.5 - 0.2, // Outward with slight upward bias
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 3 + 4,
+            color,
+            type: 'godlike_shirt_burst',
+            angle: burstAngle,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_legs_ground':
+          // Ground energy particles - rise from feet area, fire outward
+          const groundAngle = Math.random() * Math.PI * 2;
+          const groundSpeed = 0.35 + Math.random() * 0.25;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: Math.cos(groundAngle) * groundSpeed,
+            vy: Math.sin(groundAngle) * groundSpeed * 0.5 - 0.6, // Outward with strong upward
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 2 + 3,
+            color,
+            type: 'godlike_legs_ground',
+            angle: groundAngle,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_cape_flow':
+          // Flowing energy from cape - flows backward and outward
+          const flowAngle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.8; // Behind player, with spread
+          const flowSpeed = 0.3 + Math.random() * 0.2;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: Math.cos(flowAngle) * flowSpeed,
+            vy: Math.sin(flowAngle) * flowSpeed * 0.5 - 0.3, // Backward and upward
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 2 + 3,
+            color,
+            type: 'godlike_cape_flow',
+            angle: flowAngle,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_boost_energy':
+          // Energetic bursts - fire outward in all directions with energy
+          const energyAngle = Math.random() * Math.PI * 2;
+          const energySpeed = 0.5 + Math.random() * 0.4;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: Math.cos(energyAngle) * energySpeed,
+            vy: Math.sin(energyAngle) * energySpeed * 0.5 - 0.4, // Fast outward with upward
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 2 + 4,
+            color,
+            type: 'godlike_boost_energy',
+            angle: energyAngle,
+            set: effect.set
+          };
+          break;
+          
+        case 'godlike_pet_sparkle':
+          // Sparkling trail - follows pet, fires outward
+          const sparkleAngle = Math.random() * Math.PI * 2;
+          const sparkleSpeed = 0.25 + Math.random() * 0.2;
+          particle = {
+            x: baseX,
+            y: baseY,
+            vx: Math.cos(sparkleAngle) * sparkleSpeed,
+            vy: Math.sin(sparkleAngle) * sparkleSpeed * 0.5 - 0.2, // Gentle outward
+            life: 1,
+            maxLife: 1,
+            size: Math.random() * 1.5 + 2,
+            color,
+            type: 'godlike_pet_sparkle',
+            angle: sparkleAngle,
+            set: effect.set
           };
           break;
           
@@ -1115,11 +1446,68 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
     }
   }
   
-  // Limit particles per player (higher limit for godlike items)
+  // Floor-spanning effect for godlike items (only spawns once if at least 1 godlike piece is equipped)
   const hasGodlike = outfit.some(item => item.includes('godlike'));
-  const maxParticles = hasGodlike ? 50 : 25; // More particles for godlike
+  if (hasGodlike && Math.random() < 0.08) { // Spawn rate for floor effect
+    // Determine which godlike set to use (void, chaos, or abyss)
+    let floorSet: 'void' | 'chaos' | 'abyss' = 'void';
+    let floorColors: string[] = ['#ffffff', '#4b0082', '#800080', '#000000'];
+    
+    // Check which set the player has
+    if (outfit.some(item => item.includes('godlike_chaos'))) {
+      floorSet = 'chaos';
+      floorColors = ['#00ffff', '#0080ff', '#00bfff', '#0066cc'];
+    } else if (outfit.some(item => item.includes('godlike_abyss'))) {
+      floorSet = 'abyss';
+      floorColors = ['#1a0033', '#4b0082', '#000000', '#6a0dad'];
+    } else if (outfit.some(item => item.includes('godlike_void'))) {
+      floorSet = 'void';
+      floorColors = ['#ffffff', '#4b0082', '#800080', '#000000'];
+    }
+    
+    // Spawn floor particles in a circle around the player
+    const floorParticleCount = 12; // Particles spanning the floor
+    for (let i = 0; i < floorParticleCount; i++) {
+      const angle = (i / floorParticleCount) * Math.PI * 2;
+      const radius = 70 + Math.random() * 15; // Floor radius around player
+      const floorX = x + Math.cos(angle) * radius;
+      const floorY = y + 35 + Math.random() * 3; // At ground level (below player feet)
+      
+      const color = floorColors[Math.floor(Math.random() * floorColors.length)];
+      
+      particles.push({
+        x: floorX,
+        y: floorY,
+        vx: (Math.random() - 0.5) * 0.05, // Very slow horizontal drift
+        vy: -0.05 - Math.random() * 0.05, // Very slow upward drift
+        life: 1,
+        maxLife: 1,
+        size: Math.random() * 4 + 5, // Larger floor particles for visibility
+        color,
+        type: 'godlike_floor_span',
+        set: floorSet,
+        angle: angle // Store angle for pulsing effect
+      });
+    }
+  }
+  
+  // Limit particles per player (increased for godlike to allow beams to fully extend)
+  const godlikeCount = outfit.filter(item => item.includes('godlike')).length;
+  const maxParticles = godlikeCount > 0 ? 25 + (godlikeCount * 8) : 12; // Higher limit for godlike items
   if (particles.length > maxParticles) {
-    particles.splice(0, particles.length - maxParticles);
+    // Remove oldest non-beam particles first to preserve beams
+    const beamParticles = particles.filter(p => p.type === 'godlike_beam' || p.type === 'godlike_wing_beam' || p.type === 'godlike_hat_wisp');
+    const nonBeamParticles = particles.filter(p => p.type !== 'godlike_beam' && p.type !== 'godlike_wing_beam' && p.type !== 'godlike_hat_wisp');
+    
+    // Keep all beam particles, remove oldest non-beam particles
+    if (nonBeamParticles.length > maxParticles - beamParticles.length) {
+      const toRemove = nonBeamParticles.length - (maxParticles - beamParticles.length);
+      nonBeamParticles.splice(0, toRemove);
+    }
+    
+    // Reconstruct particles array with beams first, then non-beams
+    particles.length = 0;
+    particles.push(...beamParticles, ...nonBeamParticles);
   }
 }
 
@@ -1127,8 +1515,8 @@ function updateAndDrawLegendaryParticles(ctx: CanvasRenderingContext2D, playerId
   const particles = legendaryParticles.get(playerId);
   if (!particles || particles.length === 0) return;
   
-  // Slower decay for longer-lasting, calmer particles
-  const decay = deltaTime * 0.0004;
+  // Slower decay for longer-lasting particles that travel higher
+  const decay = deltaTime * 0.0003; // Even slower decay so particles travel further
   
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -1154,7 +1542,7 @@ function updateAndDrawLegendaryParticles(ctx: CanvasRenderingContext2D, playerId
         // Gentle four-pointed star sparkle
         ctx.fillStyle = p.color;
         ctx.shadowColor = p.color;
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = 2; // Reduced for performance
         const sparkleSize = p.size * (0.7 + Math.sin(time * 0.003 + i) * 0.3); // Slower pulse
         drawSparkle(ctx, p.x, p.y, sparkleSize);
         break;
@@ -1163,7 +1551,7 @@ function updateAndDrawLegendaryParticles(ctx: CanvasRenderingContext2D, playerId
         // Gentle flame particle
         ctx.fillStyle = p.color;
         ctx.shadowColor = p.color;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 3; // Reduced for performance
         ctx.beginPath();
         ctx.ellipse(p.x, p.y, p.size * 0.5, p.size * 0.8, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -1173,7 +1561,7 @@ function updateAndDrawLegendaryParticles(ctx: CanvasRenderingContext2D, playerId
         // Ice crystal (hexagonal)
         ctx.fillStyle = p.color;
         ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = 2; // Reduced for performance
         drawHexagon(ctx, p.x, p.y, p.size * 0.8);
         break;
         
@@ -1181,44 +1569,317 @@ function updateAndDrawLegendaryParticles(ctx: CanvasRenderingContext2D, playerId
         // Gentle twinkling star
         ctx.fillStyle = p.color;
         ctx.shadowColor = p.color;
-        ctx.shadowBlur = 3;
+        ctx.shadowBlur = 2; // Reduced for performance
         const twinkle = Math.sin(time * 0.004 + i * 2) * 0.3 + 0.7; // Slower, subtler twinkle
         ctx.globalAlpha = alpha * twinkle * 0.8;
         drawStar(ctx, p.x, p.y, p.size, 4);
         break;
         
       case 'void':
-        // Dark swirling particle - enhanced for godlike items
+        // Dark particle ball - fires outward for godlike items (NO CIRCLES)
         const isGodlikeParticle = p.size > 2.5; // Godlike particles are larger
         ctx.fillStyle = p.color;
         ctx.shadowColor = isGodlikeParticle ? '#ef4444' : '#4b0082'; // Red glow for godlike
-        ctx.shadowBlur = isGodlikeParticle ? 15 : 5; // Much stronger glow for godlike
+        ctx.shadowBlur = isGodlikeParticle ? 8 : 3; // Reduced for performance
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 0.8, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.size * 0.8, 0, Math.PI * 2); // Just a particle ball, no circles
         ctx.fill();
+        break;
         
-        // Additional effects for godlike: tendrils and energy waves
-        if (isGodlikeParticle) {
-          // Energy wave rings
-          const wavePhase = (time * 0.01 + i) % 1;
-          ctx.strokeStyle = `rgba(239, 68, 68, ${alpha * (1 - wavePhase)})`;
-          ctx.lineWidth = 2;
+      case 'godlike_beam':
+        // Beam shooting upward - large, bright beam
+        const beamLength = 300 + p.life * 150; // Even longer beams that extend higher
+        const beamWidth = p.size;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10; // Reduced for performance
+        ctx.lineWidth = beamWidth;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        const beamAngle = p.angle || -Math.PI / 2;
+        ctx.lineTo(p.x + Math.cos(beamAngle) * beamLength, p.y + Math.sin(beamAngle) * beamLength);
+        ctx.stroke();
+        // Add glow at base
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, beamWidth * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_ring':
+        // Particle ball (NO CIRCLES) - fire outward
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); // Just a particle ball, not a ring
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_circle':
+        // Particle ball (NO CIRCLES) - fire outward
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); // Just a particle ball, not a circle
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_wave':
+        // Particle ball (NO CIRCLES) - fire outward
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); // Just a particle ball, not a wave ring
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_wing_beam':
+        // Beam from wing tips - extend far horizontally
+        const wingBeamLength = 200 + (1 - p.life) * 100; // Longer horizontal beams
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10; // Reduced for performance
+        ctx.lineWidth = p.size;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        const wingBeamAngle = p.angle || 0;
+        ctx.lineTo(p.x + Math.cos(wingBeamAngle) * wingBeamLength, p.y + Math.sin(wingBeamAngle) * wingBeamLength);
+        ctx.stroke();
+        // Glow at origin
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_orb':
+        // Rotating energy orb
+        const orbPhase = ((p.phase || 0) + time * 0.002) % 1;
+        const orbSize = p.size * (0.9 + Math.sin(orbPhase * Math.PI * 2) * 0.1);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, orbSize, 0, Math.PI * 2);
+        ctx.fill();
+        // Rotating trail (reduced from 3 to 2 for performance)
+        ctx.globalAlpha = alpha * 0.5;
+        const trailAngle = (p.angle || 0) + time * 0.003;
+        for (let j = 0; j < 2; j++) {
+          const trailOffset = (j - 0.5) * Math.PI / 2;
+          const trailX = p.x + Math.cos(trailAngle + trailOffset) * orbSize * 1.5;
+          const trailY = p.y + Math.sin(trailAngle + trailOffset) * orbSize * 1.5;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * (1 + wavePhase * 2), 0, Math.PI * 2);
-          ctx.stroke();
-          
-          // Tendril effect
-          const tendrilAngle = (time * 0.005 + i) * Math.PI * 2;
-          ctx.strokeStyle = `rgba(148, 0, 211, ${alpha * 0.6})`;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(
-            p.x + Math.cos(tendrilAngle) * p.size * 2,
-            p.y + Math.sin(tendrilAngle) * p.size * 2
-          );
-          ctx.stroke();
+          ctx.arc(trailX, trailY, orbSize * 0.3, 0, Math.PI * 2);
+          ctx.fill();
         }
+        ctx.restore();
+        break;
+        
+      case 'godlike_pulse':
+        // Pulsing particle ball (NO CIRCLES)
+        const godlikePulsePhase = ((p.phase || 0) + time * 0.008) % 1;
+        const godlikePulseSize = p.size * (1 + Math.sin(godlikePulsePhase * Math.PI * 2) * 0.4);
+        ctx.save();
+        ctx.globalAlpha = alpha * (0.7 + Math.sin(godlikePulsePhase * Math.PI * 2) * 0.3);
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, godlikePulseSize, 0, Math.PI * 2); // Just a pulsing particle ball, no rings
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_trail':
+        // Following trail particles
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Small trailing particles (reduced from 2 to 1 for performance)
+        ctx.globalAlpha = alpha * 0.6;
+        const trailTrailX = p.x - p.vx * 5;
+        const trailTrailY = p.y - p.vy * 5;
+        ctx.beginPath();
+        ctx.arc(trailTrailX, trailTrailY, p.size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_hat_wisp':
+        // Energy wisp - elongated upward beam
+        const wispLength = 120 + (1 - p.life) * 80; // Longer upward wisps
+        const wispWidth = p.size * 0.6;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6; // Reduced for performance
+        ctx.lineWidth = wispWidth;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        const wispAngle = p.angle || -Math.PI / 2;
+        ctx.lineTo(p.x + Math.cos(wispAngle) * wispLength, p.y + Math.sin(wispAngle) * wispLength);
+        ctx.stroke();
+        // Glow at base
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, wispWidth * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_shirt_burst':
+        // Energy burst - particle ball with trail
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Burst trail (reduced from 2 to 1 for performance)
+        const burstTrailAge = 0.4;
+        const burstTrailX = p.x - p.vx * burstTrailAge * 15;
+        const burstTrailY = p.y - p.vy * burstTrailAge * 15;
+        ctx.globalAlpha = alpha * (1 - burstTrailAge) * 0.5;
+        ctx.beginPath();
+        ctx.arc(burstTrailX, burstTrailY, p.size * (1 - burstTrailAge * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_legs_ground':
+        // Ground energy - particle ball rising from ground
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Upward trail (reduced from 2 to 1 for performance)
+        const groundTrailAge = 0.3;
+        const groundTrailX = p.x;
+        const groundTrailY = p.y - Math.abs(p.vy) * groundTrailAge * 12;
+        ctx.globalAlpha = alpha * (1 - groundTrailAge) * 0.4;
+        ctx.beginPath();
+        ctx.arc(groundTrailX, groundTrailY, p.size * (1 - groundTrailAge * 0.3), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_cape_flow':
+        // Flowing energy - elongated particle flowing backward
+        const flowLength = 40 + (1 - p.life) * 30;
+        const flowWidth = p.size * 0.7;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6; // Reduced for performance
+        ctx.lineWidth = flowWidth;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        const flowAngle = p.angle || Math.PI;
+        ctx.lineTo(p.x + Math.cos(flowAngle) * flowLength, p.y + Math.sin(flowAngle) * flowLength * 0.5);
+        ctx.stroke();
+        // Glow at origin
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, flowWidth * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_boost_energy':
+        // Energetic burst - bright particle with energy trail
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Energy trail (reduced from 3 to 1 for performance)
+        const boostTrailAge = 0.25;
+        const boostTrailX = p.x - p.vx * boostTrailAge * 18;
+        const boostTrailY = p.y - p.vy * boostTrailAge * 18;
+        ctx.globalAlpha = alpha * (1 - boostTrailAge) * 0.6;
+        ctx.beginPath();
+        ctx.arc(boostTrailX, boostTrailY, p.size * (1 - boostTrailAge * 0.4), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+        
+      case 'godlike_pet_sparkle':
+        // Sparkling trail - small sparkles
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 4; // Reduced for performance
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Sparkle effect
+        const sparkleTwinkle = Math.sin(time * 0.01 + i) * 0.3 + 0.7;
+        ctx.globalAlpha = alpha * sparkleTwinkle;
+        drawSparkle(ctx, p.x, p.y, p.size * 1.2);
+        ctx.restore();
+        break;
+        
+      case 'godlike_floor_span':
+        // Floor-spanning effect - particles that span the floor around the player
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.8; // Visible floor effect
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 15; // Strong glow for floor particles
+        // Draw main particle as a glowing orb on the floor
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Draw a subtle pulsing effect
+        const floorPulsePhase = (time * 0.002 + (p.angle || 0)) % (Math.PI * 2);
+        const floorPulseSize = p.size * (1 + Math.sin(floorPulsePhase) * 0.2);
+        ctx.globalAlpha = alpha * 0.4;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, floorPulseSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
         break;
         
       case 'rainbow':
@@ -11354,6 +12015,12 @@ export function drawPet(
     drawGalaxyPet(ctx, petScaledX, finalY, p, time);
   } else if (petItemId === 'pet_rainbow') {
     drawRainbowPet(ctx, petScaledX, finalY, p, time);
+  } else if (petItemId === 'pet_godlike_void') {
+    drawGodlikeVoidPet(ctx, petScaledX, finalY, p, time);
+  } else if (petItemId === 'pet_godlike_chaos') {
+    drawGodlikeChaosPet(ctx, petScaledX, finalY, p, time);
+  } else if (petItemId === 'pet_godlike_abyss') {
+    drawGodlikeAbyssPet(ctx, petScaledX, finalY, p, time);
   } else if (petItemId === 'pet_mini_me') {
     if (player) {
       drawMiniMePet(ctx, petScaledX, finalY, p, time, player, playerDirection);

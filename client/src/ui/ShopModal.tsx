@@ -9,6 +9,44 @@ import { playClickSound, playCloseSound, playPurchaseSound, playEquipSound, play
 
 const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike'];
 
+// Helper function to get the best (highest rarity) item from a loot box
+const getBestItemFromLootBox = (lootBox: LootBox): ShopItem | null => {
+  if (lootBox.items.length === 0) return null;
+  
+  let bestItem: ShopItem | null = null;
+  let bestRarityIndex = -1;
+  
+  for (const { item } of lootBox.items) {
+    const rarity = item.rarity || 'common';
+    const rarityIndex = RARITY_ORDER.indexOf(rarity);
+    if (rarityIndex > bestRarityIndex) {
+      bestRarityIndex = rarityIndex;
+      bestItem = item;
+    }
+  }
+  
+  return bestItem;
+};
+
+// Helper function to get the highest rarity in a loot box
+const getHighestRarityFromLootBox = (lootBox: LootBox): ItemRarity => {
+  if (lootBox.items.length === 0) return 'common';
+  
+  let highestRarity: ItemRarity = 'common';
+  let highestRarityIndex = -1;
+  
+  for (const { item } of lootBox.items) {
+    const rarity = item.rarity || 'common';
+    const rarityIndex = RARITY_ORDER.indexOf(rarity);
+    if (rarityIndex > highestRarityIndex) {
+      highestRarityIndex = rarityIndex;
+      highestRarity = rarity;
+    }
+  }
+  
+  return highestRarity;
+};
+
 export function ShopModal() {
   const shopOpen = useGameStore(state => state.shopOpen);
   const shopInitialTab = useGameStore(state => state.shopInitialTab);
@@ -85,7 +123,7 @@ export function ShopModal() {
       };
       
       // Create items with chances distributed evenly within each rarity
-      // Special handling for pets: gold, phoenix, void = 20% each, rest = 13.3% each
+      // Special handling for pets: gold, phoenix, void = 20% each, rest = 13.3% each, mini_me = 0.05%
       let itemsWithChances;
       if (category === 'pets') {
         itemsWithChances = categoryItems.map(item => {
@@ -94,6 +132,8 @@ export function ShopModal() {
             chance = 20.0;
           } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
             chance = 13.3;
+          } else if (item.id === 'pet_mini_me') {
+            chance = 0.05;
           }
           return {
             item,
@@ -440,16 +480,24 @@ export function ShopModal() {
         <div className="flex gap-4 overflow-x-auto pb-2 lootbox-scroll">
           {filteredLootBoxes.map(lootBox => {
             const canAfford = playerOrbs >= lootBox.price;
+            const highestRarity = getHighestRarityFromLootBox(lootBox);
+            const bestItem = getBestItemFromLootBox(lootBox);
+            const rarityColor = RARITY_COLORS[highestRarity];
+            
             return (
               <div
                 key={lootBox.id}
                 className={`
-                  bg-gray-800 rounded-lg p-4 border-2 transition-all cursor-pointer flex-shrink-0 w-52 h-72 flex flex-col
+                  rounded-lg p-4 border-2 transition-all cursor-pointer flex-shrink-0 w-52 h-72 flex flex-col
                   ${canAfford 
-                    ? 'border-amber-500 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-500/30' 
+                    ? `${rarityColor.border} hover:shadow-lg` 
                     : 'border-gray-600 opacity-60'
                   }
                 `}
+                style={canAfford ? { 
+                  backgroundColor: 'rgba(31, 41, 55, 0.8)',
+                  boxShadow: `0 0 15px ${rarityColor.glow}` 
+                } : undefined}
                 onClick={() => {
                   if (canAfford) {
                     playClickSound();
@@ -458,8 +506,15 @@ export function ShopModal() {
                 }}
               >
                 <div className="text-center mb-3 flex-shrink-0 h-[120px] flex flex-col justify-center px-2">
-                  <div className="text-4xl mb-2">📦</div>
-                  <h3 className="font-pixel text-sm text-amber-400 mb-1 line-clamp-2 min-h-[40px] flex items-center justify-center break-words">
+                  {/* Item preview of best item */}
+                  {bestItem && (
+                    <div className="mb-2 flex justify-center">
+                      <div className="w-16 h-16 bg-gray-900 rounded-lg flex items-center justify-center border border-gray-700">
+                        <ItemPreview item={bestItem} size={48} animate={false} />
+                      </div>
+                    </div>
+                  )}
+                  <h3 className={`font-pixel text-sm mb-1 line-clamp-2 min-h-[40px] flex items-center justify-center break-words ${rarityColor.text}`}>
                     {lootBox.name}
                   </h3>
                   <div className="flex items-center justify-center gap-2">
@@ -536,16 +591,24 @@ export function ShopModal() {
               <div className="flex gap-4 overflow-x-auto pb-2 lootbox-scroll">
                 {lootBoxes.map(lootBox => {
                   const canAfford = playerOrbs >= lootBox.price;
+                  const highestRarity = getHighestRarityFromLootBox(lootBox);
+                  const bestItem = getBestItemFromLootBox(lootBox);
+                  const rarityColor = RARITY_COLORS[highestRarity];
+                  
                   return (
                     <div
                       key={lootBox.id}
                       className={`
-                        bg-gray-800 rounded-lg p-4 border-2 transition-all cursor-pointer flex-shrink-0 w-52 h-72 flex flex-col
+                        rounded-lg p-4 border-2 transition-all cursor-pointer flex-shrink-0 w-52 h-72 flex flex-col
                         ${canAfford 
-                          ? 'border-amber-500 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-500/30' 
+                          ? `${rarityColor.border} hover:shadow-lg` 
                           : 'border-gray-600 opacity-60'
                         }
                       `}
+                      style={canAfford ? { 
+                        backgroundColor: 'rgba(31, 41, 55, 0.8)',
+                        boxShadow: `0 0 15px ${rarityColor.glow}` 
+                      } : undefined}
                       onClick={() => {
                         if (canAfford) {
                           playClickSound();
@@ -554,8 +617,15 @@ export function ShopModal() {
                       }}
                     >
                       <div className="text-center mb-3 flex-shrink-0 h-[120px] flex flex-col justify-center px-2">
-                        <div className="text-4xl mb-2">📦</div>
-                        <h3 className="font-pixel text-sm text-amber-400 mb-1 line-clamp-2 min-h-[40px] flex items-center justify-center break-words">
+                        {/* Item preview of best item */}
+                        {bestItem && (
+                          <div className="mb-2 flex justify-center">
+                            <div className="w-16 h-16 bg-gray-900 rounded-lg flex items-center justify-center border border-gray-700">
+                              <ItemPreview item={bestItem} size={48} animate={false} />
+                            </div>
+                          </div>
+                        )}
+                        <h3 className={`font-pixel text-sm mb-1 line-clamp-2 min-h-[40px] flex items-center justify-center break-words ${rarityColor.text}`}>
                           {lootBox.name}
                         </h3>
                         <div className="flex items-center justify-center gap-2">
@@ -1085,6 +1155,44 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
   const playerOrbs = useGameStore(state => state.localPlayer?.orbs || 0);
   const toggleShop = useGameStore(state => state.toggleShop);
   
+  // Helper function to get the best (highest rarity) item from a loot box
+  const getBestItemFromLootBox = (lootBox: LootBox): ShopItem | null => {
+    if (lootBox.items.length === 0) return null;
+    
+    let bestItem: ShopItem | null = null;
+    let bestRarityIndex = -1;
+    
+    for (const { item } of lootBox.items) {
+      const rarity = item.rarity || 'common';
+      const rarityIndex = RARITY_ORDER.indexOf(rarity);
+      if (rarityIndex > bestRarityIndex) {
+        bestRarityIndex = rarityIndex;
+        bestItem = item;
+      }
+    }
+    
+    return bestItem;
+  };
+
+  // Helper function to get the highest rarity in a loot box
+  const getHighestRarityFromLootBox = (lootBox: LootBox): ItemRarity => {
+    if (lootBox.items.length === 0) return 'common';
+    
+    let highestRarity: ItemRarity = 'common';
+    let highestRarityIndex = -1;
+    
+    for (const { item } of lootBox.items) {
+      const rarity = item.rarity || 'common';
+      const rarityIndex = RARITY_ORDER.indexOf(rarity);
+      if (rarityIndex > highestRarityIndex) {
+        highestRarityIndex = rarityIndex;
+        highestRarity = rarity;
+      }
+    }
+    
+    return highestRarity;
+  };
+  
   // Generate loot boxes from shop items
   const lootBoxes = useMemo(() => {
     const categories: Array<'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'> = [
@@ -1141,7 +1249,7 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
       };
       
       // Create items with chances distributed evenly within each rarity
-      // Special handling for pets: gold, phoenix, void = 20% each, rest = 13.3% each
+      // Special handling for pets: gold, phoenix, void = 20% each, rest = 13.3% each, mini_me = 0.05%
       let itemsWithChances;
       if (category === 'pets') {
         itemsWithChances = categoryItems.map(item => {
@@ -1150,6 +1258,8 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
             chance = 20.0;
           } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
             chance = 13.3;
+          } else if (item.id === 'pet_mini_me') {
+            chance = 0.05;
           }
           return {
             item,
@@ -1242,16 +1352,24 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {lootBoxes.map(lootBox => {
           const canAfford = playerOrbs >= lootBox.price;
+          const highestRarity = getHighestRarityFromLootBox(lootBox);
+          const bestItem = getBestItemFromLootBox(lootBox);
+          const rarityColor = RARITY_COLORS[highestRarity];
+          
           return (
             <div
               key={lootBox.id}
               className={`
-                bg-gray-800 rounded-lg p-4 border-2 transition-all cursor-pointer
+                rounded-lg p-4 border-2 transition-all cursor-pointer
                 ${canAfford 
-                  ? 'border-amber-500 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-500/30' 
+                  ? `${rarityColor.border} hover:shadow-lg` 
                   : 'border-gray-600 opacity-60'
                 }
               `}
+              style={canAfford ? { 
+                backgroundColor: 'rgba(31, 41, 55, 0.8)',
+                boxShadow: `0 0 15px ${rarityColor.glow}` 
+              } : undefined}
               onClick={() => {
                 if (canAfford) {
                   playClickSound();
@@ -1260,8 +1378,15 @@ function LootBoxesTab({ shopItems, onOpenLootBox }: { shopItems: ShopItem[]; onO
               }}
             >
               <div className="text-center mb-3">
-                <div className="text-4xl mb-2">📦</div>
-                <h3 className="font-pixel text-lg text-amber-400 mb-1">
+                {/* Item preview of best item */}
+                {bestItem && (
+                  <div className="mb-2 flex justify-center">
+                    <div className="w-20 h-20 bg-gray-900 rounded-lg flex items-center justify-center border border-gray-700">
+                      <ItemPreview item={bestItem} size={64} animate={false} />
+                    </div>
+                  </div>
+                )}
+                <h3 className={`font-pixel text-lg mb-1 ${rarityColor.text}`}>
                   {lootBox.name}
                 </h3>
                 <div className="flex items-center justify-center gap-2 mb-2">

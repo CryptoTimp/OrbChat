@@ -105,6 +105,8 @@ export function HUD({ onLeaveRoom }: HUDProps) {
             chance = 20.0;
           } else if (item.id === 'pet_celestial' || item.id === 'pet_galaxy' || item.id === 'pet_rainbow') {
             chance = 13.3;
+          } else if (item.id === 'pet_mini_me') {
+            chance = 0.05;
           }
           return { item, chance };
         });
