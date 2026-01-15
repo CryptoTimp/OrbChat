@@ -13,6 +13,7 @@ export function getShopItems(): ShopItem[] {
     rarity: (item.rarity || 'common') as ItemRarity,
     speedMultiplier: item.speed_multiplier,
     orbMultiplier: item.orb_multiplier,
+    idleRewardRate: item.idle_reward_rate,
     trailColor: item.trail_color,
   }));
 }
@@ -31,6 +32,7 @@ export function getShopItem(itemId: string): ShopItem | undefined {
     rarity: (item.rarity || 'common') as ItemRarity,
     speedMultiplier: item.speed_multiplier,
     orbMultiplier: item.orb_multiplier,
+    idleRewardRate: item.idle_reward_rate,
     trailColor: item.trail_color,
   };
 }

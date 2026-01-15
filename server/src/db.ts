@@ -25,6 +25,7 @@ export interface ShopItemData {
   rarity: ItemRarity;
   speed_multiplier?: number; // For speed boost items
   orb_multiplier?: number; // For orb boost items: 1.0 = normal, 2.5 = 150% more orbs
+  idle_reward_rate?: number; // For idle collector items: orbs per second while idle
   trail_color?: string; // Particle trail color for boosts
 }
 
@@ -82,6 +83,9 @@ export function initializeDatabase(): void {
     migrateAddLegendarySetItems();
     // Migration: Add orb boost items
     migrateAddOrbBoostItems();
+    migrateAddIdleCollectorItems();
+    // Migration: Update idle collector rates (in case they were added with old values)
+    migrateUpdateIdleCollectorRates();
     // Migration: Update orb boost multipliers
     migrateUpdateOrbBoostMultipliers();
     // Migration: Move wings from accessory to wings layer
@@ -615,6 +619,27 @@ function seedShopItems(): void {
     // Ultra Legendary orb boost - 300000 orbs (~20+ hours)
     { id: 'boost_orb_divine', name: 'Divine Harvest', price: 300000, sprite_layer: 'boost', sprite_path: '/sprites/boost_orb_divine.png', rarity: 'legendary', orb_multiplier: 3.0, trail_color: '#ec4899' },
     
+    // === IDLE COLLECTORS === (Reward orbs for being idle)
+    // Scaled so top tier takes ~1 week idle to earn 9M orbs (Ultimate Pack price)
+    // 1 week = 604,800 seconds, 9M / 604,800 ≈ 14.88 orbs/sec for top tier
+    // Uncommon idle collector - 5000 orbs - 0.5 orbs per second (~38 days for 9M)
+    { id: 'boost_idle_basic', name: 'Basic Collector', price: 5000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_basic.png', rarity: 'uncommon', idle_reward_rate: 0.5, trail_color: '#22c55e' },
+    
+    // Rare idle collector - 20000 orbs - 1 orb per second (~104 days for 9M)
+    { id: 'boost_idle_advanced', name: 'Advanced Collector', price: 20000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_advanced.png', rarity: 'rare', idle_reward_rate: 1.0, trail_color: '#3b82f6' },
+    
+    // Epic idle collector - 60000 orbs - 2 orbs per second (~52 days for 9M)
+    { id: 'boost_idle_elite', name: 'Elite Collector', price: 60000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_elite.png', rarity: 'epic', idle_reward_rate: 2.0, trail_color: '#a855f7' },
+    
+    // Epic idle collector - 100000 orbs - 4 orbs per second (~26 days for 9M)
+    { id: 'boost_idle_master', name: 'Master Collector', price: 100000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_master.png', rarity: 'epic', idle_reward_rate: 4.0, trail_color: '#f59e0b' },
+    
+    // Legendary idle collector - 250000 orbs - 8 orbs per second (~13 days for 9M)
+    { id: 'boost_idle_legendary', name: 'Legendary Collector', price: 250000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_legendary.png', rarity: 'legendary', idle_reward_rate: 8.0, trail_color: '#ef4444' },
+    
+    // Ultra Legendary idle collector - 500000 orbs - 15 orbs per second (~7 days for 9M)
+    { id: 'boost_idle_divine', name: 'Divine Collector', price: 500000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_divine.png', rarity: 'legendary', idle_reward_rate: 15.0, trail_color: '#ec4899' },
+    
     // === LEGENDARY PETS === (Cosmetic companions that follow you) - 200% price increase
     { id: 'pet_golden', name: 'Golden Dragon', price: 750000, sprite_layer: 'pet', sprite_path: '/sprites/pet_golden.png', rarity: 'legendary' },
     { id: 'pet_phoenix', name: 'Phoenix Companion', price: 840000, sprite_layer: 'pet', sprite_path: '/sprites/pet_phoenix.png', rarity: 'legendary' },
@@ -626,12 +651,81 @@ function seedShopItems(): void {
     { id: 'pet_mini_me', name: 'Mini Me', price: 5000000, sprite_layer: 'pet', sprite_path: '/sprites/pet_mini_me.png', rarity: 'legendary' },
   ];
 
+  let addedCount = 0;
   for (const item of items) {
-    data.shop_items[item.id] = item;
+    // Only add if item doesn't exist (preserve existing items that may have been updated by migrations)
+    if (!data.shop_items[item.id]) {
+      data.shop_items[item.id] = item;
+      addedCount++;
+    }
   }
   
-  saveData();
-  console.log(`Shop items seeded: ${items.length} items`);
+  if (addedCount > 0) {
+    saveData();
+    console.log(`Shop items seeded: ${addedCount} new items added (${items.length - addedCount} already existed)`);
+  }
+}
+
+// Migration: Add idle collector items
+function migrateAddIdleCollectorItems(): void {
+  const idleCollectorItems: ShopItemData[] = [
+    // Scaled so top tier takes ~1 week idle to earn 9M orbs (Ultimate Pack price)
+    // Uncommon idle collector - 5000 orbs - 0.5 orbs per second
+    { id: 'boost_idle_basic', name: 'Basic Collector', price: 5000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_basic.png', rarity: 'uncommon', idle_reward_rate: 0.5, trail_color: '#22c55e' },
+    
+    // Rare idle collector - 20000 orbs - 1 orb per second
+    { id: 'boost_idle_advanced', name: 'Advanced Collector', price: 20000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_advanced.png', rarity: 'rare', idle_reward_rate: 1.0, trail_color: '#3b82f6' },
+    
+    // Epic idle collector - 60000 orbs - 2 orbs per second
+    { id: 'boost_idle_elite', name: 'Elite Collector', price: 60000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_elite.png', rarity: 'epic', idle_reward_rate: 2.0, trail_color: '#a855f7' },
+    
+    // Epic idle collector - 100000 orbs - 4 orbs per second
+    { id: 'boost_idle_master', name: 'Master Collector', price: 100000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_master.png', rarity: 'epic', idle_reward_rate: 4.0, trail_color: '#f59e0b' },
+    
+    // Legendary idle collector - 250000 orbs - 8 orbs per second
+    { id: 'boost_idle_legendary', name: 'Legendary Collector', price: 250000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_legendary.png', rarity: 'legendary', idle_reward_rate: 8.0, trail_color: '#ef4444' },
+    
+    // Ultra Legendary idle collector - 500000 orbs - 15 orbs per second (~7 days for 9M)
+    { id: 'boost_idle_divine', name: 'Divine Collector', price: 500000, sprite_layer: 'boost', sprite_path: '/sprites/boost_idle_divine.png', rarity: 'legendary', idle_reward_rate: 15.0, trail_color: '#ec4899' },
+  ];
+  
+  let addedCount = 0;
+  for (const item of idleCollectorItems) {
+    if (!data.shop_items[item.id]) {
+      data.shop_items[item.id] = item;
+      addedCount++;
+    }
+  }
+  
+  if (addedCount > 0) {
+    saveData();
+    console.log(`Migration: Added ${addedCount} idle collector items to shop`);
+  }
+}
+
+// Migration: Update idle collector reward rates to match 1 week = 9M scaling
+function migrateUpdateIdleCollectorRates(): void {
+  const updates: { id: string; idle_reward_rate: number }[] = [
+    { id: 'boost_idle_basic', idle_reward_rate: 0.5 },
+    { id: 'boost_idle_advanced', idle_reward_rate: 1.0 },
+    { id: 'boost_idle_elite', idle_reward_rate: 2.0 },
+    { id: 'boost_idle_master', idle_reward_rate: 4.0 },
+    { id: 'boost_idle_legendary', idle_reward_rate: 8.0 },
+    { id: 'boost_idle_divine', idle_reward_rate: 15.0 },
+  ];
+  
+  let updatedCount = 0;
+  for (const update of updates) {
+    if (data.shop_items[update.id] && data.shop_items[update.id].idle_reward_rate !== update.idle_reward_rate) {
+      data.shop_items[update.id].idle_reward_rate = update.idle_reward_rate;
+      updatedCount++;
+    }
+  }
+  
+  if (updatedCount > 0) {
+    saveData();
+    console.log(`Migration: Updated ${updatedCount} idle collector reward rates`);
+  }
 }
 
 // Migration: Add orb boost items
@@ -670,8 +764,33 @@ function migrateAddOrbBoostItems(): void {
   }
 }
 
-// Migration: Update orb boost multipliers to new max (200%)
-function migrateUpdateOrbBoostMultipliers(): void {
+// Migration: Update idle collector reward rates to match 1 week = 9M scaling
+function migrateUpdateIdleCollectorRates(): void {
+  const updates: { id: string; idle_reward_rate: number }[] = [
+    { id: 'boost_idle_basic', idle_reward_rate: 0.5 },
+    { id: 'boost_idle_advanced', idle_reward_rate: 1.0 },
+    { id: 'boost_idle_elite', idle_reward_rate: 2.0 },
+    { id: 'boost_idle_master', idle_reward_rate: 4.0 },
+    { id: 'boost_idle_legendary', idle_reward_rate: 8.0 },
+    { id: 'boost_idle_divine', idle_reward_rate: 15.0 },
+  ];
+  
+  let updatedCount = 0;
+  for (const update of updates) {
+    if (data.shop_items[update.id] && data.shop_items[update.id].idle_reward_rate !== update.idle_reward_rate) {
+      data.shop_items[update.id].idle_reward_rate = update.idle_reward_rate;
+      updatedCount++;
+    }
+  }
+  
+  if (updatedCount > 0) {
+    saveData();
+    console.log(`Migration: Updated ${updatedCount} idle collector reward rates`);
+  }
+}
+
+    // Migration: Update orb boost multipliers to new max (200%)
+    function migrateUpdateOrbBoostMultipliers(): void {
   const updates: { id: string; multiplier: number }[] = [
     { id: 'boost_orb_divine', multiplier: 3.0 }, // Update to 200% (was 2.5 = 150%)
   ];

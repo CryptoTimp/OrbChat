@@ -1,13 +1,13 @@
 import { useEffect, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useGameStore } from '../state/gameStore';
-import { Direction, InventoryItem } from '../types';
+import { Direction, InventoryItem, GAME_CONSTANTS } from '../types';
 import { updateUserOrbs, getUserProfile, updateEquippedItems, addToInventory, updateGoldCoins } from '../firebase/auth';
 import { ref, set } from 'firebase/database';
 import { database } from '../firebase/config';
 import { addNotification } from '../ui/Notifications';
 import { playPickupSound, playShrineRejectionSound, playShrineRewardSound, playSellSound } from '../utils/sounds';
-import { setShrineSpeechBubble } from '../game/renderer';
+import { setShrineSpeechBubble, spawnFloatingText } from '../game/renderer';
 
 // Socket.IO server URL
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 
@@ -362,20 +362,39 @@ function attachListeners(sock: Socket) {
     }
   });
   
-  // Player orb balance updated (e.g. from purchases)
-  sock.on('player_orbs_updated', async ({ playerId, orbs }) => {
+  // Player orb balance updated (e.g. from purchases, idle rewards, etc.)
+  sock.on('player_orbs_updated', async ({ playerId, orbs, rewardAmount, rewardType }) => {
     const state = useGameStore.getState();
     
     if (playerId === state.playerId) {
       // For our own balance update, check if the value matches what we already have
-      // If it matches, skip the sync to avoid triggering floating text with total difference
       const currentOrbs = state.localPlayer?.orbs || 0;
       if (orbs === currentOrbs) {
         // Value already matches, no need to sync
         return;
       }
-      // For our own balance update, sync from Firebase (source of truth)
-      await syncOrbsFromFirebase(playerId);
+      
+      // Special handling for idle rewards - show incremental update with floating text
+      if (rewardType === 'idle' && rewardAmount && rewardAmount > 0) {
+        // Update balance directly with the reward amount for visual feedback
+        // This ensures the balance ticks up smoothly and shows floating text
+        // Note: Server already updated Firebase before emitting this event, so no need to sync
+        state.updatePlayerOrbs(playerId, orbs, rewardAmount);
+        
+        // Spawn floating text above player's head (like when collecting orbs from ground)
+        const localPlayer = state.localPlayer;
+        if (localPlayer && localPlayer.x !== undefined && localPlayer.y !== undefined) {
+          const { SCALE, PLAYER_WIDTH } = GAME_CONSTANTS;
+          const playerHeadX = localPlayer.x * SCALE + (PLAYER_WIDTH / 2) * SCALE;
+          const playerHeadY = localPlayer.y * SCALE - 10; // Above head
+          
+          // Use 'idle' as orb type for idle rewards (will use appropriate color)
+          spawnFloatingText(playerHeadX, playerHeadY, rewardAmount, 'idle');
+        }
+      } else {
+        // For other balance updates (purchases, etc.), sync from Firebase (source of truth)
+        await syncOrbsFromFirebase(playerId);
+      }
     } else {
       // For other players, update the balance
       // We trust server updates for purchases/transactions (they decrease balance)

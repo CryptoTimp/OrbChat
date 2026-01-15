@@ -86,6 +86,7 @@ export interface ShopItem {
   rarity: ItemRarity;
   speedMultiplier?: number; // For speed boost items: 1.0 = normal, 1.5 = 50% faster
   orbMultiplier?: number; // For orb boost items: 1.0 = normal, 2.5 = 150% more orbs
+  idleRewardRate?: number; // For idle collector items: orbs per second while idle
   trailColor?: string; // Particle trail color for boosts
 }
 

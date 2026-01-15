@@ -7339,6 +7339,7 @@ export function spawnFloatingText(x: number, y: number, value: number, orbType: 
     'normal': '#00dcff',     // Legacy cyan
     'gold': '#ffd700',       // Legacy gold
     'shrine': '#dc143c',     // Red (crimson) for shrine orbs
+    'idle': '#22c55e',       // Green for idle rewards
   };
   const color = colors[orbType] || '#00dcff';
   

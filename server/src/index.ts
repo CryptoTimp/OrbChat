@@ -44,12 +44,26 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 // Initialize database
 initializeDatabase();
 
+// Verify idle collector items are loaded
+const shopItems = shop.getShopItems();
+const idleCollectors = shopItems.filter(item => item.idleRewardRate && item.idleRewardRate > 0);
+console.log(`[Idle Reward System] Found ${idleCollectors.length} idle collector items in shop:`, 
+  idleCollectors.map(item => `${item.name} (${item.idleRewardRate}/sec)`).join(', '));
+
 // Initialize global rooms
 rooms.initializeGlobalRooms();
 
 // Track socket -> player mapping
 // Note: This is cleared on server restart (new Map instance)
 const socketToPlayer: Map<string, { playerId: string; roomId: string }> = new Map();
+
+// Track last movement time for each player (for idle collectors)
+// Map: playerId -> lastMovementTime (timestamp)
+const playerLastMovement: Map<string, number> = new Map();
+
+// Track last idle reward time for each player (to prevent double rewards)
+// Map: playerId -> lastRewardTime (timestamp)
+const playerLastIdleReward: Map<string, number> = new Map();
 
 // Clean up any lingering socket state on server startup
 // (Socket.IO rooms are automatically cleared when server restarts, but we ensure clean state)
@@ -61,6 +75,118 @@ function clearAllSocketState() {
 
 // Clear socket state on startup
 clearAllSocketState();
+
+// Idle reward system - check every 5 seconds and reward idle players
+console.log('[Idle Reward System] Starting idle reward interval (every 5 seconds)');
+let intervalRunCount = 0;
+setInterval(async () => {
+  intervalRunCount++;
+  const now = Date.now();
+  const IDLE_THRESHOLD = 5000; // 5 seconds of no movement to be considered idle
+  const REWARD_INTERVAL = 5000; // Reward every 5 seconds to reduce database calls
+  
+  
+  // Iterate through all rooms and check players
+  const allRooms = rooms.getAllRooms();
+  
+  if (allRooms.length === 0) {
+    return; // No rooms, skip
+  }
+  
+  for (const roomId of allRooms) {
+    const playersInRoom = rooms.getPlayersInRoom(roomId);
+    
+    if (playersInRoom.length === 0) {
+      continue; // No players in this room
+    }
+    
+    for (const player of playersInRoom) {
+      const lastMove = playerLastMovement.get(player.id);
+      if (!lastMove) {
+        // Player not tracked yet, initialize them
+        playerLastMovement.set(player.id, now);
+        continue;
+      }
+      
+      const idleTime = now - lastMove;
+      
+      // Player must be idle for at least IDLE_THRESHOLD
+      if (idleTime >= IDLE_THRESHOLD) {
+        // Check if player has idle collector equipped
+        const shopItems = shop.getShopItems();
+        let maxIdleRewardRate = 0;
+        
+        if (!player.sprite?.outfit || player.sprite.outfit.length === 0) {
+          // No outfit equipped, skip
+          continue;
+        }
+        
+        // Check equipped items for idle collectors
+        for (const itemId of player.sprite.outfit) {
+          const item = shopItems.find(s => s.id === itemId);
+          if (item?.idleRewardRate && isFinite(item.idleRewardRate)) {
+            // Use highest idle reward rate (don't stack)
+            maxIdleRewardRate = Math.max(maxIdleRewardRate, item.idleRewardRate);
+          }
+        }
+        
+        // If player has an idle collector equipped, reward them
+        if (maxIdleRewardRate > 0) {
+          const lastReward = playerLastIdleReward.get(player.id) || 0;
+          const timeSinceLastReward = now - lastReward;
+          
+          // Only reward if enough time has passed since last reward
+          if (timeSinceLastReward >= REWARD_INTERVAL) {
+            // Calculate orbs to reward (rate per second * interval in seconds)
+            const rewardIntervalSeconds = REWARD_INTERVAL / 1000;
+            const orbsToReward = Math.floor(maxIdleRewardRate * rewardIntervalSeconds);
+            
+            if (orbsToReward > 0) {
+              // Get current orbs from Firebase (source of truth) or fallback to room state
+              const { getUserData, updateUserOrbs, firebaseAdmin } = await import('./firebase');
+              
+              // Check if Firebase is initialized before attempting operations
+              let currentOrbs = player.orbs || 0;
+              if (firebaseAdmin.apps.length > 0) {
+                const userData = await getUserData(player.id);
+                currentOrbs = userData?.orbs || player.orbs || 0;
+              }
+              
+              const newBalance = currentOrbs + orbsToReward;
+              
+              // Update Firebase (if available, otherwise continue with room state update)
+              if (firebaseAdmin.apps.length > 0) {
+                await updateUserOrbs(player.id, newBalance);
+              }
+              // If Firebase not available, continue with room state update
+              // Client will sync from Firebase when it's available
+              
+              // Update room state
+              player.orbs = newBalance;
+              await players.updatePlayerOrbs(player.id, newBalance);
+              
+              // Update last reward time
+              playerLastIdleReward.set(player.id, now);
+              
+              // Broadcast update with reward amount for client-side visual feedback
+              io.to(roomId).emit('player_orbs_updated', { 
+                playerId: player.id, 
+                orbs: newBalance,
+                rewardAmount: orbsToReward, // Include reward amount for idle rewards
+                rewardType: 'idle' // Mark as idle reward
+              });
+              
+              // Log reward (only occasionally to reduce spam)
+              if (Math.random() < 0.1) { // 10% chance
+                console.log(`[Idle Reward] ${player.name} received ${orbsToReward} orbs (${maxIdleRewardRate}/sec)`);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}, 5000); // Check every 5 seconds
 
 // Socket connection handler
 io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
@@ -219,6 +345,12 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     
     // Create player with data from Firebase
     const player = players.createPlayerFromFirebase(playerId, playerName, roomId, orbs || 0, equippedItems || [], roomMapType);
+    
+    // Initialize player movement tracking for idle rewards
+    playerLastMovement.set(player.id, Date.now());
+    
+    // Initialize last movement time for idle tracking
+    playerLastMovement.set(player.id, Date.now());
     
     // Sync server's local database with Firebase orb balance (source of truth)
     // This ensures shrine checks and other operations use the correct balance
@@ -419,7 +551,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     if (!mapping) return;
 
     const { playerId, roomId } = mapping;
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    if (!player) return;
+    
+    // Check if player actually moved (not just direction change)
+    const moved = player.x !== x || player.y !== y;
+    
     const updated = rooms.updatePlayerPosition(roomId, playerId, x, y, direction as Direction);
+    
+    // Update last movement time if player actually moved
+    if (updated && moved) {
+      playerLastMovement.set(playerId, Date.now());
+    }
     
     if (updated) {
       io.to(roomId).emit('player_moved', { playerId, x, y, direction: direction as Direction });
@@ -1115,6 +1258,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       // Only remove player from room if no other sockets exist for this player
       if (!hasOtherSockets) {
         rooms.removePlayerFromRoom(roomId, playerId);
+        // Clean up idle tracking when player leaves
+        playerLastMovement.delete(playerId);
+        playerLastIdleReward.delete(playerId);
         
         // Check if room is empty and stop spawner
         const playersLeft = rooms.getPlayersInRoom(roomId);

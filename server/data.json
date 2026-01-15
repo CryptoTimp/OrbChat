@@ -3,11 +3,11 @@
     "ZqlLG9gh1odb9nNy6QEpHuIJofd2": {
       "id": "ZqlLG9gh1odb9nNy6QEpHuIJofd2",
       "name": "Unknown",
-      "orbs": 1118,
+      "orbs": 2117,
       "sprite_body": "default",
       "sprite_outfit": "[]",
       "created_at": "2026-01-14T19:15:59.446Z",
-      "last_seen": "2026-01-15T20:47:04.681Z",
+      "last_seen": "2026-01-15T21:43:42.647Z",
       "logs": 1
     }
   },
@@ -1649,6 +1649,66 @@
       "sprite_layer": "pet",
       "sprite_path": "/sprites/pet_godlike_abyss.png",
       "rarity": "godlike"
+    },
+    "boost_idle_basic": {
+      "id": "boost_idle_basic",
+      "name": "Basic Collector",
+      "price": 5000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_idle_basic.png",
+      "rarity": "uncommon",
+      "idle_reward_rate": 0.5,
+      "trail_color": "#22c55e"
+    },
+    "boost_idle_advanced": {
+      "id": "boost_idle_advanced",
+      "name": "Advanced Collector",
+      "price": 20000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_idle_advanced.png",
+      "rarity": "rare",
+      "idle_reward_rate": 1,
+      "trail_color": "#3b82f6"
+    },
+    "boost_idle_elite": {
+      "id": "boost_idle_elite",
+      "name": "Elite Collector",
+      "price": 60000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_idle_elite.png",
+      "rarity": "epic",
+      "idle_reward_rate": 2,
+      "trail_color": "#a855f7"
+    },
+    "boost_idle_master": {
+      "id": "boost_idle_master",
+      "name": "Master Collector",
+      "price": 100000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_idle_master.png",
+      "rarity": "epic",
+      "idle_reward_rate": 4,
+      "trail_color": "#f59e0b"
+    },
+    "boost_idle_legendary": {
+      "id": "boost_idle_legendary",
+      "name": "Legendary Collector",
+      "price": 250000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_idle_legendary.png",
+      "rarity": "legendary",
+      "idle_reward_rate": 8,
+      "trail_color": "#ef4444"
+    },
+    "boost_idle_divine": {
+      "id": "boost_idle_divine",
+      "name": "Divine Collector",
+      "price": 500000,
+      "sprite_layer": "boost",
+      "sprite_path": "/sprites/boost_idle_divine.png",
+      "rarity": "legendary",
+      "idle_reward_rate": 15,
+      "trail_color": "#ec4899"
     }
   },
   "inventory": [

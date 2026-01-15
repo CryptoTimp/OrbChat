@@ -409,6 +409,11 @@ export function ShopModal() {
             $ {Math.round((item.orbMultiplier - 1) * 100)}% More Orbs
           </p>
         )}
+        {item.idleRewardRate && (
+          <p className="text-[8px] font-pixel text-center mb-1" style={{ color: item.trailColor || '#22c55e' }}>
+            💤 {item.idleRewardRate}/sec Idle
+          </p>
+        )}
         
         {/* Action buttons */}
         <div className="flex gap-1">
@@ -759,7 +764,7 @@ export function ShopModal() {
           <div>
             {renderFilteredLootBoxes()}
             <p className="text-gray-400 font-pixel text-xs mb-4">
-              ⚡ Boosts enhance your gameplay! Speed boosts increase movement speed, orb boosts increase orb rewards!
+              ⚡ Boosts enhance your gameplay! Speed boosts increase movement speed, orb boosts increase orb rewards, idle collectors reward orbs for being idle!
             </p>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
               {sortByRarity(boosts).map(renderItem)}

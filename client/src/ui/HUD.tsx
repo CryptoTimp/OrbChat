@@ -188,6 +188,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
     value: number;
     createdAt: number;
     progress: number; // Store progress in the object itself
+    orbType?: string; // Optional orb type for color determination (e.g., 'idle')
   }
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const [, forceUpdate] = useState(0); // Force re-render trigger
@@ -263,34 +264,48 @@ export function HUD({ onLeaveRoom }: HUDProps) {
       const endValue = currentOrbs;
       const difference = endValue - startValue;
       
-      // Only animate if there's actually a difference to animate
-      if (difference > 0) {
-        const duration = Math.min(800, Math.max(300, difference * 2)); // 300-800ms based on amount
-        const startTime = Date.now();
-        
-        // Spawn +X animation from orb balance (canvas-style, ref-based)
-        // Use the last orb value from store if available, otherwise use the difference
-        // This prevents showing red for normal orbs after shrine rewards
-        const displayValue = lastOrbValue !== undefined ? lastOrbValue : difference;
-        
+      // Spawn +X animation from orb balance (canvas-style, ref-based)
+      // Use the last orb value from store if available, otherwise use the actual increase
+      // This prevents showing red for normal orbs after shrine rewards
+      const actualIncrease = currentOrbs - previousOrbs;
+      const displayValue = lastOrbValue !== undefined ? lastOrbValue : actualIncrease;
+      
+      // Check if this is an idle reward (we can detect this by checking if lastOrbValue matches typical idle reward amounts)
+      // Or we could store the orb type in the store, but for now we'll use a heuristic
+      // Idle rewards are typically 75, 40, 20, 10, 5, or 2.5 (but we floor it, so 2, 5, 10, 20, 40, 75)
+      // Actually, let's check the store for a flag or use the reward amount pattern
+      // For now, let's check if we can determine it from context - if it's a round number that matches idle patterns
+      const isIdleReward = lastOrbValue !== undefined && (
+        lastOrbValue === 75 || lastOrbValue === 40 || lastOrbValue === 20 || 
+        lastOrbValue === 10 || lastOrbValue === 5 || lastOrbValue === 2 ||
+        (lastOrbValue % 5 === 0 && lastOrbValue <= 100) // Common idle reward pattern
+      );
+      
+      // Create floating text whenever balance increases (regardless of displayed value sync)
+      if (displayValue > 0 && orbBalanceRef.current) {
         // Clear lastOrbValue immediately after using it to prevent reuse
         // This ensures each orb collection only triggers one floating text with the correct value
         if (lastOrbValue !== undefined) {
           useGameStore.setState({ lastOrbValue: undefined });
         }
         
-        if (orbBalanceRef.current) {
-          const newFloatingText: FloatingText = {
-            id: `ft_${Date.now()}_${Math.random()}`,
-            value: displayValue, // Use the actual orb value, not the total difference
-            createdAt: Date.now(),
-            progress: 0,
-          };
-          floatingTextsRef.current.push(newFloatingText);
-          
-          // Trigger animation loop start if not already running
-          forceUpdate(prev => prev + 1);
-        }
+        const newFloatingText: FloatingText = {
+          id: `ft_${Date.now()}_${Math.random()}`,
+          value: displayValue, // Use the actual orb value, not the total difference
+          createdAt: Date.now(),
+          progress: 0,
+          orbType: isIdleReward ? 'idle' : undefined, // Mark as idle if detected
+        };
+        floatingTextsRef.current.push(newFloatingText);
+        
+        // Trigger animation loop start if not already running
+        forceUpdate(prev => prev + 1);
+      }
+      
+      // Only animate if there's actually a difference to animate
+      if (difference > 0) {
+        const duration = Math.min(800, Math.max(300, difference * 2)); // 300-800ms based on amount
+        const startTime = Date.now();
         
         // Cancel any existing animation
         if (animationRef.current) {
@@ -574,7 +589,8 @@ export function HUD({ onLeaveRoom }: HUDProps) {
               const opacity = ft.progress < 0.6 ? 1 : Math.max(0, 1 - ((ft.progress - 0.6) / 0.4));
               
               const scale = 1 + easeOut * 0.5;
-              const color = getOrbColor(ft.value);
+              // Use green for idle rewards, otherwise use value-based color
+              const color = ft.orbType === 'idle' ? '#22c55e' : getOrbColor(ft.value);
               
               // Don't render if completely faded or animation complete
               if (opacity <= 0 || ft.progress >= 1) return null;
