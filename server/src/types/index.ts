@@ -148,6 +148,7 @@ export interface ClientToServerEvents {
     newInventory?: string[];  // Client sends updated inventory
   }) => void;
   treasure_chest_interact: (data: { chestId: string; firebaseOrbs?: number }) => void;
+  treasure_chest_relocate: (data: { chestId: string }) => void;
   sell_gold_coins: (data?: { coinCount?: number; orbsReceived?: number }) => void;
 }
 
@@ -191,6 +192,14 @@ export interface ServerToClientEvents {
     message: string; 
     coinsFound?: number;
     openedBy?: string; // Player ID who opened the chest
+  }) => void;
+  treasure_chest_relocated: (data: { 
+    chestId: string; 
+    chest: TreasureChest; 
+    oldX: number; 
+    oldY: number; 
+    newX: number; 
+    newY: number;
   }) => void;
   treasure_chest_interaction_error: (data: { chestId: string; message: string }) => void;
   gold_coins_sold: (data: { playerId: string; coinCount: number; orbsReceived: number; newBalance: number }) => void;

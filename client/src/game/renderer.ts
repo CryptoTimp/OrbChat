@@ -11066,6 +11066,20 @@ export function getHoveredShrine(worldX: number, worldY: number, shrines: Shrine
 
 // ============ TREASURE CHEST RENDERING ============
 
+// Track chests that are relocating (disappearing)
+const relocatingChests: Map<string, number> = new Map(); // chestId -> startTime
+const CHEST_RELOCATE_FADE_DURATION = 500; // ms
+
+// Mark a chest as relocating (disappearing)
+export function markChestRelocating(chestId: string): void {
+  relocatingChests.set(chestId, Date.now());
+}
+
+// Clear relocating state
+export function clearChestRelocating(chestId: string): void {
+  relocatingChests.delete(chestId);
+}
+
 // Draw treasure chest
 export function drawTreasureChest(
   ctx: CanvasRenderingContext2D,
@@ -11080,9 +11094,23 @@ export function drawTreasureChest(
   
   ctx.save();
   
+  // Check if chest is relocating (fading out)
+  const relocatingStartTime = relocatingChests.get(chest.id);
+  let relocatingAlpha = 1;
+  if (relocatingStartTime !== undefined) {
+    const elapsed = now - relocatingStartTime;
+    const fadeProgress = Math.min(1, elapsed / CHEST_RELOCATE_FADE_DURATION);
+    relocatingAlpha = 1 - fadeProgress; // Fade from 1 to 0
+    if (fadeProgress >= 1) {
+      // Fully faded, don't draw
+      ctx.restore();
+      return;
+    }
+  }
+  
   // Hover glow effect
   if (isHovered) {
-    ctx.globalAlpha = 0.6;
+    ctx.globalAlpha = 0.6 * relocatingAlpha;
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, 25 * p);
     gradient.addColorStop(0, 'rgba(245, 158, 11, 0.8)');
     gradient.addColorStop(0.5, 'rgba(245, 158, 11, 0.4)');
@@ -11092,14 +11120,14 @@ export function drawTreasureChest(
     ctx.arc(x, y, 25 * p, 0, Math.PI * 2);
     ctx.fill();
     
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha = 0.3 * relocatingAlpha;
     ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
     ctx.lineWidth = 3 * p;
     ctx.beginPath();
     ctx.arc(x, y, 20 * p, 0, Math.PI * 2);
     ctx.stroke();
     
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = relocatingAlpha;
     ctx.shadowBlur = 25 * p;
     ctx.shadowColor = 'rgba(245, 158, 11, 1.0)';
   }
@@ -11107,7 +11135,9 @@ export function drawTreasureChest(
   // Cooldown indicator
   const isOnCooldown = chest.cooldownEndTime && now < chest.cooldownEndTime;
   if (isOnCooldown) {
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.5 * relocatingAlpha;
+  } else {
+    ctx.globalAlpha = relocatingAlpha;
   }
   
   // Draw chest base (brown wooden box)

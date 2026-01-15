@@ -585,6 +585,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
 
       // If blessed, spawn red shrine orbs around the shrine base
       let actualOrbsSpawned = 0;
+      let actualTotalValue = 0; // Track total value of orbs actually spawned
       if (result.blessed && result.orbCount && result.totalValue) {
         const TILE_SIZE = 16;
         const SCALE = 3;
@@ -617,6 +618,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           const orb = rooms.createOrbAtPosition(roomId, orbX, orbY, orbValue, 'shrine', true);
           if (orb) {
             actualOrbsSpawned++;
+            actualTotalValue += orbValue; // Sum up actual orb values
             // Mark orb as coming from shrine for client animation
             orb.fromShrine = {
               shrineId: shrine.id,
@@ -637,6 +639,17 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         blessed: result.blessed && actualOrbsSpawned === result.orbCount, // Blessed if all orbs spawned successfully
         orbsSpawned: actualOrbsSpawned,
       });
+      
+      // Send chat message only if blessed (remove "no blessing" messages)
+      if (result.blessed && actualOrbsSpawned > 0 && actualTotalValue > 0) {
+        const player = rooms.getPlayerInRoom(roomId, playerId);
+        if (player) {
+          const chatMessage = `${player.name} was blessed by the shrine and received ${actualTotalValue.toLocaleString()} orbs! ✨`;
+          const createdAt = rooms.updatePlayerChat(roomId, playerId, chatMessage);
+          io.to(roomId).emit('chat_message', { playerId, text: chatMessage, createdAt });
+          console.log(`[Shrine] Chat message sent: ${chatMessage}`);
+        }
+      }
     } catch (error: any) {
       console.error(`[Shrine] Error during shrine interaction for player ${playerId}:`, error);
       const shrine = rooms.getShrine(roomId, shrineId);
@@ -696,16 +709,29 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       console.log(`[TreasureChest] Emitting treasure_chest_opened directly to socket ${socket.id}, coinsFound: ${result.coinsFound || 0}`);
       socket.emit('treasure_chest_opened', eventDataForOpener);
       
-      // Broadcast to other players in room (without coinsFound, just state update)
+      // Broadcast to other players in room (include coinsFound for sound, but they won't see modal)
       const eventDataForOthers = {
         chestId,
         chest,
         message: result.message,
-        coinsFound: undefined, // Don't show coins to other players
+        coinsFound: result.coinsFound || 0, // Include for sound broadcasting
         openedBy: playerId,
       };
-      console.log(`[TreasureChest] Broadcasting treasure_chest_opened to room ${roomId} (excluding opener)`);
+      console.log(`[TreasureChest] Broadcasting treasure_chest_opened to room ${roomId} (excluding opener), coinsFound: ${result.coinsFound || 0}`);
       socket.to(roomId).emit('treasure_chest_opened', eventDataForOthers);
+      
+      // Send chat message if coins were found (broadcast to ALL players including opener)
+      if (result.coinsFound && result.coinsFound > 0) {
+        const player = rooms.getPlayerInRoom(roomId, playerId);
+        if (player) {
+          const chatMessage = `${player.name} found ${result.coinsFound} gold coins in a treasure chest! 🪙`;
+          const createdAt = rooms.updatePlayerChat(roomId, playerId, chatMessage);
+          // Broadcast to entire room including opener
+          io.to(roomId).emit('chat_message', { playerId, text: chatMessage, createdAt });
+          console.log(`[TreasureChest] Chat message sent to all players: ${chatMessage}`);
+        }
+      }
+      
       console.log(`[TreasureChest] Event emitted successfully`);
     } catch (error: any) {
       console.error(`[TreasureChest] Error during chest interaction for player ${playerId}:`, error);
@@ -718,6 +744,46 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       } else {
         socket.emit('error', { message: 'Treasure chest interaction failed' });
       }
+    }
+  });
+
+  // Handle treasure chest relocation (after chest is opened and modal is closed)
+  socket.on('treasure_chest_relocate', ({ chestId }) => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+
+    const { roomId } = mapping;
+    const chest = rooms.getTreasureChest(roomId, chestId);
+    
+    if (!chest) {
+      socket.emit('error', { message: 'Treasure chest not found' });
+      return;
+    }
+
+    // Store old position for animation
+    const oldX = chest.x;
+    const oldY = chest.y;
+
+    // Relocate the chest
+    const result = rooms.relocateTreasureChest(roomId, chestId);
+    
+    if (!result.success) {
+      socket.emit('error', { message: result.message || 'Failed to relocate chest' });
+      return;
+    }
+
+    // Broadcast relocation to all players in room
+    const updatedChest = rooms.getTreasureChest(roomId, chestId);
+    if (updatedChest) {
+      io.to(roomId).emit('treasure_chest_relocated', {
+        chestId,
+        chest: updatedChest,
+        oldX,
+        oldY,
+        newX: result.newX!,
+        newY: result.newY!,
+      });
+      console.log(`[TreasureChest] Relocated chest ${chestId} from (${oldX}, ${oldY}) to (${result.newX}, ${result.newY})`);
     }
   });
 
@@ -869,29 +935,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const player = rooms.getPlayerInRoom(roomId, playerId);
     if (!player) return;
 
-    // Get gold coins from Firebase
-    const { getGoldCoins, getUserData, updateGoldCoins, updateUserOrbs } = await import('./firebase');
-    const coinCount = await getGoldCoins(playerId);
+    // Client already handles Firebase update, server just validates and broadcasts
+    // Get coin count and orbs received from client (they've already updated Firebase)
+    const { coinCount, orbsReceived } = data || {};
     
-    if (coinCount === 0) {
+    if (!coinCount || coinCount === 0) {
       socket.emit('error', { message: 'You have no gold coins to sell' });
       return;
     }
 
-    // Calculate orbs to receive (500 per coin)
-    const orbsPerCoin = 500;
-    const orbsReceived = coinCount * orbsPerCoin;
-    
-    // Get current orbs from Firebase
-    const userData = await getUserData(playerId);
-    const currentOrbs = userData?.orbs || player.orbs;
-    const newBalance = currentOrbs + orbsReceived;
-    
-    // Update Firebase: set gold_coins to 0, add orbs
-    await Promise.all([
-      updateGoldCoins(playerId, 0),
-      updateUserOrbs(playerId, newBalance),
-    ]);
+    // Get current orbs from room state (client has already updated Firebase)
+    // Use the orbs received to calculate new balance
+    const currentOrbs = player.orbs || 0;
+    const newBalance = currentOrbs + (orbsReceived || 0);
     
     // Update room state
     await players.updatePlayerOrbs(playerId, newBalance);

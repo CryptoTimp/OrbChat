@@ -297,8 +297,8 @@ export function generateShrinesForRoom(roomId: string, mapType: MapType): Shrine
     return [];
   }
 
-  // Generate 5-10 random shrines
-  const shrineCount = 5 + Math.floor(Math.random() * 6); // 5-10 shrines
+  // Generate 10-15 random shrines
+  const shrineCount = 10 + Math.floor(Math.random() * 6); // 10-15 shrines
   
   // Minimum distance between shrines (in tiles)
   const minDistance = 15;
@@ -362,44 +362,64 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
   }
 
   const TILE_SIZE = GAME_CONSTANTS.TILE_SIZE;
+  const MAP_WIDTH = GAME_CONSTANTS.MAP_WIDTH;
+  const MAP_HEIGHT = GAME_CONSTANTS.MAP_HEIGHT;
   const chests: TreasureChest[] = [];
   
-  // Get forest path tiles
+  // Get shrines to avoid placing chests on top of them
+  const shrines = generateShrinesForRoom(roomId, mapType);
+  const shrinePositions = shrines.map(s => ({
+    tileX: Math.floor(s.x / TILE_SIZE),
+    tileY: Math.floor(s.y / TILE_SIZE),
+  }));
+  
+  // Get forest path tiles to EXCLUDE (chests should be deep in forest, NOT on paths)
   const pathTiles = generateForestSpawnZones();
-  const pathList = Array.from(pathTiles).map(s => {
-    const [x, y] = s.split(',').map(Number);
-    return { x, y };
-  });
+  const pathTileSet = new Set(pathTiles);
+  
+  // Generate all possible tiles, then filter out paths
+  const allTiles: Array<{ x: number; y: number }> = [];
+  for (let x = 0; x < MAP_WIDTH; x++) {
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      const tileKey = `${x},${y}`;
+      // Only include tiles that are NOT paths (deep in forest)
+      if (!pathTileSet.has(tileKey)) {
+        allTiles.push({ x, y });
+      }
+    }
+  }
 
-  if (pathList.length === 0) {
+  if (allTiles.length === 0) {
     return [];
   }
 
-  // Generate 3-6 random treasure chests (fewer than shrines)
-  const chestCount = 3 + Math.floor(Math.random() * 4); // 3-6 chests
+  // Generate 13 treasure chests
+  const chestCount = 13;
   
   // Minimum distance between chests (in tiles)
   const minDistance = 20;
+  // Minimum distance from shrines (in tiles)
+  const minDistanceFromShrine = 10;
   const placedPositions: Array<{ x: number; y: number }> = [];
   
   // Plaza exclusion - chests should be DEEP in forests, far from center
-  const fountainCenterTileX = GAME_CONSTANTS.MAP_WIDTH / 2;
-  const fountainCenterTileY = GAME_CONSTANTS.MAP_HEIGHT / 2;
+  const fountainCenterTileX = MAP_WIDTH / 2;
+  const fountainCenterTileY = MAP_HEIGHT / 2;
   const minDistanceFromPlaza = 50; // Chests must be at least 50 tiles from fountain center (deep in forests)
 
-  for (let i = 0; i < chestCount && i < pathList.length; i++) {
+  for (let i = 0; i < chestCount; i++) {
     let attempts = 0;
     let placed = false;
 
-    while (attempts < 100 && !placed) {
-      // Pick a random path tile
-      const tile = pathList[Math.floor(Math.random() * pathList.length)];
+    while (attempts < 200 && !placed) {
+      // Pick a random NON-PATH tile (deep in forest)
+      const tile = allTiles[Math.floor(Math.random() * allTiles.length)];
       
       // Add some randomness within the tile
       const x = tile.x * TILE_SIZE + Math.random() * TILE_SIZE;
       const y = tile.y * TILE_SIZE + Math.random() * TILE_SIZE;
       
-      // Convert to tile coordinates for plaza check
+      // Convert to tile coordinates for checks
       const tileX = x / TILE_SIZE;
       const tileY = y / TILE_SIZE;
       
@@ -409,6 +429,13 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
       const distToPlaza = Math.sqrt(dx * dx + dy * dy);
       const isFarEnoughFromPlaza = distToPlaza >= minDistanceFromPlaza;
 
+      // Check minimum distance from shrines
+      const tooCloseToShrine = shrinePositions.some(shrine => {
+        const dx = tileX - shrine.tileX;
+        const dy = tileY - shrine.tileY;
+        return Math.sqrt(dx * dx + dy * dy) < minDistanceFromShrine;
+      });
+
       // Check minimum distance from other chests
       const tooClose = placedPositions.some(pos => {
         const dx = (x - pos.x) / TILE_SIZE;
@@ -416,8 +443,12 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
         return Math.sqrt(dx * dx + dy * dy) < minDistance;
       });
 
-      // Only place if far from plaza (deep in forests) and not too close to other chests
-      if (isFarEnoughFromPlaza && !tooClose) {
+      // Only place if:
+      // - Far from plaza (deep in forests)
+      // - Not on a path (already filtered in allTiles)
+      // - Not too close to shrines
+      // - Not too close to other chests
+      if (isFarEnoughFromPlaza && !tooCloseToShrine && !tooClose) {
         chests.push({
           id: `treasure_chest_${roomId}_${i}`,
           x: Math.floor(x),
@@ -839,6 +870,134 @@ export function getTreasureChestsInRoom(roomId: string): TreasureChest[] {
   const room = rooms.get(roomId);
   if (!room) return [];
   return [...room.treasureChests];
+}
+
+// Find a new valid position for a treasure chest (deep in forest, avoiding paths, shrines, and other chests)
+function findNewChestPosition(roomId: string, mapType: MapType, excludeChestId?: string): { x: number; y: number } | null {
+  if (mapType !== 'forest') {
+    return null;
+  }
+
+  const TILE_SIZE = GAME_CONSTANTS.TILE_SIZE;
+  const MAP_WIDTH = GAME_CONSTANTS.MAP_WIDTH;
+  const MAP_HEIGHT = GAME_CONSTANTS.MAP_HEIGHT;
+  
+  // Get shrines to avoid placing chests on top of them
+  const shrines = generateShrinesForRoom(roomId, mapType);
+  const shrinePositions = shrines.map(s => ({
+    tileX: Math.floor(s.x / TILE_SIZE),
+    tileY: Math.floor(s.y / TILE_SIZE),
+  }));
+  
+  // Get forest path tiles to EXCLUDE (chests should be deep in forest, NOT on paths)
+  const pathTiles = generateForestSpawnZones();
+  const pathTileSet = new Set(pathTiles);
+  
+  // Get existing chests to avoid (excluding the one being relocated)
+  const room = rooms.get(roomId);
+  const existingChests = room ? room.treasureChests.filter(c => c.id !== excludeChestId) : [];
+  const existingChestPositions = existingChests.map(c => ({
+    x: c.x,
+    y: c.y,
+  }));
+  
+  // Generate all possible tiles, then filter out paths
+  const allTiles: Array<{ x: number; y: number }> = [];
+  for (let x = 0; x < MAP_WIDTH; x++) {
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      const tileKey = `${x},${y}`;
+      // Only include tiles that are NOT paths (deep in forest)
+      if (!pathTileSet.has(tileKey)) {
+        allTiles.push({ x, y });
+      }
+    }
+  }
+
+  if (allTiles.length === 0) {
+    return null;
+  }
+  
+  // Minimum distance between chests (in tiles)
+  const minDistance = 20;
+  // Minimum distance from shrines (in tiles)
+  const minDistanceFromShrine = 10;
+  
+  // Plaza exclusion - chests should be DEEP in forests, far from center
+  const fountainCenterTileX = MAP_WIDTH / 2;
+  const fountainCenterTileY = MAP_HEIGHT / 2;
+  const minDistanceFromPlaza = 50; // Chests must be at least 50 tiles from fountain center (deep in forests)
+
+  // Try to find a valid position
+  for (let attempts = 0; attempts < 200; attempts++) {
+    // Pick a random NON-PATH tile (deep in forest)
+    const tile = allTiles[Math.floor(Math.random() * allTiles.length)];
+    
+    // Add some randomness within the tile
+    const x = tile.x * TILE_SIZE + Math.random() * TILE_SIZE;
+    const y = tile.y * TILE_SIZE + Math.random() * TILE_SIZE;
+    
+    // Convert to tile coordinates for checks
+    const tileX = x / TILE_SIZE;
+    const tileY = y / TILE_SIZE;
+    
+    // Check if position is far enough from plaza (deep in forests)
+    const dx = tileX - fountainCenterTileX;
+    const dy = tileY - fountainCenterTileY;
+    const distToPlaza = Math.sqrt(dx * dx + dy * dy);
+    const isFarEnoughFromPlaza = distToPlaza >= minDistanceFromPlaza;
+
+    // Check minimum distance from shrines
+    const tooCloseToShrine = shrinePositions.some(shrine => {
+      const dx = tileX - shrine.tileX;
+      const dy = tileY - shrine.tileY;
+      return Math.sqrt(dx * dx + dy * dy) < minDistanceFromShrine;
+    });
+
+    // Check minimum distance from other chests
+    const tooClose = existingChestPositions.some(pos => {
+      const dx = (x - pos.x) / TILE_SIZE;
+      const dy = (y - pos.y) / TILE_SIZE;
+      return Math.sqrt(dx * dx + dy * dy) < minDistance;
+    });
+
+    // Only place if:
+    // - Far from plaza (deep in forests)
+    // - Not on a path (already filtered in allTiles)
+    // - Not too close to shrines
+    // - Not too close to other chests
+    if (isFarEnoughFromPlaza && !tooCloseToShrine && !tooClose) {
+      return { x: Math.floor(x), y: Math.floor(y) };
+    }
+  }
+
+  return null; // Could not find valid position
+}
+
+// Relocate a treasure chest to a new position
+export function relocateTreasureChest(roomId: string, chestId: string): { success: boolean; newX?: number; newY?: number; message?: string } {
+  const room = rooms.get(roomId);
+  if (!room) {
+    return { success: false, message: 'Room not found' };
+  }
+
+  const chest = room.treasureChests.find(c => c.id === chestId);
+  if (!chest) {
+    return { success: false, message: 'Treasure chest not found' };
+  }
+
+  // Find a new valid position
+  const newPosition = findNewChestPosition(roomId, room.mapType, chestId);
+  if (!newPosition) {
+    return { success: false, message: 'Could not find valid position for chest relocation' };
+  }
+
+  // Update chest position
+  chest.x = newPosition.x;
+  chest.y = newPosition.y;
+  // Reset cooldown so it can be opened again
+  chest.cooldownEndTime = undefined;
+
+  return { success: true, newX: newPosition.x, newY: newPosition.y };
 }
 
 // Tree state management

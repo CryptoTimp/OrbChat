@@ -495,6 +495,23 @@ function attachListeners(sock: Socket) {
       console.error('[useSocket] No chest object received in treasure_chest_opened event');
     }
     
+    // Play sound for ALL players (reward or empty sound based on result)
+    if (coinsFound !== undefined) {
+      // Import sounds dynamically to avoid circular dependencies
+      const { playChestRewardSound, playChestEmptySound } = await import('../utils/sounds');
+      if (coinsFound > 0) {
+        // Play reward sound for all players (after delay to sync with chest opening)
+        setTimeout(() => {
+          playChestRewardSound();
+        }, 500);
+      } else {
+        // Play empty sound for all players (after delay to sync with chest opening)
+        setTimeout(() => {
+          playChestEmptySound();
+        }, 500);
+      }
+    }
+    
     // Only show modal and coins to the player who opened it
     const isOpener = openedBy && currentPlayerId && openedBy === currentPlayerId;
     
@@ -528,9 +545,13 @@ function attachListeners(sock: Socket) {
       // Show modal after dispatching event
       if (chest) {
         console.log('[useSocket] Setting selected chest and opening modal for opener');
+        // Set chest first, then open modal (use setTimeout to ensure state updates in order)
         state.setSelectedTreasureChest(chest);
-        state.toggleTreasureChestModal();
-        console.log('[useSocket] Modal state after toggle:', state.treasureChestModalOpen);
+        // Small delay to ensure selectedTreasureChest is set before opening modal
+        setTimeout(() => {
+          state.toggleTreasureChestModal();
+          console.log('[useSocket] Modal state after toggle:', state.treasureChestModalOpen);
+        }, 10);
       } else {
         console.error('[useSocket] Cannot open modal: no chest object');
       }
@@ -561,17 +582,59 @@ function attachListeners(sock: Socket) {
     }, 100);
   });
   
-  sock.on('gold_coins_sold', ({ playerId, coinCount, orbsReceived, newBalance }) => {
+  sock.on('treasure_chest_relocated', async ({ chestId, chest, oldX, oldY, newX, newY }) => {
+    console.log('[useSocket] treasure_chest_relocated received:', { chestId, oldX, oldY, newX, newY });
     const state = useGameStore.getState();
     
-    // Update player orbs
-    state.updatePlayerOrbs(playerId, newBalance);
-    if (state.localPlayer && state.localPlayer.id === playerId) {
-      state.localPlayer.orbs = newBalance;
-    }
+    // Mark chest as relocating (fading out) and spawn smoke at old position
+    const { spawnSmokeEffect, markChestRelocating, clearChestRelocating } = await import('../game/renderer');
+    markChestRelocating(chestId);
+    spawnSmokeEffect(oldX, oldY);
     
-    // Show notification
-    addNotification(`Sold ${coinCount} gold coins for ${orbsReceived.toLocaleString()} orbs!`, 'success');
+    // After fade duration, update chest position and spawn smoke at new position
+    setTimeout(() => {
+      // Update chest state with new position
+      if (chest) {
+        state.updateTreasureChest(chestId, chest);
+      }
+      
+      // Clear relocating state and spawn smoke at new position (chest appearing)
+      clearChestRelocating(chestId);
+      spawnSmokeEffect(newX, newY);
+    }, 500);
+  });
+  
+  sock.on('gold_coins_sold', async ({ playerId, coinCount, orbsReceived, newBalance }) => {
+    const state = useGameStore.getState();
+    
+    // For our own sale, sync from Firebase to ensure we have the latest balance
+    if (playerId === state.playerId) {
+      try {
+        // Sync orbs from Firebase (client already updated it, but ensure we have latest)
+        await syncOrbsFromFirebase(playerId);
+        // Get updated profile to ensure we have the correct balance
+        const profile = await getUserProfile(playerId);
+        if (profile) {
+          const firebaseOrbs = profile.orbs || 0;
+          state.updatePlayerOrbs(playerId, firebaseOrbs);
+          if (state.localPlayer) {
+            state.localPlayer.orbs = firebaseOrbs;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to sync orbs from Firebase after selling coins:', error);
+        // Fallback to server's balance
+        state.updatePlayerOrbs(playerId, newBalance);
+        if (state.localPlayer && state.localPlayer.id === playerId) {
+          state.localPlayer.orbs = newBalance;
+        }
+      }
+      // Show notification
+      addNotification(`Sold ${coinCount} gold coins for ${orbsReceived.toLocaleString()} orbs!`, 'success');
+    } else {
+      // For other players, just update from server
+      state.updatePlayerOrbs(playerId, newBalance);
+    }
   });
   
   sock.on('shrine_interaction_error', async ({ shrineId, message }) => {

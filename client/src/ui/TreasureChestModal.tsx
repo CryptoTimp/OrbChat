@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useGameStore } from '../state/gameStore';
+import { useSocket } from '../hooks/useSocket';
 import { playClickSound, playCloseSound, playChestOpenSound, playChestRewardSound, playChestEmptySound } from '../utils/sounds';
 
 export function TreasureChestModal() {
@@ -13,6 +14,9 @@ export function TreasureChestModal() {
   const [coinsFound, setCoinsFound] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   
+  // Always call useSocket hook before any early returns (Rules of Hooks)
+  const { socket } = useSocket();
+  
   // Listen for treasure chest opened event to get coins found (always listen)
   useEffect(() => {
     const handleTreasureChestOpened = (event: Event) => {
@@ -23,18 +27,8 @@ export function TreasureChestModal() {
         console.log('[TreasureChestModal] Setting coinsFound to:', found);
         setCoinsFound(found);
         
-        // Play appropriate sound based on result (after a delay to sync with chest opening animation)
-        if (found > 0) {
-          // Play reward sound when coins are found
-          setTimeout(() => {
-            playChestRewardSound();
-          }, 500);
-        } else {
-          // Play empty sound when no coins found
-          setTimeout(() => {
-            playChestEmptySound();
-          }, 500);
-        }
+        // Note: Sound is now played for all players via the socket event handler
+        // No need to play it here again to avoid duplicate sounds
         
         // Show result after a short delay to allow animation to play
         setTimeout(() => {
@@ -53,6 +47,7 @@ export function TreasureChestModal() {
   
   useEffect(() => {
     if (treasureChestModalOpen && selectedTreasureChest) {
+      // Prevent modal from closing if chest is selected
       // Reset state when modal opens (but preserve coinsFound if already set)
       setIsOpening(true);
       setIsOpen(false);
@@ -110,8 +105,14 @@ export function TreasureChestModal() {
   
   const handleClose = () => {
     playCloseSound();
+    const chest = selectedTreasureChest;
     toggleTreasureChestModal();
     setSelectedTreasureChest(null);
+    
+    // Request chest relocation after closing modal
+    if (chest && socket && socket.connected) {
+      socket.emit('treasure_chest_relocate', { chestId: chest.id });
+    }
   };
   
   const hasCoins = coinsFound !== null && coinsFound > 0;
