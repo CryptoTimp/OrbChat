@@ -67,7 +67,7 @@ export interface Room {
   passwordHash?: string;
 }
 
-export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'godlike';
 
 export interface ShopItem {
   id: string;
