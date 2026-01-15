@@ -222,11 +222,27 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   const itemAlreadyOwnedRef = useRef(false); // Track if the selected item was already owned
   const pendingSelectedItemRef = useRef<ShopItem | null>(null); // Track item to display even during re-renders
   const isOpeningRef = useRef(false); // Synchronous ref to prevent spam clicking
+  const pendingPurchaseRef = useRef<{ lootBoxId: string; itemId: string; price: number } | null>(null); // Store purchase info to complete even if component re-renders
+  const purchaseTimeoutRef = useRef<number | null>(null); // Timeout fallback to ensure purchase completes
   
   // Cleanup function to stop all animations and sounds
   const cleanup = useCallback(() => {
     setIsOpening(false);
     isOpeningRef.current = false;
+    
+    // If animation was interrupted, ensure purchase still completes
+    if (pendingPurchaseRef.current) {
+      const { lootBoxId, itemId, price } = pendingPurchaseRef.current;
+      // Complete the purchase even if animation was cancelled
+      purchaseLootBox(lootBoxId, itemId, price);
+      pendingPurchaseRef.current = null;
+    }
+    
+    // Clear timeout
+    if (purchaseTimeoutRef.current) {
+      clearTimeout(purchaseTimeoutRef.current);
+      purchaseTimeoutRef.current = null;
+    }
     
     // Cancel animation
     if (animationRef.current) {
@@ -240,7 +256,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       sound.currentTime = 0;
     });
     activeTickSoundsRef.current = [];
-  }, []);
+  }, [purchaseLootBox]);
   
   // Handle Escape key to close modal
   useEffect(() => {
@@ -352,9 +368,14 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     }
   }, [playerOrbs, previousOrbs]);
   
-  // Check if selected item was already owned BEFORE purchase (use ref, not current inventory)
-  // The current inventory check would be wrong because purchaseLootBox adds the item to inventory
-  const isItemOwned = selectedItem ? itemAlreadyOwnedRef.current : false;
+  // Check if selected item was already owned BEFORE purchase
+  // The ref is set before purchaseLootBox is called, so it correctly tracks duplicates
+  // We also check current inventory count - if item appears more than once, it was a duplicate
+  // (After purchase, a duplicate would appear twice in inventory)
+  const itemCount = selectedItem ? inventory.filter(inv => inv.itemId === selectedItem.id).length : 0;
+  const isItemOwned = selectedItem ? (
+    itemAlreadyOwnedRef.current || itemCount > 1
+  ) : false;
   
   // Sort items by rarity (legendary to common) for display - highest rarity at top
   const sortedItems = useMemo(() => {
@@ -460,6 +481,13 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     // Select the item first (server-side would do this, but for now client-side)
     const item = selectRandomItem();
     
+    // Store purchase info in ref immediately so it persists even if component re-renders
+    pendingPurchaseRef.current = {
+      lootBoxId: currentLootBox.id,
+      itemId: item?.id || '',
+      price: currentLootBox.price
+    };
+    
     // Update orb balance optimistically - decrease immediately when clicking unlock
     const state = useGameStore.getState();
     const currentOrbs = state.localPlayer?.orbs || 0;
@@ -470,8 +498,10 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     }
     
     // Check if item is already owned (only if we got an item, not nothing)
+    // Use the inventory at the time of unlock, not after re-renders
+    const inventoryAtUnlock = inventory;
     if (item !== null) {
-      itemAlreadyOwnedRef.current = inventory.some(inv => inv.itemId === item.id);
+      itemAlreadyOwnedRef.current = inventoryAtUnlock.some(inv => inv.itemId === item.id);
     } else {
       itemAlreadyOwnedRef.current = false;
     }
@@ -546,8 +576,15 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         const progress = Math.min(elapsed / duration, 1);
         
         // Safety check: if animation was cancelled, stop
+        // But ensure purchase still happens if we have pending purchase
         if (animationFrameId === null || animationRef.current === null) {
           console.log('Animation cancelled, stopping');
+          // If we have a pending purchase, complete it even if animation was cancelled
+          if (pendingPurchaseRef.current) {
+            const { lootBoxId, itemId, price } = pendingPurchaseRef.current;
+            purchaseLootBox(lootBoxId, itemId, price);
+            pendingPurchaseRef.current = null;
+          }
           return;
         }
         
@@ -617,30 +654,50 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           
           // Use requestAnimationFrame to ensure scroll position is set and rendered before showing result
           requestAnimationFrame(() => {
-            if (item === null) {
+            // Get the item and purchase info from refs (persists even if component re-rendered)
+            const finalItem = item; // Item was captured in closure
+            const purchaseInfo = pendingPurchaseRef.current;
+            
+            if (!purchaseInfo) {
+              console.error('No pending purchase info found, animation may have been interrupted');
+              setIsOpening(false);
+              isOpeningRef.current = false;
+              return;
+            }
+            
+            if (finalItem === null) {
               // "Nothing" result - show empty result
               console.log('Setting selected item: Nothing');
               pendingSelectedItemRef.current = null;
               setSelectedItem(null);
               
               // Purchase the loot box after animation completes (will sync with Firebase)
-              purchaseLootBox(currentLootBox.id, '', currentLootBox.price);
+              purchaseLootBox(purchaseInfo.lootBoxId, '', purchaseInfo.price);
             } else {
               // Normal item result
               // Always set the selected item so it displays, even if already owned
-              console.log('Setting selected item:', item.name, 'already owned:', itemAlreadyOwnedRef.current);
+              console.log('Setting selected item:', finalItem.name, 'already owned:', itemAlreadyOwnedRef.current);
               // Store in ref first to ensure it persists
-              pendingSelectedItemRef.current = item;
-              setSelectedItem(item);
+              pendingSelectedItemRef.current = finalItem;
+              setSelectedItem(finalItem);
               
               // Play level-up sound for rare, epic, legendary, or godlike items
-              const rarity = item.rarity || 'common';
+              const rarity = finalItem.rarity || 'common';
               if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike') {
                 playLevelUpSound();
               }
               
               // Purchase the loot box after animation completes (will sync with Firebase)
-              purchaseLootBox(currentLootBox.id, item.id, currentLootBox.price);
+              purchaseLootBox(purchaseInfo.lootBoxId, purchaseInfo.itemId, purchaseInfo.price);
+            }
+            
+            // Clear pending purchase
+            pendingPurchaseRef.current = null;
+            
+            // Clear timeout since purchase completed normally
+            if (purchaseTimeoutRef.current) {
+              clearTimeout(purchaseTimeoutRef.current);
+              purchaseTimeoutRef.current = null;
             }
             
             // NOW that animation is done and item is shown, allow opening again
@@ -654,6 +711,34 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       console.log('Starting animation frame, startPosition:', startPosition, 'targetPosition:', targetPosition, 'extraScroll:', extraScroll);
       animationFrameId = requestAnimationFrame(animate);
       animationRef.current = animationFrameId;
+      
+      // Set a timeout fallback to ensure purchase completes even if animation gets interrupted
+      // This protects against component re-renders or other interruptions
+      if (purchaseTimeoutRef.current) {
+        clearTimeout(purchaseTimeoutRef.current);
+      }
+      purchaseTimeoutRef.current = window.setTimeout(() => {
+        // If purchase hasn't completed after 4 seconds (animation should be done in 3), force it
+        if (pendingPurchaseRef.current) {
+          console.warn('Purchase timeout - forcing purchase completion');
+          const { lootBoxId, itemId, price } = pendingPurchaseRef.current;
+          purchaseLootBox(lootBoxId, itemId, price);
+          
+          // Set the item if we have it
+          if (item !== null) {
+            pendingSelectedItemRef.current = item;
+            setSelectedItem(item);
+          } else {
+            pendingSelectedItemRef.current = null;
+            setSelectedItem(null);
+          }
+          
+          pendingPurchaseRef.current = null;
+          setIsOpening(false);
+          isOpeningRef.current = false;
+        }
+        purchaseTimeoutRef.current = null;
+      }, 4000); // 4 seconds (animation is 3 seconds, give 1 second buffer)
     });
   }, [currentLootBox, canAfford, isOpening, normalizedItems, scrollPosition, selectRandomItem, inventory, purchaseLootBox]);
   

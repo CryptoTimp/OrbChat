@@ -667,10 +667,10 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                         return (
                           <div 
                             key={player.id}
-                            className="flex items-center justify-between text-xs font-pixel py-1 px-2 rounded bg-gray-900/50"
+                            className="flex items-center justify-between text-xs font-pixel py-1 px-2 rounded bg-gray-900/50 gap-2"
                           >
                             <span 
-                              className="text-gray-300 truncate flex-1"
+                              className="text-gray-300 truncate flex-1 min-w-0"
                               style={{
                                 color: player.id === localPlayer?.id ? '#60a5fa' : undefined,
                                 fontWeight: player.id === localPlayer?.id ? 'bold' : 'normal',
@@ -680,7 +680,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                               {player.name}
                             </span>
                             <span 
-                              className="text-emerald-400 ml-2"
+                              className="text-emerald-400 shrink-0"
                               style={{
                                 color: playerOrbColor.color,
                               }}
