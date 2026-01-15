@@ -18,10 +18,10 @@ import { ItemPreview } from './ItemPreview';
 
 // Orb purchase packages (£15 ≈ multiple legendary items)
 const ORB_PACKAGES = [
-  { id: 'medium', name: 'Medium Pack', orbs: 175000, price: 9.99, popular: false, bonus: '+25K bonus' },
-  { id: 'large', name: 'Large Pack', orbs: 200000, price: 14.99, popular: true, bonus: '+100K bonus' },
-  { id: 'mega', name: 'Mega Pack', orbs: 700000, price: 29.99, popular: false, bonus: '+100K bonus' },
-  { id: 'ultimate', name: 'Ultimate Pack', orbs: 1500000, price: 49.99, popular: false, bonus: '+250K bonus' },
+  { id: 'medium', name: 'Medium Pack', orbs: 1050000, price: 9.99, popular: false, bonus: '+150K bonus' },
+  { id: 'large', name: 'Large Pack', orbs: 1200000, price: 14.99, popular: true, bonus: '+600K bonus' },
+  { id: 'mega', name: 'Mega Pack', orbs: 4200000, price: 29.99, popular: false, bonus: '+600K bonus' },
+  { id: 'ultimate', name: 'Ultimate Pack', orbs: 9000000, price: 49.99, popular: false, bonus: '+1.5M bonus' },
 ];
 
 
