@@ -1554,9 +1554,22 @@ export function useSocket() {
           const coinCount = profile.gold_coins || 0;
           
           if (coinCount > 0) {
-            // Calculate orbs to receive
+            // Calculate orb multiplier from equipped items
+            let orbMultiplier = 1.0;
+            const equippedOutfit = profile.equippedItems || [];
+            const shopItems = state.shopItems;
+            for (const itemId of equippedOutfit) {
+              const item = shopItems.find(s => s.id === itemId);
+              if (item?.orbMultiplier && isFinite(item.orbMultiplier)) {
+                // Use highest boost (don't stack), cap at reasonable maximum
+                orbMultiplier = Math.min(3.0, Math.max(orbMultiplier, item.orbMultiplier));
+              }
+            }
+            
+            // Calculate orbs to receive (with boost)
             const orbsPerCoin = 250;
-            const orbsReceived = coinCount * orbsPerCoin;
+            const baseOrbsReceived = coinCount * orbsPerCoin;
+            const orbsReceived = Math.floor(baseOrbsReceived * orbMultiplier);
             const currentOrbs = profile.orbs || 0;
             const newOrbs = currentOrbs + orbsReceived;
             
