@@ -6,6 +6,7 @@ import { ItemPreview } from './ItemPreview';
 import { CharacterPreview } from './CharacterPreview';
 import { LootBoxModal, LootBox } from './LootBoxModal';
 import { playClickSound, playCloseSound, playPurchaseSound, playEquipSound, playBuyOrbsSound } from '../utils/sounds';
+import { getOrbCountColor } from '../game/renderer';
 
 const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike'];
 
@@ -800,10 +801,28 @@ export function ShopModal() {
           
           {/* Balance & Actions */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-lg">
-              <div className="w-4 h-4 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500" />
-              <span className="text-cyan-300 font-pixel text-sm">{playerOrbs.toLocaleString()}</span>
-            </div>
+            {(() => {
+              const orbColorInfo = getOrbCountColor(playerOrbs);
+              return (
+                <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-lg">
+                  <div 
+                    className="w-4 h-4 rounded-full"
+                    style={{
+                      background: `radial-gradient(circle at 30% 30%, ${orbColorInfo.color}dd, ${orbColorInfo.color})`,
+                      boxShadow: orbColorInfo.glow 
+                        ? `0 0 6px ${orbColorInfo.glow}, 0 0 10px ${orbColorInfo.glow}40`
+                        : '0 0 3px rgba(0, 0, 0, 0.3)',
+                    }}
+                  />
+                  <span 
+                    className="font-pixel text-sm"
+                    style={{ color: orbColorInfo.color }}
+                  >
+                    {playerOrbs.toLocaleString()}
+                  </span>
+                </div>
+              );
+            })()}
             
             {/* Buy Orbs button */}
             <button

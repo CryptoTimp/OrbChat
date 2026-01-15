@@ -35,13 +35,30 @@ if (!admin.apps.length) {
 }
 
 export const firebaseAdmin = admin;
-export const firebaseAuth = admin.auth();
-export const firebaseDb = admin.database();
+
+// Lazy getters for Firebase services (only access when initialized)
+export function getFirebaseAuth() {
+  if (!admin.apps.length) {
+    throw new Error('Firebase Admin SDK not initialized');
+  }
+  return admin.auth();
+}
+
+export function getFirebaseDb() {
+  if (!admin.apps.length) {
+    throw new Error('Firebase Admin SDK not initialized');
+  }
+  return admin.database();
+}
 
 // Verify Firebase ID token
 export async function verifyIdToken(token: string): Promise<admin.auth.DecodedIdToken | null> {
   try {
-    const decodedToken = await firebaseAuth.verifyIdToken(token);
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot verify token');
+      return null;
+    }
+    const decodedToken = await getFirebaseAuth().verifyIdToken(token);
     return decodedToken;
   } catch (error) {
     console.error('Error verifying Firebase token:', error);
@@ -58,7 +75,7 @@ export async function getUserData(uid: string) {
     }
     // Check if database is actually available (not just initialized)
     try {
-      const snapshot = await firebaseDb.ref(`users/${uid}`).once('value');
+      const snapshot = await getFirebaseDb().ref(`users/${uid}`).once('value');
       return snapshot.val();
     } catch (dbError: any) {
       // If database access fails due to credentials, return null gracefully
@@ -82,7 +99,11 @@ export async function getUserData(uid: string) {
 // Update user orbs in Firebase Database
 export async function updateUserOrbs(uid: string, orbs: number) {
   try {
-    await firebaseDb.ref(`users/${uid}/orbs`).set(orbs);
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot update user orbs');
+      return false;
+    }
+    await getFirebaseDb().ref(`users/${uid}/orbs`).set(orbs);
     return true;
   } catch (error) {
     console.error('Error updating user orbs:', error);
@@ -93,7 +114,11 @@ export async function updateUserOrbs(uid: string, orbs: number) {
 // Add item to user inventory in Firebase Database
 export async function addToUserInventory(uid: string, itemId: string) {
   try {
-    const inventoryRef = firebaseDb.ref(`users/${uid}/inventory`);
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot add to inventory');
+      return false;
+    }
+    const inventoryRef = getFirebaseDb().ref(`users/${uid}/inventory`);
     const snapshot = await inventoryRef.once('value');
     const currentInventory = snapshot.val() || [];
     
@@ -111,7 +136,11 @@ export async function addToUserInventory(uid: string, itemId: string) {
 // Get user inventory from Firebase Database
 export async function getUserInventory(uid: string): Promise<string[]> {
   try {
-    const snapshot = await firebaseDb.ref(`users/${uid}/inventory`).once('value');
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot get inventory');
+      return [];
+    }
+    const snapshot = await getFirebaseDb().ref(`users/${uid}/inventory`).once('value');
     return snapshot.val() || [];
   } catch (error) {
     console.error('Error getting inventory:', error);
@@ -122,7 +151,11 @@ export async function getUserInventory(uid: string): Promise<string[]> {
 // Get user equipped items from Firebase Database
 export async function getUserEquippedItems(uid: string): Promise<string[]> {
   try {
-    const snapshot = await firebaseDb.ref(`users/${uid}/equippedItems`).once('value');
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot get equipped items');
+      return [];
+    }
+    const snapshot = await getFirebaseDb().ref(`users/${uid}/equippedItems`).once('value');
     return snapshot.val() || [];
   } catch (error) {
     console.error('Error getting equipped items:', error);
@@ -144,7 +177,11 @@ export async function userHasItem(uid: string, itemId: string): Promise<boolean>
 // Update equipped items in Firebase Database
 export async function updateUserEquippedItems(uid: string, equippedItems: string[]): Promise<boolean> {
   try {
-    await firebaseDb.ref(`users/${uid}/equippedItems`).set(equippedItems);
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot update equipped items');
+      return false;
+    }
+    await getFirebaseDb().ref(`users/${uid}/equippedItems`).set(equippedItems);
     return true;
   } catch (error) {
     console.error('Error updating equipped items:', error);
@@ -160,7 +197,7 @@ export async function updateGoldCoins(uid: string, amount: number): Promise<bool
       return false;
     }
     try {
-      await firebaseDb.ref(`users/${uid}/gold_coins`).set(amount);
+      await getFirebaseDb().ref(`users/${uid}/gold_coins`).set(amount);
       return true;
     } catch (dbError: any) {
       // If database access fails due to credentials, return false gracefully
@@ -189,7 +226,7 @@ export async function getGoldCoins(uid: string): Promise<number> {
       return 0;
     }
     try {
-      const snapshot = await firebaseDb.ref(`users/${uid}/gold_coins`).once('value');
+      const snapshot = await getFirebaseDb().ref(`users/${uid}/gold_coins`).once('value');
       return snapshot.val() || 0;
     } catch (dbError: any) {
       // If database access fails due to credentials, return 0 gracefully
@@ -214,7 +251,11 @@ export async function getGoldCoins(uid: string): Promise<number> {
 // This function can be used to seed shop items to Firebase if needed
 export async function getShopItemsFromFirebase(): Promise<any[]> {
   try {
-    const snapshot = await firebaseDb.ref('shop_items').once('value');
+    if (!admin.apps.length) {
+      console.warn('Firebase Admin SDK not initialized, cannot get shop items');
+      return [];
+    }
+    const snapshot = await getFirebaseDb().ref('shop_items').once('value');
     return snapshot.val() ? Object.values(snapshot.val()) : [];
   } catch (error) {
     console.error('Error getting shop items from Firebase:', error);

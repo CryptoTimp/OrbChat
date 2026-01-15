@@ -48,11 +48,30 @@ initializeDatabase();
 rooms.initializeGlobalRooms();
 
 // Track socket -> player mapping
+// Note: This is cleared on server restart (new Map instance)
 const socketToPlayer: Map<string, { playerId: string; roomId: string }> = new Map();
+
+// Clean up any lingering socket state on server startup
+// (Socket.IO rooms are automatically cleared when server restarts, but we ensure clean state)
+function clearAllSocketState() {
+  socketToPlayer.clear();
+  // Socket.IO rooms are automatically empty on server restart since 'io' is a new instance
+  console.log('Socket state cleared on server startup');
+}
+
+// Clear socket state on startup
+clearAllSocketState();
 
 // Socket connection handler
 io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
-  console.log(`Client connected: ${socket.id}`);
+  // Only log if it's a new connection (not a reconnection)
+  // Socket.IO reconnections create new socket IDs, so we can't easily distinguish
+  // For now, we'll track connection count instead
+  const connectionCount = io.sockets.sockets.size;
+  if (connectionCount <= 2) {
+    // Only log first few connections to avoid spam
+    console.log(`Client connected: ${socket.id} (Total: ${connectionCount})`);
+  }
 
   // Handle listing available rooms
   socket.on('list_rooms', () => {
@@ -63,6 +82,39 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
 
   // Handle joining a room
   socket.on('join_room', async ({ roomId, playerName, orbs, equippedItems, mapType, password }) => {
+    // Check if this socket is already in this room for this player (prevent duplicate joins)
+    const existingMapping = socketToPlayer.get(socket.id);
+    if (existingMapping && existingMapping.roomId === roomId) {
+      const existingPlayer = rooms.getPlayerInRoom(roomId, existingMapping.playerId);
+      if (existingPlayer) {
+        // Already in room - just update player data and send room_state, don't rejoin
+        console.log(`Socket ${socket.id} already in room ${roomId}, updating player data only`);
+        const playerId = socket.handshake.auth?.playerId as string | undefined;
+        if (playerId === existingMapping.playerId) {
+          // Update player data
+          existingPlayer.orbs = orbs || existingPlayer.orbs;
+          existingPlayer.sprite.outfit = equippedItems || existingPlayer.sprite.outfit;
+          
+          // Send room_state without re-joining
+          const room = rooms.getRoom(roomId);
+          if (room) {
+            const allPlayers = rooms.getPlayersInRoom(roomId);
+            socket.emit('room_state', {
+              roomId,
+              players: allPlayers,
+              orbs: rooms.getOrbsInRoom(roomId),
+              shrines: rooms.getShrinesInRoom(roomId),
+              treasureChests: rooms.getTreasureChestsInRoom(roomId),
+              treeStates: rooms.getTreeStatesInRoom(roomId),
+              yourPlayerId: playerId,
+              mapType: room.mapType,
+            });
+          }
+          return; // Exit early, don't process as new join
+        }
+      }
+    }
+    
     console.log(`join_room received: room=${roomId}, player=${playerName}, requestedMap=${mapType}, password=${password ? `provided (length: ${password.length})` : 'none'}`);
     
     // Extract player ID from handshake (Firebase UID)
@@ -186,7 +238,23 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       player.direction = existingPlayer.direction;
     }
     
-    // Store mapping
+    // IMPORTANT: Clean up any old sockets for this player in this room BEFORE adding the new one
+    // This prevents accumulation of multiple sockets for the same player
+    for (const [oldSocketId, oldMapping] of socketToPlayer.entries()) {
+      if (oldMapping.playerId === player.id && oldMapping.roomId === roomId) {
+        // This is an old socket for the same player - remove it
+        const oldSocket = io.sockets.sockets.get(oldSocketId);
+        if (oldSocket) {
+          // Remove old socket from room
+          oldSocket.leave(roomId);
+        }
+        // Remove old mapping
+        socketToPlayer.delete(oldSocketId);
+        console.log(`Cleaned up old socket ${oldSocketId} for player ${player.id} in room ${roomId}`);
+      }
+    }
+    
+    // Store mapping for new socket
     socketToPlayer.set(socket.id, { playerId: player.id, roomId });
     
     // Join socket room
@@ -256,9 +324,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     
     // IMPORTANT: Broadcast to other players BEFORE async Firebase calls
     // This ensures the broadcast doesn't get blocked by slow/failing Firebase operations
-    const socketsInRoom = io.sockets.adapter.rooms.get(roomId);
-    const numSockets = socketsInRoom ? socketsInRoom.size : 0;
-    console.log(`Broadcasting player_joined for ${player.name} to room ${roomId} (${numSockets} sockets in room)`);
+    // Count only connected sockets that are properly mapped (not disconnected ones)
+    const joinSocketsInRoom = io.sockets.adapter.rooms.get(roomId);
+    let numSockets = 0;
+    if (joinSocketsInRoom) {
+      // Only count sockets that are actually connected and mapped
+      for (const socketId of joinSocketsInRoom) {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket && socket.connected && socketToPlayer.has(socketId)) {
+          numSockets++;
+        }
+      }
+    }
+    console.log(`Broadcasting player_joined for ${player.name} to room ${roomId} (${numSockets} active sockets in room)`);
     
     // Emit player_joined event to notify others
     io.to(roomId).emit('player_joined', player);
@@ -541,9 +619,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     console.log(`  New outfit:`, equippedItems);
     
     // Broadcast player update to ALL players in room (including sender) so everyone sees the cosmetic change
-    const socketsInRoom = io.sockets.adapter.rooms.get(roomId);
-    const numSockets = socketsInRoom ? socketsInRoom.size : 0;
-    console.log(`  Broadcasting player_joined to ${numSockets} sockets in room ${roomId}`);
+    // Count only connected sockets that are properly mapped
+    const equipSocketsInRoom = io.sockets.adapter.rooms.get(roomId);
+    let numActiveSockets = 0;
+    if (equipSocketsInRoom) {
+      for (const socketId of equipSocketsInRoom) {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket && socket.connected && socketToPlayer.has(socketId)) {
+          numActiveSockets++;
+        }
+      }
+    }
+    console.log(`  Broadcasting player_joined to ${numActiveSockets} active sockets in room ${roomId}`);
     
     io.to(roomId).emit('player_joined', player);
     
@@ -612,6 +699,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           const orbY = shrineY + 8 * SCALE; // At base platform level
 
           // Calculate orb value (distribute total evenly, add remainder to first orb)
+          // Note: totalValue already has orb multiplier applied from interactWithShrine
           const orbValue = valuePerOrb + (i === 0 ? remainder : 0);
 
           // Create red shrine orb (bypass max orbs limit for shrine rewards)
@@ -883,19 +971,14 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     if (!player) return;
 
     // Client already handles removing logs from Firebase and updating orbs
-    // Server just needs to broadcast the update
-    // Get current orbs from Firebase to ensure accuracy
-    const { getUserData } = await import('./firebase');
-    const userData = await getUserData(playerId);
-    const newBalance = userData?.orbs || player.orbs;
-    
+    // Server validates and also updates Firebase to keep it in sync
     // Use client-provided values if available, otherwise check Firebase (fallback)
     let logCount = data?.logCount;
     let orbsReceived = data?.orbsReceived;
 
     if (logCount === undefined || orbsReceived === undefined) {
       // Fallback: check Firebase if client didn't provide data
-      const { getUserInventory } = await import('./firebase');
+      const { getUserInventory, getUserData } = await import('./firebase');
       const firebaseInventory = await getUserInventory(playerId);
       const logs = firebaseInventory.filter(itemId => itemId === 'log');
       logCount = logs.length;
@@ -905,17 +988,38 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         return;
       }
 
-      // Calculate orbs to receive (100 per log)
+      // Calculate orbs to receive (100 per log) with orb boost
       const orbsPerLog = 100;
-      orbsReceived = logCount * orbsPerLog;
+      const baseOrbsReceived = logCount * orbsPerLog;
+      
+      // Calculate orb multiplier from equipped items
+      let orbMultiplier = 1.0;
+      if (player.sprite?.outfit) {
+        const shopItems = shop.getShopItems();
+        for (const itemId of player.sprite.outfit) {
+          const item = shopItems.find(s => s.id === itemId);
+          if (item?.orbMultiplier && isFinite(item.orbMultiplier)) {
+            // Use highest boost (don't stack), cap at reasonable maximum
+            orbMultiplier = Math.min(3.0, Math.max(orbMultiplier, item.orbMultiplier));
+          }
+        }
+      }
+      
+      orbsReceived = Math.floor(baseOrbsReceived * orbMultiplier);
     } else if (logCount === 0) {
       // Client sent 0 logs - show error
       socket.emit('error', { message: 'You have no logs to sell' });
       return;
     }
     
-    // Update database to keep it in sync
-    await players.updatePlayerOrbs(playerId, newBalance);
+    // Get current orbs from Firebase (source of truth) and add orbs received
+    const { getUserData, updateUserOrbs } = await import('./firebase');
+    const userData = await getUserData(playerId);
+    const currentOrbs = userData?.orbs || player.orbs || 0;
+    const newBalance = currentOrbs + orbsReceived;
+    
+    // Update Firebase to keep it in sync (same way as elsewhere in the app)
+    await updateUserOrbs(playerId, newBalance);
     // Update room state
     player.orbs = newBalance;
 
@@ -937,20 +1041,51 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
 
     // Client already handles Firebase update, server just validates and broadcasts
     // Get coin count and orbs received from client (they've already updated Firebase)
-    const { coinCount, orbsReceived } = data || {};
+    let { coinCount, orbsReceived } = data || {};
     
+    // If client didn't provide values, calculate them with boost
     if (!coinCount || coinCount === 0) {
-      socket.emit('error', { message: 'You have no gold coins to sell' });
-      return;
+      // Try to get from Firebase
+      const { getUserData } = await import('./firebase');
+      const userData = await getUserData(playerId);
+      coinCount = userData?.gold_coins || 0;
+      
+      if (coinCount === 0) {
+        socket.emit('error', { message: 'You have no gold coins to sell' });
+        return;
+      }
+    }
+    
+    // If orbsReceived not provided or we need to recalculate, apply boost
+    if (!orbsReceived) {
+      const orbsPerCoin = 250;
+      const baseOrbsReceived = coinCount * orbsPerCoin;
+      
+      // Calculate orb multiplier from equipped items
+      let orbMultiplier = 1.0;
+      if (player.sprite?.outfit) {
+        const shopItems = shop.getShopItems();
+        for (const itemId of player.sprite.outfit) {
+          const item = shopItems.find(s => s.id === itemId);
+          if (item?.orbMultiplier && isFinite(item.orbMultiplier)) {
+            // Use highest boost (don't stack), cap at reasonable maximum
+            orbMultiplier = Math.min(3.0, Math.max(orbMultiplier, item.orbMultiplier));
+          }
+        }
+      }
+      
+      orbsReceived = Math.floor(baseOrbsReceived * orbMultiplier);
     }
 
-    // Get current orbs from room state (client has already updated Firebase)
-    // Use the orbs received to calculate new balance
-    const currentOrbs = player.orbs || 0;
-    const newBalance = currentOrbs + (orbsReceived || 0);
+    // Get current orbs from Firebase (source of truth) and add orbs received
+    const { getUserData, updateUserOrbs } = await import('./firebase');
+    const userData = await getUserData(playerId);
+    const currentOrbs = userData?.orbs || player.orbs || 0;
+    const newBalance = currentOrbs + orbsReceived;
     
+    // Update Firebase to keep it in sync (same way as elsewhere in the app)
+    await updateUserOrbs(playerId, newBalance);
     // Update room state
-    await players.updatePlayerOrbs(playerId, newBalance);
     player.orbs = newBalance;
 
     // Broadcast updates
@@ -966,7 +1101,10 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     if (mapping) {
       const { playerId, roomId } = mapping;
       
-      // Clean up mapping first
+      // IMPORTANT: Leave Socket.IO room first to prevent disconnected sockets from being counted
+      socket.leave(roomId);
+      
+      // Clean up mapping
       socketToPlayer.delete(socket.id);
       
       // Check if there are any other sockets for this player
@@ -992,9 +1130,23 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       } else {
         console.log(`Socket ${socket.id} disconnected for player ${playerId}, but player still has other sockets`);
       }
+    } else {
+      // Socket wasn't in mapping, but might still be in a room - clean it up
+      // Get all rooms this socket might be in and leave them
+      const socketRooms = Array.from(socket.rooms);
+      for (const room of socketRooms) {
+        // Skip the default room (socket.id) and system rooms
+        if (room !== socket.id && !room.startsWith('_')) {
+          socket.leave(room);
+        }
+      }
     }
     
-    console.log(`Client disconnected: ${socket.id}`);
+    const remainingConnections = io.sockets.sockets.size;
+    if (remainingConnections <= 2) {
+      // Only log disconnections when there are few connections
+      console.log(`Client disconnected: ${socket.id} (Remaining: ${remainingConnections})`);
+    }
   });
 });
 

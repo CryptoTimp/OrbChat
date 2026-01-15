@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import { Room, PlayerWithChat, Orb, GAME_CONSTANTS, MapType, OrbType, RoomInfo, Shrine, TreasureChest, TreeState } from './types';
 import * as players from './players';
+import * as shop from './shop';
 
 // Global room IDs that persist even when empty
 export const GLOBAL_ROOM_IDS = ['eu-1', 'eu-2', 'eu-3'];
@@ -642,13 +643,29 @@ export function getTreasureChest(roomId: string, chestId: string): TreasureChest
   return room.treasureChests.find(c => c.id === chestId) || null;
 }
 
+// Helper function to get orb multiplier from player's equipped items
+function getOrbMultiplier(player: PlayerWithChat): number {
+  let orbMultiplier = 1.0;
+  if (player.sprite?.outfit) {
+    const shopItems = shop.getShopItems();
+    for (const itemId of player.sprite.outfit) {
+      const item = shopItems.find(s => s.id === itemId);
+      if (item?.orbMultiplier && isFinite(item.orbMultiplier)) {
+        // Use highest boost (don't stack), cap at reasonable maximum
+        orbMultiplier = Math.min(3.0, Math.max(orbMultiplier, item.orbMultiplier));
+      }
+    }
+  }
+  return orbMultiplier;
+}
+
 // Interact with a shrine
 export async function interactWithShrine(
   roomId: string,
   shrineId: string,
   playerId: string,
   firebaseOrbs?: number
-): Promise<{ success: boolean; message: string; blessed: boolean; orbCount?: number; totalValue?: number }> {
+): Promise<{ success: boolean; message: string; blessed: boolean; orbCount?: number; totalValue?: number; orbMultiplier?: number }> {
   const room = rooms.get(roomId);
   if (!room) {
     return { success: false, message: 'Room not found', blessed: false };
@@ -664,6 +681,9 @@ export async function interactWithShrine(
   if (!player) {
     return { success: false, message: 'Player not found', blessed: false };
   }
+  
+  // Get orb multiplier from equipped items
+  const orbMultiplier = getOrbMultiplier(player);
 
   const MIN_ORBS_REQUIRED = 250000;
   // Use Firebase balance from client if provided (client already polled Firebase successfully)
@@ -758,6 +778,9 @@ export async function interactWithShrine(
       
       totalValue += orbValue;
     }
+    
+    // Apply orb multiplier to total value
+    const boostedTotalValue = Math.floor(totalValue * orbMultiplier);
 
     const messages = [
       'The gods applaud you!',
@@ -773,7 +796,8 @@ export async function interactWithShrine(
       message,
       blessed: true,
       orbCount,
-      totalValue, // Return total value for red orb spawning
+      totalValue: boostedTotalValue, // Return boosted total value for red orb spawning
+      orbMultiplier, // Return multiplier for client display
     };
   } else {
     const messages = [

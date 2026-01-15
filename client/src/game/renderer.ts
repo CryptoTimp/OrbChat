@@ -763,6 +763,10 @@ export function getOrbCountColor(orbs: number): { color: string; glow: string | 
   };
   
   // Check from highest to lowest rarity
+  // 10 million threshold - red color (highest tier)
+  if (orbs >= 10000000) {
+    return { color: '#ef4444', glow: '#ef4444' }; // Red with glow
+  }
   if (orbs >= thresholds.legendary) {
     return { color: '#fbbf24', glow: '#fbbf24' }; // Gold with glow
   }

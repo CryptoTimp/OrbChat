@@ -155,6 +155,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   const previousOrbsRef = useRef(currentOrbs);
   const orbBalanceRef = useRef<HTMLDivElement>(null);
   const [showSessionStats, setShowSessionStats] = useState(true); // Expanded by default
+  const [showPlayerList, setShowPlayerList] = useState(false); // Collapsed by default
   
   // Get orbs per hour for flaming effect
   const sessionStats = useGameStore(state => state.sessionStats);
@@ -417,9 +418,6 @@ export function HUD({ onLeaveRoom }: HUDProps) {
               <span className="text-gray-400 leading-none">
                 Map: <span className="text-amber-400">{mapType}</span>
               </span>
-              <span className="text-gray-400 leading-none">
-                Players: <span className="text-emerald-400">{players.size}</span>
-              </span>
             </div>
           </div>
         </div>
@@ -612,6 +610,76 @@ export function HUD({ onLeaveRoom }: HUDProps) {
             </div>
           </div>
           
+          {/* Player count - collapsible */}
+          <div className="flex flex-col gap-1 mb-1 w-full">
+            <div 
+              onClick={() => setShowPlayerList(!showPlayerList)}
+              className="relative bg-gray-800/80 backdrop-blur-sm rounded-lg px-4 py-2 border border-gray-600/50 flex items-center justify-center gap-2 cursor-pointer hover:bg-gray-700/80 transition-colors w-full"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <span className="text-gray-200 font-pixel text-sm leading-none">
+                Players: <span className="text-emerald-400">{players.size}</span>
+              </span>
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-auto ${showPlayerList ? 'rotate-180' : ''}`}
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            
+            {/* Player list - toggleable with animation */}
+            <div 
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                showPlayerList ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'
+              }`}
+            >
+              <div className="bg-gray-800/80 backdrop-blur-sm rounded-lg px-3 py-2 border border-gray-600/50 w-full">
+                {players.size === 0 ? (
+                  <div className="text-xs text-gray-500 font-pixel text-center py-2">No players</div>
+                ) : (
+                  <div className="space-y-1.5 max-h-[120px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                    {Array.from(players.values())
+                      .sort((a, b) => (b.orbs || 0) - (a.orbs || 0)) // Sort by orb count descending
+                      .map((player) => {
+                        const playerOrbColor = getOrbCountColor(player.orbs || 0);
+                        return (
+                          <div 
+                            key={player.id}
+                            className="flex items-center justify-between text-xs font-pixel py-1 px-2 rounded bg-gray-900/50"
+                          >
+                            <span 
+                              className="text-gray-300 truncate flex-1"
+                              style={{
+                                color: player.id === localPlayer?.id ? '#60a5fa' : undefined,
+                                fontWeight: player.id === localPlayer?.id ? 'bold' : 'normal',
+                              }}
+                              title={player.name}
+                            >
+                              {player.name}
+                            </span>
+                            <span 
+                              className="text-emerald-400 ml-2"
+                              style={{
+                                color: playerOrbColor.color,
+                              }}
+                            >
+                              {player.orbs ? player.orbs.toLocaleString() : '0'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          
           <button
             onClick={() => { playInventoryOpenSound(); toggleInventory(); }}
             className="bg-gradient-to-br from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 
@@ -734,8 +802,21 @@ export function HUD({ onLeaveRoom }: HUDProps) {
               <div className="flex items-center justify-center gap-3">
                 <span className="text-gray-400 font-pixel text-sm">Your Balance:</span>
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 shadow-lg shadow-cyan-500/30" />
-                  <span className="text-cyan-300 font-pixel text-lg">{displayedOrbs.toLocaleString()}</span>
+                  <div 
+                    className="w-5 h-5 rounded-full shadow-lg"
+                    style={{
+                      background: `radial-gradient(circle at 30% 30%, ${orbColorInfo.color}dd, ${orbColorInfo.color})`,
+                      boxShadow: orbColorInfo.glow 
+                        ? `0 0 8px ${orbColorInfo.glow}, 0 0 12px ${orbColorInfo.glow}40`
+                        : '0 0 4px rgba(0, 0, 0, 0.3)',
+                    }}
+                  />
+                  <span 
+                    className="font-pixel text-lg"
+                    style={{ color: orbColorInfo.color }}
+                  >
+                    {displayedOrbs.toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>

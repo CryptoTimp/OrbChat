@@ -4,6 +4,7 @@ import { useSocket } from '../hooks/useSocket';
 import { ShopItem, RARITY_COLORS, ItemRarity } from '../types';
 import { ItemPreview } from './ItemPreview';
 import { playClickSound, playCloseSound, playPurchaseSound, playBuyOrbsSound, playLevelUpSound } from '../utils/sounds';
+import { getOrbCountColor } from '../game/renderer';
 
 const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike'];
 
@@ -268,6 +269,7 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   // Get orbs directly from store so it updates when purchase completes
   const playerOrbs = useGameStore(state => state.localPlayer?.orbs || 0);
   const canAfford = currentLootBox ? playerOrbs >= currentLootBox.price : false;
+  const orbColorInfo = getOrbCountColor(playerOrbs);
   
   // Calculate normalized chances (memoized to prevent recalculation on every render)
   // Must be defined before any useEffect that uses it
@@ -985,41 +987,25 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             {/* Orb balance at top */}
             <div className="mb-2 sm:mb-4 flex items-center justify-center shrink-0">
               <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
-              <span className="text-cyan-300 font-pixel">●</span>
-              <span 
-                className={`font-pixel text-lg transition-colors ${
-                  orbAnimation === 'decrease' 
-                    ? 'orb-animate-decrease text-white' 
-                    : orbAnimation === 'increase' 
-                    ? 'orb-animate-increase text-white' 
-                    : 'text-white'
-                }`}
-              >
-                {playerOrbs.toLocaleString()}
-              </span>
-              <span className="text-gray-400 font-pixel text-sm">orbs</span>
-              <span className="text-gray-500 font-pixel text-xs">({currentLootBox.price.toLocaleString()} per case)</span>
-              {!canAfford && (
-                <button
-                  onClick={() => {
-                    playBuyOrbsSound();
-                    toggleBuyOrbs();
+                <span className="font-pixel" style={{ color: orbColorInfo.color }}>●</span>
+                <span 
+                  className={`font-pixel text-lg transition-colors ${
+                    orbAnimation === 'decrease' 
+                      ? 'orb-animate-decrease' 
+                      : orbAnimation === 'increase' 
+                      ? 'orb-animate-increase' 
+                      : ''
+                  }`}
+                  style={{ 
+                    color: orbAnimation === 'decrease' || orbAnimation === 'increase' 
+                      ? undefined 
+                      : orbColorInfo.color 
                   }}
-                  className="relative overflow-hidden ml-4 px-4 py-2 rounded-lg font-pixel text-sm 
-                             bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 
-                             text-white shadow-lg shadow-amber-500/40 hover:shadow-amber-500/60
-                             transition-all duration-200 flex items-center justify-center gap-2"
                 >
-                  {/* Small particle effects */}
-                  <span className="absolute w-1 h-1 bg-yellow-300 rounded-full animate-btn-particle-1 opacity-60" />
-                  <span className="absolute w-0.5 h-0.5 bg-amber-200 rounded-full animate-btn-particle-2 opacity-50" />
-                  <span className="absolute w-1 h-1 bg-orange-300 rounded-full animate-btn-particle-3 opacity-60" />
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="relative z-10">Buy Orbs</span>
-                </button>
-              )}
+                  {playerOrbs.toLocaleString()}
+                </span>
+                <span className="text-gray-400 font-pixel text-sm">orbs</span>
+                <span className="text-gray-500 font-pixel text-xs">({currentLootBox.price.toLocaleString()} per case)</span>
               </div>
             </div>
             

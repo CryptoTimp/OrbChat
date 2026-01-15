@@ -17,6 +17,8 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ||
 let socket: Socket | null = null;
 let listenersAttached = false;
 let pendingRejoin = false;  // Prevent duplicate rejoins
+let hasAttemptedRejoin = false;  // Track if we've attempted rejoin in this session
+let isJoiningRoom = false;  // Prevent concurrent join attempts
 
 // Sync orb balance from Firebase (source of truth)
 async function syncOrbsFromFirebase(playerId: string): Promise<void> {
@@ -72,16 +74,21 @@ function attachListeners(sock: Socket) {
   
   // Connection events
   sock.on('connect', () => {
-    console.log('Connected to server, socket id:', sock.id);
+    // Only log initial connection, not reconnections (to reduce spam)
+    if (!sock.recovered) {
+      console.log('Connected to server, socket id:', sock.id);
+    }
     useGameStore.getState().setConnected(true);
     
-    // Auto-rejoin room if we were in one (but only once)
+    // Auto-rejoin room if we were in one (but only once per connection)
     // IMPORTANT: Only auto-rejoin if we have a localPlayer (meaning we were successfully in a room before)
     // Don't auto-rejoin if we just have roomId from a failed join attempt
     const state = useGameStore.getState();
-    if (state.roomId && state.playerName && state.localPlayer && !pendingRejoin) {
+    if (state.roomId && state.playerName && state.localPlayer && !pendingRejoin && !hasAttemptedRejoin && !isJoiningRoom) {
       pendingRejoin = true;
-      console.log('Auto-rejoining room:', state.roomId, 'with map:', state.mapType);
+      hasAttemptedRejoin = true;
+      isJoiningRoom = true;
+      console.log('[connect event] Auto-rejoining room:', state.roomId, 'with map:', state.mapType);
       sock.emit('join_room', { 
         roomId: state.roomId, 
         playerName: state.playerName,
@@ -98,9 +105,14 @@ function attachListeners(sock: Socket) {
   });
   
   sock.on('disconnect', (reason) => {
-    console.log('Disconnected from server, reason:', reason);
+    // Only log unexpected disconnects, not normal reconnections
+    if (reason !== 'io client disconnect') {
+      console.log('Disconnected from server, reason:', reason);
+    }
     useGameStore.getState().setConnected(false);
     pendingRejoin = false;  // Allow rejoin on next connect
+    hasAttemptedRejoin = false;  // Reset rejoin flag on disconnect
+    isJoiningRoom = false;  // Reset join flag on disconnect
   });
   
   sock.on('connect_error', (error) => {
@@ -127,7 +139,10 @@ function attachListeners(sock: Socket) {
     const store = useGameStore.getState();
     const wasInRoom = store.roomId === roomId && store.localPlayer; // Check if already fully in this room
     
-    pendingRejoin = false;  // Reset rejoin flag after successful join
+    // Reset rejoin flags after successful join
+    pendingRejoin = false;
+    hasAttemptedRejoin = false;  // Reset so we can rejoin if we disconnect and reconnect
+    isJoiningRoom = false;  // Reset join flag after successful join
     store.setRoomId(roomId);
     
     // Set map type if provided by server (server is source of truth)
@@ -715,12 +730,16 @@ export function useSocket() {
     const sock = getOrCreateSocket();
     attachListeners(sock);
     
-    // If socket is already connected (e.g., after HMR), trigger auto-rejoin
-    if (sock.connected && !pendingRejoin) {
+    // If socket is already connected when we attach listeners (e.g., after HMR),
+    // the 'connect' event won't fire again, so we need to handle rejoin here
+    // But only if the connect event handler hasn't already handled it
+    if (sock.connected && !pendingRejoin && !hasAttemptedRejoin && !isJoiningRoom) {
       const state = useGameStore.getState();
-      if (state.roomId && state.playerName) {
+      if (state.roomId && state.playerName && state.localPlayer) {
         pendingRejoin = true;
-        console.log('Socket already connected, auto-rejoining room:', state.roomId, 'with map:', state.mapType);
+        hasAttemptedRejoin = true;
+        isJoiningRoom = true;
+        console.log('[useEffect] Socket already connected, auto-rejoining room:', state.roomId, 'with map:', state.mapType);
         sock.emit('join_room', { 
           roomId: state.roomId, 
           playerName: state.playerName,
@@ -734,8 +753,23 @@ export function useSocket() {
   
   // Action methods
   const joinRoom = useCallback(async (roomId: string, playerName: string, mapType?: string, password?: string) => {
+    // Prevent duplicate joins - if we're already in this room, don't join again
+    const state = useGameStore.getState();
+    if (state.roomId === roomId && state.localPlayer && state.playerName === playerName) {
+      console.log('Already in room', roomId, 'as', playerName, '- skipping duplicate join');
+      return;
+    }
+    
+    // Prevent concurrent join attempts
+    if (isJoiningRoom) {
+      console.log('Join already in progress, skipping duplicate join request');
+      return;
+    }
+    
     // Prevent auto-rejoin from firing during manual join
     pendingRejoin = true;
+    hasAttemptedRejoin = true;  // Mark that we've attempted a join (manual or auto)
+    isJoiningRoom = true;  // Mark that we're currently joining
     
     // Recreate socket to ensure it has the latest auth (Firebase UID)
     const sock = recreateSocket();
@@ -1424,9 +1458,22 @@ export function useSocket() {
           const logCount = logs.length;
           
           if (logCount > 0) {
-            // Calculate orbs to receive
+            // Calculate orb multiplier from equipped items
+            let orbMultiplier = 1.0;
+            const equippedOutfit = profile.equippedItems || [];
+            const shopItems = state.shopItems;
+            for (const itemId of equippedOutfit) {
+              const item = shopItems.find(s => s.id === itemId);
+              if (item?.orbMultiplier && isFinite(item.orbMultiplier)) {
+                // Use highest boost (don't stack), cap at reasonable maximum
+                orbMultiplier = Math.min(3.0, Math.max(orbMultiplier, item.orbMultiplier));
+              }
+            }
+            
+            // Calculate orbs to receive (with boost)
             const orbsPerLog = 100;
-            const orbsReceived = logCount * orbsPerLog;
+            const baseOrbsReceived = logCount * orbsPerLog;
+            const orbsReceived = Math.floor(baseOrbsReceived * orbMultiplier);
             const currentOrbs = profile.orbs || 0;
             const newOrbs = currentOrbs + orbsReceived;
             
