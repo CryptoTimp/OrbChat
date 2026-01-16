@@ -1193,6 +1193,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle treasure chest relocation (after chest is opened and modal is closed)
+  // Note: Chests no longer relocate - they stay in place and just clear cooldown
   socket.on('treasure_chest_relocate', ({ chestId }) => {
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
@@ -1205,19 +1206,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       return;
     }
 
-    // Store old position for animation
+    // Store old position (will be same as new position now)
     const oldX = chest.x;
     const oldY = chest.y;
 
-    // Relocate the chest
+    // Clear cooldown - chest stays in same position
     const result = rooms.relocateTreasureChest(roomId, chestId);
     
     if (!result.success) {
-      socket.emit('error', { message: result.message || 'Failed to relocate chest' });
+      socket.emit('error', { message: result.message || 'Failed to clear chest cooldown' });
       return;
     }
 
-    // Broadcast relocation to all players in room
+    // Broadcast that chest is available again (same position)
     const updatedChest = rooms.getTreasureChest(roomId, chestId);
     if (updatedChest) {
       io.to(roomId).emit('treasure_chest_relocated', {
@@ -1228,7 +1229,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         newX: result.newX!,
         newY: result.newY!,
       });
-      console.log(`[TreasureChest] Relocated chest ${chestId} from (${oldX}, ${oldY}) to (${result.newX}, ${result.newY})`);
+      console.log(`[TreasureChest] Cleared cooldown for chest ${chestId} at (${result.newX}, ${result.newY})`);
     }
   });
 
@@ -1541,19 +1542,20 @@ setInterval(() => {
       io.to(roomId).emit('tree_state_updated', { treeStates });
     }
     
-    // Check and auto-relocate treasure chests whose cooldown has expired
-    const relocatedChests = rooms.checkTreasureChestRespawn(roomId);
-    for (const { chestId, chest, oldX, oldY, newX, newY } of relocatedChests) {
-      // Broadcast relocation to all players in room
+    // Check and clear cooldown for treasure chests whose cooldown has expired
+    // Chests stay in place and just become available again
+    const respawnedChests = rooms.checkTreasureChestRespawn(roomId);
+    for (const { chestId, chest } of respawnedChests) {
+      // Broadcast that the chest is available again (same position)
       io.to(roomId).emit('treasure_chest_relocated', {
         chestId,
         chest,
-        oldX,
-        oldY,
-        newX,
-        newY,
+        oldX: chest.x, // Same position
+        oldY: chest.y, // Same position
+        newX: chest.x, // Same position
+        newY: chest.y, // Same position
       });
-      console.log(`[TreasureChest] Auto-relocated chest ${chestId} in room ${roomId}`);
+      console.log(`[TreasureChest] Chest ${chestId} in room ${roomId} is now available again at (${chest.x}, ${chest.y})`);
     }
   }
 }, 5000);
