@@ -1033,10 +1033,29 @@ export function getRoomList(): RoomInfo[] {
     const room = rooms.get(roomId);
     if (room) {
       const playerNames = Array.from(room.players.values()).map(p => p.name);
+      
+      // For plaza rooms (eu-1, eu-2, eu-3), include players from casino and lounge rooms
+      let totalPlayerCount = room.players.size;
+      if (roomId === 'eu-1' || roomId === 'eu-2' || roomId === 'eu-3') {
+        // Count players in corresponding casino room
+        const casinoRoomId = `casino-${roomId}`;
+        const casinoRoom = rooms.get(casinoRoomId);
+        if (casinoRoom) {
+          totalPlayerCount += casinoRoom.players.size;
+        }
+        
+        // Count players in corresponding millionaire's lounge room
+        const loungeRoomId = `millionaires_lounge-${roomId}`;
+        const loungeRoom = rooms.get(loungeRoomId);
+        if (loungeRoom) {
+          totalPlayerCount += loungeRoom.players.size;
+        }
+      }
+      
       roomList.push({
         id: roomId,
         mapType: room.mapType,
-        playerCount: room.players.size,
+        playerCount: totalPlayerCount, // Use combined count for plaza rooms
         players: playerNames,
         isGlobal: true,
         isPrivate: false, // Global rooms are never private

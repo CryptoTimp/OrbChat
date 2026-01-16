@@ -1421,8 +1421,13 @@ export function GameCanvas() {
             if (currentRoomId && currentRoomId !== casinoRoomId) {
               console.log(`[Casino] Storing previous room: ${currentRoomId} before joining ${casinoRoomId}`);
               setPreviousRoomId(currentRoomId);
+              // Verify it was stored
+              const verifyStore = useGameStore.getState();
+              console.log(`[Casino] Verified previousRoomId stored: ${verifyStore.previousRoomId}`);
             } else if (!currentRoomId) {
               console.warn('[Casino] No currentRoomId available, cannot store previous room');
+            } else {
+              console.warn(`[Casino] Skipping previousRoomId storage - currentRoomId (${currentRoomId}) same as casinoRoomId (${casinoRoomId})`);
             }
             
             // Play portal sound
@@ -1454,11 +1459,17 @@ export function GameCanvas() {
           // Player reached return portal - transport back to previous room
           const currentPlayerName = playerName || 'Player';
           
+          // Get the most up-to-date previousRoomId from store (in case it changed)
+          const store = useGameStore.getState();
+          const storedPreviousRoomId = store.previousRoomId;
+          const currentCasinoRoomId = roomId || store.roomId || '';
+          
+          console.log(`[Casino Return] Checking return room - previousRoomId: ${storedPreviousRoomId}, currentRoomId: ${currentCasinoRoomId}`);
+          
           // Try to get return room from previousRoomId, or infer from current casino room
-          let returnRoomId = previousRoomId;
+          let returnRoomId = storedPreviousRoomId;
           if (!returnRoomId) {
             // Infer from current casino room ID (e.g., casino-eu-2 -> eu-2)
-            const currentCasinoRoomId = roomId || useGameStore.getState().roomId || '';
             if (currentCasinoRoomId.startsWith('casino-')) {
               returnRoomId = currentCasinoRoomId.replace('casino-', '');
               console.log(`[Casino Return] Inferred return room ${returnRoomId} from casino room ${currentCasinoRoomId}`);

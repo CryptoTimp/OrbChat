@@ -140,11 +140,21 @@ function attachListeners(sock: Socket) {
     const store = useGameStore.getState();
     const wasInRoom = store.roomId === roomId && store.localPlayer; // Check if already fully in this room
     
+    // Preserve previousRoomId when joining casino/lounge (don't clear it)
+    const preservePreviousRoomId = roomId.startsWith('casino-') || roomId.startsWith('millionaires_lounge-');
+    const savedPreviousRoomId = preservePreviousRoomId ? store.previousRoomId : null;
+    
     // Reset rejoin flags after successful join
     pendingRejoin = false;
     hasAttemptedRejoin = false;  // Reset so we can rejoin if we disconnect and reconnect
     isJoiningRoom = false;  // Reset join flag after successful join
     store.setRoomId(roomId);
+    
+    // Restore previousRoomId if we're joining a casino/lounge (it should already be set, but ensure it persists)
+    if (preservePreviousRoomId && savedPreviousRoomId) {
+      console.log(`[Room State] Preserving previousRoomId ${savedPreviousRoomId} when joining ${roomId}`);
+      store.setPreviousRoomId(savedPreviousRoomId);
+    }
     
     // Set map type if provided by server (server is source of truth)
     if (mapType) {
