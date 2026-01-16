@@ -1519,6 +1519,12 @@ function updateAndDrawLegendaryParticles(ctx: CanvasRenderingContext2D, playerId
   const particles = legendaryParticles.get(playerId);
   if (!particles || particles.length === 0) return;
   
+  // Safety check: prevent particle accumulation issues
+  if (particles.length > 100) {
+    // Clear old particles if too many accumulate (indicates a bug)
+    particles.splice(0, particles.length - 50); // Keep only the 50 most recent
+  }
+  
   // Slower decay for longer-lasting particles that travel higher
   const decay = deltaTime * 0.0003; // Even slower decay so particles travel further
   
@@ -1899,6 +1905,10 @@ function updateAndDrawLegendaryParticles(ctx: CanvasRenderingContext2D, playerId
     }
     
     ctx.restore();
+    
+    // Explicitly reset shadow properties to prevent artifacts leaking to other rendering
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
   }
 }
 
@@ -7770,8 +7780,10 @@ export function drawParticleTrails(ctx: CanvasRenderingContext2D, time: number, 
     }
   });
   
-  // Reset alpha
+  // Reset alpha and shadow properties to prevent artifacts
   ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
 }
 
 // Clear trail for a player

@@ -1411,14 +1411,18 @@ export function GameCanvas() {
             // If in eu-1, eu-2, or eu-3, join corresponding casino room
             // Otherwise default to casino-eu-1
             let casinoRoomId = 'casino-eu-1';
-            const currentRoomId = roomId || '';
+            // Get current roomId from store (most up-to-date)
+            const currentRoomId = roomId || useGameStore.getState().roomId || '';
             if (currentRoomId === 'eu-1' || currentRoomId === 'eu-2' || currentRoomId === 'eu-3') {
               casinoRoomId = `casino-${currentRoomId}`;
             }
             
-            // Store previous room before joining casino
+            // Store previous room before joining casino (always store, even if it's the same)
             if (currentRoomId && currentRoomId !== casinoRoomId) {
+              console.log(`[Casino] Storing previous room: ${currentRoomId} before joining ${casinoRoomId}`);
               setPreviousRoomId(currentRoomId);
+            } else if (!currentRoomId) {
+              console.warn('[Casino] No currentRoomId available, cannot store previous room');
             }
             
             // Play portal sound
@@ -1449,7 +1453,23 @@ export function GameCanvas() {
         if (dist < INTERACTION_RANGE) {
           // Player reached return portal - transport back to previous room
           const currentPlayerName = playerName || 'Player';
-          const returnRoomId = previousRoomId || 'eu-1'; // Default to eu-1 if no previous room
+          
+          // Try to get return room from previousRoomId, or infer from current casino room
+          let returnRoomId = previousRoomId;
+          if (!returnRoomId) {
+            // Infer from current casino room ID (e.g., casino-eu-2 -> eu-2)
+            const currentCasinoRoomId = roomId || useGameStore.getState().roomId || '';
+            if (currentCasinoRoomId.startsWith('casino-')) {
+              returnRoomId = currentCasinoRoomId.replace('casino-', '');
+              console.log(`[Casino Return] Inferred return room ${returnRoomId} from casino room ${currentCasinoRoomId}`);
+            } else {
+              // Last resort: default to eu-1
+              returnRoomId = 'eu-1';
+              console.warn(`[Casino Return] No previousRoomId and cannot infer from ${currentCasinoRoomId}, defaulting to eu-1`);
+            }
+          } else {
+            console.log(`[Casino Return] Using stored previousRoomId: ${returnRoomId}`);
+          }
           
           // Determine map type based on room ID
           let returnMapType: MapType = 'forest';
@@ -1495,14 +1515,18 @@ export function GameCanvas() {
               // If in eu-1, eu-2, or eu-3, join corresponding lounge room
               // Otherwise default to millionaires_lounge-eu-1
               let loungeRoomId = 'millionaires_lounge-eu-1';
-              const currentRoomId = roomId || '';
+              // Get current roomId from store (most up-to-date)
+              const currentRoomId = roomId || useGameStore.getState().roomId || '';
               if (currentRoomId === 'eu-1' || currentRoomId === 'eu-2' || currentRoomId === 'eu-3') {
                 loungeRoomId = `millionaires_lounge-${currentRoomId}`;
               }
               
-              // Store previous room before joining lounge
+              // Store previous room before joining lounge (always store, even if it's the same)
               if (currentRoomId && currentRoomId !== loungeRoomId) {
+                console.log(`[Lounge] Storing previous room: ${currentRoomId} before joining ${loungeRoomId}`);
                 setPreviousRoomId(currentRoomId);
+              } else if (!currentRoomId) {
+                console.warn('[Lounge] No currentRoomId available, cannot store previous room');
               }
               
               // Play portal sound
@@ -1535,7 +1559,23 @@ export function GameCanvas() {
           if (dist < INTERACTION_RANGE) {
             // Player reached return portal - return to previous room
             const currentPlayerName = playerName || 'Player';
-            const returnRoomId = previousRoomId || 'eu-1'; // Default to eu-1 if no previous room
+            
+            // Try to get return room from previousRoomId, or infer from current lounge room
+            let returnRoomId = previousRoomId;
+            if (!returnRoomId) {
+              // Infer from current lounge room ID (e.g., millionaires_lounge-eu-2 -> eu-2)
+              const currentLoungeRoomId = roomId || useGameStore.getState().roomId || '';
+              if (currentLoungeRoomId.startsWith('millionaires_lounge-')) {
+                returnRoomId = currentLoungeRoomId.replace('millionaires_lounge-', '');
+                console.log(`[Lounge Return] Inferred return room ${returnRoomId} from lounge room ${currentLoungeRoomId}`);
+              } else {
+                // Last resort: default to eu-1
+                returnRoomId = 'eu-1';
+                console.warn(`[Lounge Return] No previousRoomId and cannot infer from ${currentLoungeRoomId}, defaulting to eu-1`);
+              }
+            } else {
+              console.log(`[Lounge Return] Using stored previousRoomId: ${returnRoomId}`);
+            }
             
             // Determine map type based on room ID
             let returnMapType: MapType = 'forest';
