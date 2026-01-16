@@ -512,36 +512,47 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
     let targetPosition: number;
     
     if (item === null) {
-      // For "nothing", scroll to an empty tile position
-      // Empty tiles are added after each set of items in godlike cases
-      // Scroll to the empty tile after the 4th set (setIndex 3) so there are more items visible after it
-      // Structure: Set 0: [items 0..n-1], [empty]
-      //            Set 1: [items 0..n-1], [empty]
-      //            Set 2: [items 0..n-1], [empty]
-      //            Set 3: [items 0..n-1], [empty] <- target this empty tile
-      //            Set 4: [items 0..n-1], [empty] <- more items after target
-      const itemsPerSet = normalizedItems.length + 1; // +1 for empty tile
+      // For "nothing", scroll to an empty tile position in godlike cases
+      // New structure: each set has [item0, empty, item1, empty, item2, empty, ..., empty]
+      // Positions in a set: 0=item0, 1=empty, 2=item1, 3=empty, 4=item2, 5=empty, ..., (len*2-1)=empty, (len*2)=empty at end
+      // Each set = normalizedItems.length items + normalizedItems.length empty tiles (between items) + 1 empty tile at end
+      // Total per set = normalizedItems.length * 2 + 1
+      // Scroll to an empty tile in the 4th set (setIndex 3) - target the empty tile after the first item (position 1)
+      const itemsPerSet = normalizedItems.length * 2 + 1; // items + empty tiles between + empty at end
       // The 4th set (setIndex 3) starts after 3 complete sets
-      // Set 3 start = (itemsPerSet * 3) * itemWidth
       const set3Start = itemsPerSet * itemWidth * 3;
-      // Empty tile is the last item in set 3, after all normal items in that set
-      // Position = start of set 3 + (normalizedItems.length items * itemWidth)
-      targetPosition = set3Start + (normalizedItems.length * itemWidth);
+      // Target the empty tile after the first item in set 3 (position 1 in the set)
+      // Position = start of set 3 + (1 * itemWidth) = position 1 (the empty tile after item 0)
+      targetPosition = set3Start + (1 * itemWidth);
       console.log('Empty tile target calculation:', { 
         itemsPerSet, 
         set3Start, 
         targetPosition, 
         normalizedItemsLength: normalizedItems.length,
-        itemWidth 
+        itemWidth,
+        emptyTilePosition: 'position 1 (after first item)'
       });
       itemIndex = undefined; // No item index for "nothing"
     } else {
       // Normal item - find its index and scroll to it
       itemIndex = normalizedItems.findIndex(i => i.item.id === item.id);
-      // Calculate target position - we start at 2 sets in, so find the item in one of the sets
-      // We'll scroll to the item in the 3rd set (index 2) to ensure it's visible
-      const initialOffset = normalizedItems.length * itemWidth * 2;
-      targetPosition = initialOffset + (itemIndex * itemWidth);
+      
+      // Check if this is a godlike case to determine layout
+      const isGodlikeCase = currentLootBox?.category?.startsWith('godlike_');
+      
+      if (isGodlikeCase) {
+        // For godlike cases: each set has [item0, empty, item1, empty, item2, empty, ..., empty]
+        // Items are at positions: 0, 2, 4, 6, ... (even positions)
+        // Scroll to the item in the 3rd set (setIndex 2) to ensure it's visible
+        const itemsPerSet = normalizedItems.length * 2 + 1; // items + empty tiles + empty at end
+        const set2Start = itemsPerSet * itemWidth * 2;
+        // Item at index itemIndex is at position (itemIndex * 2) in the set
+        targetPosition = set2Start + (itemIndex * 2 * itemWidth);
+      } else {
+        // Regular cases - no empty tiles between items
+        const initialOffset = normalizedItems.length * itemWidth * 2;
+        targetPosition = initialOffset + (itemIndex * itemWidth);
+      }
     }
     
     // Animate scrolling - use requestAnimationFrame to ensure we have the latest scroll position
@@ -553,8 +564,15 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       const currentScrollPos = scrollPosition;
       const startPosition = currentScrollPos; // Start from current scroll position
       // Calculate extra scroll to go through items multiple times before landing
-      // For empty tiles (godlike cases), account for the extra empty tile per set
-      const itemsPerSetForScroll = item === null ? normalizedItems.length + 1 : normalizedItems.length;
+      // For godlike cases with empty tiles, account for the new layout
+      const isGodlikeCase = currentLootBox?.category?.startsWith('godlike_');
+      let itemsPerSetForScroll: number;
+      if (isGodlikeCase) {
+        // Each set has: items + empty tiles between + empty at end = normalizedItems.length * 2 + 1
+        itemsPerSetForScroll = normalizedItems.length * 2 + 1;
+      } else {
+        itemsPerSetForScroll = normalizedItems.length;
+      }
       const extraScroll = itemsPerSetForScroll * itemWidth * 2; // Scroll through 2 more sets
       
       // Store the frame ID in a local variable to track if animation is active
@@ -567,18 +585,20 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         itemIndex, 
         itemName: item?.name || 'Nothing', 
         scrollDistance: targetPosition + extraScroll - startPosition,
-        itemsPerSet: item === null ? normalizedItems.length + 1 : normalizedItems.length,
-        isNull: item === null
+        itemsPerSet: itemsPerSetForScroll,
+        isNull: item === null,
+        isGodlikeCase: currentLootBox?.category?.startsWith('godlike_')
       });
       
       const animate = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         
-        // Safety check: if animation was cancelled, stop
-        // But ensure purchase still happens if we have pending purchase
-        if (animationFrameId === null || animationRef.current === null) {
-          console.log('Animation cancelled, stopping');
+        // Safety check: if animation was cancelled externally, handle it gracefully
+        // Only check animationFrameId (local var) - don't check animationRef.current
+        // because it might be cleared by cleanup effects, but we still want to complete
+        if (animationFrameId === null) {
+          console.log('Animation frame ID is null, stopping');
           // If we have a pending purchase, complete it even if animation was cancelled
           if (pendingPurchaseRef.current) {
             const { lootBoxId, itemId, price } = pendingPurchaseRef.current;
@@ -586,6 +606,13 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
             pendingPurchaseRef.current = null;
           }
           return;
+        }
+        
+        // If animationRef was cleared but we still have a frame ID, continue
+        // This handles cases where cleanup effects clear the ref but animation should continue
+        if (animationRef.current === null && animationFrameId !== null) {
+          // Restore the ref to keep animation going
+          animationRef.current = animationFrameId;
         }
         
         // Ease out cubic for smooth deceleration
@@ -596,7 +623,14 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         const scrollDistance = targetPosition + extraScroll - startPosition;
         const currentPosition = startPosition + scrollDistance * easeOut;
         
+        // Update scroll position - use both state and direct DOM update for smoothness
         setScrollPosition(currentPosition);
+        // Also update directly via ref for immediate visual feedback
+        if (scrollRef.current) {
+          const itemWidth = 144;
+          const centerOffset = scrollRef.current.offsetWidth / 2 - itemWidth / 2;
+          scrollRef.current.style.transform = `translateX(calc(50% - 64px - ${currentPosition}px))`;
+        }
         
         // Play ticking sound as items scroll past
         const itemWidth = 144;
@@ -640,10 +674,12 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           animationFrameId = requestAnimationFrame(animate);
           animationRef.current = animationFrameId;
         } else {
-          // Animation complete - set final position
+          // Animation complete - ensure we're exactly at target position
+          // Update scroll position both via state and directly for immediate visual update
           setScrollPosition(targetPosition);
-          animationFrameId = null;
-          animationRef.current = null;
+          if (scrollRef.current) {
+            scrollRef.current.style.transform = `translateX(calc(50% - 64px - ${targetPosition}px))`;
+          }
           
           // Stop all active tick sounds when animation completes
           activeTickSoundsRef.current.forEach(sound => {
@@ -652,42 +688,48 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           });
           activeTickSoundsRef.current = [];
           
-          // Use requestAnimationFrame to ensure scroll position is set and rendered before showing result
-          requestAnimationFrame(() => {
-            // Get the item and purchase info from refs (persists even if component re-rendered)
-            const finalItem = item; // Item was captured in closure
-            const purchaseInfo = pendingPurchaseRef.current;
+          // Clear animation refs
+          animationFrameId = null;
+          animationRef.current = null;
+          
+          // Get the item and purchase info from refs (persists even if component re-rendered)
+          const finalItem = item; // Item was captured in closure
+          const purchaseInfo = pendingPurchaseRef.current;
+          
+          if (!purchaseInfo) {
+            console.error('No pending purchase info found, animation may have been interrupted');
+            setIsOpening(false);
+            isOpeningRef.current = false;
+            return;
+          }
+          
+          // CRITICAL: Set selected item FIRST and immediately to trigger React render
+          // This must happen before any other state updates to prevent freeze
+          if (finalItem === null) {
+            // "Nothing" result - show empty result
+            console.log('Setting selected item: Nothing');
+            pendingSelectedItemRef.current = null;
+            setSelectedItem(null);
+          } else {
+            // Normal item result - set immediately
+            console.log('Setting selected item:', finalItem.name, 'already owned:', itemAlreadyOwnedRef.current);
+            pendingSelectedItemRef.current = finalItem;
+            setSelectedItem(finalItem);
             
-            if (!purchaseInfo) {
-              console.error('No pending purchase info found, animation may have been interrupted');
-              setIsOpening(false);
-              isOpeningRef.current = false;
-              return;
+            // Play level-up sound for rare, epic, legendary, or godlike items
+            const rarity = finalItem.rarity || 'common';
+            if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike') {
+              playLevelUpSound();
             }
-            
+          }
+          
+          // Use requestAnimationFrame to handle cleanup AFTER React has rendered the selected item
+          // This ensures the UI updates smoothly without freezing
+          requestAnimationFrame(() => {
+            // Purchase the loot box after animation completes (will sync with Firebase)
             if (finalItem === null) {
-              // "Nothing" result - show empty result
-              console.log('Setting selected item: Nothing');
-              pendingSelectedItemRef.current = null;
-              setSelectedItem(null);
-              
-              // Purchase the loot box after animation completes (will sync with Firebase)
               purchaseLootBox(purchaseInfo.lootBoxId, '', purchaseInfo.price);
             } else {
-              // Normal item result
-              // Always set the selected item so it displays, even if already owned
-              console.log('Setting selected item:', finalItem.name, 'already owned:', itemAlreadyOwnedRef.current);
-              // Store in ref first to ensure it persists
-              pendingSelectedItemRef.current = finalItem;
-              setSelectedItem(finalItem);
-              
-              // Play level-up sound for rare, epic, legendary, or godlike items
-              const rarity = finalItem.rarity || 'common';
-              if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike') {
-                playLevelUpSound();
-              }
-              
-              // Purchase the loot box after animation completes (will sync with Firebase)
               purchaseLootBox(purchaseInfo.lootBoxId, purchaseInfo.itemId, purchaseInfo.price);
             }
             
@@ -766,26 +808,32 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
   useEffect(() => {
     if (currentLootBox) {
       // Only reset if we're switching to a different loot box (not just an update)
-      setIsOpening(false);
-      isOpeningRef.current = false;
-      setSelectedItem(null);
-      // Reset orb animation state
-      setPreviousOrbs(playerOrbs);
-      setOrbAnimation(null);
-      // Cancel any ongoing animation
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
+      // Don't cancel animation if we're currently opening - let it complete
+      if (!isOpeningRef.current && !isOpening) {
+        setIsOpening(false);
+        isOpeningRef.current = false;
+        setSelectedItem(null);
+        // Reset orb animation state
+        setPreviousOrbs(playerOrbs);
+        setOrbAnimation(null);
+        // Cancel any ongoing animation (only if not currently opening)
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = null;
+        }
+        // Stop all active tick sounds
+        activeTickSoundsRef.current.forEach(sound => {
+          sound.pause();
+          sound.currentTime = 0;
+        });
+        activeTickSoundsRef.current = [];
+      } else {
+        // Just update orb state without cancelling animation
+        setPreviousOrbs(playerOrbs);
       }
-      // Stop all active tick sounds
-      activeTickSoundsRef.current.forEach(sound => {
-        sound.pause();
-        sound.currentTime = 0;
-      });
-      activeTickSoundsRef.current = [];
       // Reset scroll position will be handled by the other effect
     }
-  }, [currentLootBox?.id, playerOrbs]); // Only depend on currentLootBox.id - this ensures it only runs when switching loot boxes
+  }, [currentLootBox?.id]); // Only depend on currentLootBox.id - removed playerOrbs to prevent cancelling animation mid-spin
   
   // Cleanup when loot box becomes null (modal closes)
   useEffect(() => {
@@ -1328,22 +1376,37 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                 const isGodlikeCase = currentLootBox?.category?.startsWith('godlike_');
                 const itemsToRender: Array<{ item: ShopItem | null; setIndex: number; itemIndex: number }> = [];
                 
-                // Create 7 sets of items (more sets for godlike cases so empty tile doesn't appear at the end)
-                const numSets = isGodlikeCase ? 7 : 5;
-                for (let setIndex = 0; setIndex < numSets; setIndex++) {
-                  normalizedItems.forEach((entry, itemIndex) => {
-                    itemsToRender.push({ item: entry.item, setIndex, itemIndex });
-                  });
-                  // Add empty tile after each set for godlike cases
-                  if (isGodlikeCase) {
-                    itemsToRender.push({ item: null, setIndex, itemIndex: normalizedItems.length });
+                if (isGodlikeCase) {
+                  // For godlike cases, break up items with empty tiles to prevent consecutive godlike items
+                  // Create 7 sets with empty tiles distributed throughout
+                  const numSets = 7;
+                  for (let setIndex = 0; setIndex < numSets; setIndex++) {
+                    normalizedItems.forEach((entry, itemIndex) => {
+                      itemsToRender.push({ item: entry.item, setIndex, itemIndex });
+                      // Add empty tile after every godlike item to break them up
+                      // This ensures we never see 3 godlike items in a row
+                      itemsToRender.push({ item: null, setIndex, itemIndex: normalizedItems.length + itemIndex });
+                    });
+                    // Also add an empty tile at the end of each set
+                    itemsToRender.push({ item: null, setIndex, itemIndex: normalizedItems.length * 2 });
+                  }
+                } else {
+                  // Regular cases - no empty tiles
+                  const numSets = 5;
+                  for (let setIndex = 0; setIndex < numSets; setIndex++) {
+                    normalizedItems.forEach((entry, itemIndex) => {
+                      itemsToRender.push({ item: entry.item, setIndex, itemIndex });
+                    });
                   }
                 }
                 
                 return itemsToRender.map((entry, index) => {
                   // Handle empty tile entries
                   if (entry.item === null) {
-                    const isEmptySelected = selectedItem === null && entry.setIndex === 3; // Select empty tile in 4th set
+                    // For godlike cases, select empty tile in 4th set (setIndex 3) after first item
+                    // Empty tiles are at positions: 1, 3, 5, ... (after each item) and at the end
+                    // We target the one after the first item (itemIndex would be normalizedItems.length for the first empty after items)
+                    const isEmptySelected = selectedItem === null && entry.setIndex === 3 && entry.itemIndex === normalizedItems.length;
                     return (
                       <div
                         key={`empty-${entry.setIndex}-${entry.itemIndex}`}
