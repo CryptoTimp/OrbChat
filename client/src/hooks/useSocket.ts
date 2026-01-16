@@ -19,6 +19,7 @@ let listenersAttached = false;
 let pendingRejoin = false;  // Prevent duplicate rejoins
 let hasAttemptedRejoin = false;  // Track if we've attempted rejoin in this session
 let isJoiningRoom = false;  // Prevent concurrent join attempts
+let isPurchasingLootBox = false;  // Prevent concurrent loot box purchases
 
 // Sync orb balance from Firebase (source of truth)
 async function syncOrbsFromFirebase(playerId: string): Promise<void> {
@@ -436,7 +437,10 @@ function attachListeners(sock: Socket) {
       await updateUserOrbs(playerId, newOrbs);
       
       // Update local state
-      state.updatePlayerOrbs(playerId, newOrbs);
+      state.updatePlayerOrbs(playerId, newOrbs, rewardAmount);
+      
+      // Record idle reward in session stats
+      state.recordOrbCollection('normal', rewardAmount);
       
       // Notify server with updated balance (so server can update room state)
       const sock = getOrCreateSocket();
@@ -988,6 +992,12 @@ export function useSocket() {
   }, []);
   
   const purchaseLootBox = useCallback(async (lootBoxId: string, selectedItemId: string, lootBoxPrice: number) => {
+    // Prevent concurrent purchases
+    if (isPurchasingLootBox) {
+      console.warn('Purchase already in progress, ignoring duplicate request');
+      return;
+    }
+    
     const state = useGameStore.getState();
     const playerId = state.playerId;
     
@@ -996,20 +1006,34 @@ export function useSocket() {
       return;
     }
     
+    // Set purchase lock
+    isPurchasingLootBox = true;
+    
+    // Store original state for rollback
+    let originalOrbs: number | null = null;
+    let originalInventory: string[] | null = null;
+    
     // For now, we'll use the same logic as purchaseItem but with the selected item
     // In a real implementation, the server would handle the random selection
     try {
       const profile = await getUserProfile(playerId);
       if (!profile) {
         console.error('User profile not found');
+        isPurchasingLootBox = false;
         return;
       }
+      
+      // Store original state for rollback
+      originalOrbs = profile.orbs || 0;
+      originalInventory = [...(profile.inventory || [])];
       
       // Use the provided loot box price
       const firebaseOrbs = profile.orbs || 0;
       
       if (firebaseOrbs < lootBoxPrice) {
         console.log('Insufficient orbs for loot box');
+        addNotification('Insufficient orbs!', 'error');
+        isPurchasingLootBox = false;
         return;
       }
       
@@ -1017,38 +1041,90 @@ export function useSocket() {
       if (!selectedItemId || selectedItemId === '') {
         // Exclusive case gave nothing - just deduct orbs
         const newOrbs = firebaseOrbs - lootBoxPrice;
-        await updateUserOrbs(playerId, newOrbs);
-        state.updatePlayerOrbs(playerId, newOrbs);
-        addNotification(`Case was empty. Better luck next time!`, 'error');
         
-        // Get loot box name from category (handle godlike cases)
-        let lootBoxCategory = lootBoxId.replace('lootbox_', '');
-        let lootBoxName: string;
-        
-        if (lootBoxCategory.startsWith('godlike_')) {
-          // Handle godlike cases: "godlike_hats" -> "Godlike Hats Case"
-          const category = lootBoxCategory.replace('godlike_', '');
-          lootBoxName = `Godlike ${category.charAt(0).toUpperCase() + category.slice(1)} Case`;
-        } else {
-          // Regular cases: "hats" -> "Hats Case"
-          lootBoxName = lootBoxCategory.charAt(0).toUpperCase() + lootBoxCategory.slice(1) + ' Case';
+        // Update Firebase with retry logic
+        let retries = 3;
+        let success = false;
+        while (retries > 0 && !success) {
+          try {
+            // Re-read orbs before updating to prevent race conditions
+            const currentProfile = await getUserProfile(playerId);
+            if (!currentProfile) {
+              throw new Error('Profile not found');
+            }
+            const currentOrbs = currentProfile.orbs || 0;
+            
+            // Verify we still have enough orbs (might have changed due to concurrent purchase)
+            if (currentOrbs < lootBoxPrice) {
+              throw new Error('Insufficient orbs (balance changed)');
+            }
+            
+            // Update with current balance
+            const finalOrbs = currentOrbs - lootBoxPrice;
+            await updateUserOrbs(playerId, finalOrbs);
+            success = true;
+            
+            state.updatePlayerOrbs(playerId, finalOrbs);
+            addNotification(`Case was empty. Better luck next time!`, 'error');
+            
+            // Get loot box name from category (handle godlike cases)
+            let lootBoxCategory = lootBoxId.replace('lootbox_', '');
+            let lootBoxName: string;
+            
+            if (lootBoxCategory.startsWith('godlike_')) {
+              // Handle godlike cases: "godlike_hats" -> "Godlike Hats Case"
+              const category = lootBoxCategory.replace('godlike_', '');
+              lootBoxName = `Godlike ${category.charAt(0).toUpperCase() + category.slice(1)} Case`;
+            } else {
+              // Regular cases: "hats" -> "Hats Case"
+              lootBoxName = lootBoxCategory.charAt(0).toUpperCase() + lootBoxCategory.slice(1) + ' Case';
+            }
+            
+            // Send chat message for "nothing" result
+            const message = `opened a ${lootBoxName} but found nothing!`;
+            console.log('Sending loot box chat message (nothing):', message);
+            sendChat(message);
+            
+            // Notify server
+            const sock = getOrCreateSocket();
+            if (sock.connected) {
+              sock.emit('purchase_lootbox', { lootBoxId, itemId: '', newOrbs: finalOrbs, newInventory: currentProfile.inventory || [], alreadyOwned: false });
+            }
+          } catch (error) {
+            retries--;
+            if (retries === 0) {
+              // Rollback: restore original state
+              if (originalOrbs !== null) {
+                await updateUserOrbs(playerId, originalOrbs);
+                state.updatePlayerOrbs(playerId, originalOrbs);
+              }
+              addNotification('Purchase failed. Please try again.', 'error');
+              console.error('Loot box purchase failed after retries:', error);
+              isPurchasingLootBox = false;
+              return;
+            }
+            // Wait a bit before retry
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         }
-        
-        // Send chat message for "nothing" result
-        const message = `opened a ${lootBoxName} but found nothing!`;
-        console.log('Sending loot box chat message (nothing):', message);
-        sendChat(message);
-        
-        // Notify server
-        const sock = getOrCreateSocket();
-        if (sock.connected) {
-          sock.emit('purchase_lootbox', { lootBoxId, itemId: '', newOrbs, newInventory: profile.inventory || [], alreadyOwned: false });
-        }
+        isPurchasingLootBox = false;
         return;
       }
       
-      // Check if already owned
-      const firebaseInventory = profile.inventory || [];
+      // Check if already owned (re-read to get latest state)
+      const currentProfile = await getUserProfile(playerId);
+      if (!currentProfile) {
+        throw new Error('Profile not found during purchase');
+      }
+      
+      const firebaseInventory = currentProfile.inventory || [];
+      const currentFirebaseOrbs = currentProfile.orbs || 0;
+      
+      // Verify we still have enough orbs (might have changed due to concurrent purchase)
+      if (currentFirebaseOrbs < lootBoxPrice) {
+        throw new Error('Insufficient orbs (balance changed)');
+      }
+      
       const alreadyOwned = firebaseInventory.includes(selectedItemId);
       
       let newOrbs: number;
@@ -1056,11 +1132,11 @@ export function useSocket() {
       
       if (alreadyOwned) {
         // If already owned, deduct full price (no refund)
-        newOrbs = firebaseOrbs - lootBoxPrice;
+        newOrbs = currentFirebaseOrbs - lootBoxPrice;
         newInventory = firebaseInventory; // Don't add item to inventory
       } else {
         // Normal purchase: deduct orbs and add selected item to inventory
-        newOrbs = firebaseOrbs - lootBoxPrice;
+        newOrbs = currentFirebaseOrbs - lootBoxPrice;
         newInventory = [...firebaseInventory, selectedItemId];
       }
       
@@ -1085,26 +1161,94 @@ export function useSocket() {
       const shopItems = state.shopItems;
       const item = shopItems.find(i => i.id === selectedItemId);
       
-      // Now update Firebase (this happens asynchronously, but UI is already updated)
-      if (alreadyOwned) {
-        await updateUserOrbs(playerId, newOrbs);
-        addNotification(`Item already owned!`, 'error');
-        console.log('Loot box item already owned, no refund. new orbs:', newOrbs);
-      } else {
-        await Promise.all([
-          updateUserOrbs(playerId, newOrbs),
-          addToInventory(playerId, selectedItemId),
-        ]);
-        // Simple, clean notification message
-        const itemName = item ? item.name : selectedItemId;
-        addNotification(`Unlocked ${itemName}!`, 'success');
-        console.log('Loot box purchase successful:', selectedItemId, 'new orbs:', newOrbs);
-      }
-      
-      // Notify server
-      const sock = getOrCreateSocket();
-      if (sock.connected) {
-        sock.emit('purchase_lootbox', { lootBoxId, itemId: selectedItemId, newOrbs, newInventory, alreadyOwned });
+      // Now update Firebase with retry logic
+      let retries = 3;
+      let success = false;
+      while (retries > 0 && !success) {
+        try {
+          // Re-read profile before updating to prevent race conditions
+          const latestProfile = await getUserProfile(playerId);
+          if (!latestProfile) {
+            throw new Error('Profile not found');
+          }
+          const latestOrbs = latestProfile.orbs || 0;
+          const latestInventory = latestProfile.inventory || [];
+          
+          // Verify we still have enough orbs
+          if (latestOrbs < lootBoxPrice) {
+            throw new Error('Insufficient orbs (balance changed during purchase)');
+          }
+          
+          // Calculate final values based on latest state
+          const finalOrbs = latestOrbs - lootBoxPrice;
+          const finalInventory = alreadyOwned ? latestInventory : [...latestInventory, selectedItemId];
+          
+          // Update Firebase atomically
+          if (alreadyOwned) {
+            await updateUserOrbs(playerId, finalOrbs);
+          } else {
+            await Promise.all([
+              updateUserOrbs(playerId, finalOrbs),
+              addToInventory(playerId, selectedItemId),
+            ]);
+          }
+          
+          success = true;
+          
+          // Update local state with final values
+          state.updatePlayerOrbs(playerId, finalOrbs);
+          const finalInventoryItems: InventoryItem[] = finalInventory.map(itemId => {
+            const existingItem = currentInventory.find(inv => inv.itemId === itemId);
+            return {
+              playerId,
+              itemId,
+              equipped: existingItem?.equipped || false,
+            };
+          });
+          state.setInventory(finalInventoryItems, finalOrbs);
+          
+          if (alreadyOwned) {
+            addNotification(`Item already owned!`, 'error');
+            console.log('Loot box item already owned, no refund. new orbs:', finalOrbs);
+          } else {
+            // Simple, clean notification message
+            const itemName = item ? item.name : selectedItemId;
+            addNotification(`Unlocked ${itemName}!`, 'success');
+            console.log('Loot box purchase successful:', selectedItemId, 'new orbs:', finalOrbs);
+          }
+          
+          // Notify server
+          const sock = getOrCreateSocket();
+          if (sock.connected) {
+            sock.emit('purchase_lootbox', { lootBoxId, itemId: selectedItemId, newOrbs: finalOrbs, newInventory: finalInventory, alreadyOwned });
+          }
+        } catch (error) {
+          retries--;
+          if (retries === 0) {
+            // Rollback: restore original state
+            if (originalOrbs !== null) {
+              await updateUserOrbs(playerId, originalOrbs);
+              state.updatePlayerOrbs(playerId, originalOrbs);
+            }
+            if (originalInventory !== null) {
+              const rollbackInventoryItems: InventoryItem[] = originalInventory.map(itemId => {
+                const existingItem = currentInventory.find(inv => inv.itemId === itemId);
+                return {
+                  playerId,
+                  itemId,
+                  equipped: existingItem?.equipped || false,
+                };
+              });
+              state.setInventory(rollbackInventoryItems, originalOrbs);
+            }
+            addNotification('Purchase failed. Please try again.', 'error');
+            console.error('Loot box purchase failed after retries:', error);
+            isPurchasingLootBox = false;
+            return;
+          }
+          // Wait a bit before retry
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
       
       // Send chat message about the loot box opening (always send, even if already owned or nothing)
@@ -1136,6 +1280,35 @@ export function useSocket() {
       }
     } catch (error) {
       console.error('Loot box purchase failed:', error);
+      // Rollback on error
+      if (originalOrbs !== null) {
+        try {
+          await updateUserOrbs(playerId, originalOrbs);
+          state.updatePlayerOrbs(playerId, originalOrbs);
+        } catch (rollbackError) {
+          console.error('Failed to rollback orbs:', rollbackError);
+        }
+      }
+      if (originalInventory !== null) {
+        try {
+          const currentInventory = state.inventory;
+          const rollbackInventoryItems: InventoryItem[] = originalInventory.map(itemId => {
+            const existingItem = currentInventory.find(inv => inv.itemId === itemId);
+            return {
+              playerId,
+              itemId,
+              equipped: existingItem?.equipped || false,
+            };
+          });
+          state.setInventory(rollbackInventoryItems, originalOrbs || 0);
+        } catch (rollbackError) {
+          console.error('Failed to rollback inventory:', rollbackError);
+        }
+      }
+      addNotification('Purchase failed. Please try again.', 'error');
+    } finally {
+      // Always release the lock
+      isPurchasingLootBox = false;
     }
   }, [sendChat]);
   

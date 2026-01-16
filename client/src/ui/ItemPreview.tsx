@@ -2228,42 +2228,92 @@ function drawBoostPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: num
     ctx.fillRect(dollarX - 3 * p, dollarY, 5 * p, 1 * p); // Middle line highlight
     ctx.fillRect(dollarX - 3 * p, dollarY + 4 * p, 5 * p, 1 * p); // Bottom line highlight
   } else if (isSpeedBoost) {
-    // Draw speed lines / motion blur effect
-    ctx.strokeStyle = secondaryColor;
-    ctx.lineWidth = 2 * p;
-    ctx.globalAlpha = 0.6;
+    // Check if this is a godlike speed boost
+    const isGodlikeSpeed = rarity === 'godlike' && isSpeedBoost;
     
-    // Motion lines
-    for (let i = 0; i < 3; i++) {
-      const y = cy - 4 * p + i * 4 * p;
+    if (isGodlikeSpeed) {
+      // Draw red circle for godlike speed boost
+      ctx.fillStyle = '#dc2626'; // Red
       ctx.beginPath();
-      ctx.moveTo(cx - 10 * p, y);
-      ctx.lineTo(cx - 4 * p, y);
-      ctx.stroke();
+      ctx.arc(cx, cy, 8 * p, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw motion lines inside the circle
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 1.5 * p;
+      ctx.globalAlpha = 0.7;
+      for (let i = 0; i < 3; i++) {
+        const y = cy - 3 * p + i * 3 * p;
+        ctx.beginPath();
+        ctx.moveTo(cx - 5 * p, y);
+        ctx.lineTo(cx - 2 * p, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      
+      // Animated flashing dots around the circle
+      const flashPhase = (time * 0.003) % 1;
+      const dotPositions = [
+        { x: cx, y: cy - 12 * p },      // Top
+        { x: cx + 12 * p, y: cy },      // Right
+        { x: cx, y: cy + 12 * p },      // Bottom
+        { x: cx - 12 * p, y: cy },      // Left
+      ];
+      
+      dotPositions.forEach((pos, index) => {
+        const dotPhase = (flashPhase + index * 0.25) % 1;
+        const opacity = dotPhase < 0.5 ? dotPhase * 2 : 2 - dotPhase * 2;
+        const size = 2 * p + (opacity * 1.5 * p);
+        
+        ctx.fillStyle = `rgba(239, 68, 68, ${opacity})`;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Outer glow
+        ctx.fillStyle = `rgba(239, 68, 68, ${opacity * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, size + 1 * p, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    } else {
+      // Regular speed boost - draw speed lines / motion blur effect
+      ctx.strokeStyle = secondaryColor;
+      ctx.lineWidth = 2 * p;
+      ctx.globalAlpha = 0.6;
+      
+      // Motion lines
+      for (let i = 0; i < 3; i++) {
+        const y = cy - 4 * p + i * 4 * p;
+        ctx.beginPath();
+        ctx.moveTo(cx - 10 * p, y);
+        ctx.lineTo(cx - 4 * p, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      
+      // Draw lightning bolt (speed symbol)
+      ctx.fillStyle = primaryColor;
+      ctx.beginPath();
+      ctx.moveTo(cx + 2 * p, cy - 8 * p);  // Top
+      ctx.lineTo(cx - 4 * p, cy + p);       // Left middle
+      ctx.lineTo(cx - p, cy + p);           // Inner left
+      ctx.lineTo(cx - 3 * p, cy + 8 * p);   // Bottom
+      ctx.lineTo(cx + 4 * p, cy - p);       // Right middle
+      ctx.lineTo(cx + p, cy - p);           // Inner right
+      ctx.closePath();
+      ctx.fill();
+      
+      // Highlight on lightning
+      ctx.fillStyle = secondaryColor;
+      ctx.beginPath();
+      ctx.moveTo(cx + p, cy - 6 * p);
+      ctx.lineTo(cx - 2 * p, cy);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + 2 * p, cy - 4 * p);
+      ctx.closePath();
+      ctx.fill();
     }
-    ctx.globalAlpha = 1;
-    
-    // Draw lightning bolt (speed symbol)
-    ctx.fillStyle = primaryColor;
-    ctx.beginPath();
-    ctx.moveTo(cx + 2 * p, cy - 8 * p);  // Top
-    ctx.lineTo(cx - 4 * p, cy + p);       // Left middle
-    ctx.lineTo(cx - p, cy + p);           // Inner left
-    ctx.lineTo(cx - 3 * p, cy + 8 * p);   // Bottom
-    ctx.lineTo(cx + 4 * p, cy - p);       // Right middle
-    ctx.lineTo(cx + p, cy - p);           // Inner right
-    ctx.closePath();
-    ctx.fill();
-    
-    // Highlight on lightning
-    ctx.fillStyle = secondaryColor;
-    ctx.beginPath();
-    ctx.moveTo(cx + p, cy - 6 * p);
-    ctx.lineTo(cx - 2 * p, cy);
-    ctx.lineTo(cx, cy);
-    ctx.lineTo(cx + 2 * p, cy - 4 * p);
-    ctx.closePath();
-    ctx.fill();
   } else {
     // Fallback: draw lightning bolt if we can't determine type
     ctx.fillStyle = primaryColor;

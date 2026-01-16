@@ -444,27 +444,67 @@ export function HUD({ onLeaveRoom }: HUDProps) {
           {/* Powerup icons - above orb balance */}
           {equippedBoosts.length > 0 && (
             <div className="flex items-center gap-2 mb-1 justify-center flex-wrap max-w-[200px]">
-              {equippedBoosts.map((boost) => (
-                <div
-                  key={boost.id}
-                  className="relative bg-gray-800/80 backdrop-blur-sm rounded-lg p-1.5 border border-gray-600/50"
-                  style={{
-                    borderColor: boost.trailColor ? `${boost.trailColor}80` : undefined,
-                  }}
-                  title={boost.name}
-                >
-                  <ItemPreview item={boost} size={32} />
-                  {/* Glow effect based on rarity */}
-                  {boost.rarity === 'legendary' && (
-                    <div 
-                      className="absolute inset-0 rounded-lg pointer-events-none"
-                      style={{
-                        boxShadow: `0 0 8px ${boost.trailColor || '#ffd700'}40`,
-                      }}
-                    />
-                  )}
-                </div>
-              ))}
+              {equippedBoosts.map((boost) => {
+                // Check if this is a godlike boost
+                const isGodlike = (boost.rarity || 'common') === 'godlike';
+                let glowColor = boost.trailColor || '#ef4444';
+                
+                // For godlike speed boosts, always use red
+                if (isGodlike && boost.speedMultiplier) {
+                  glowColor = '#ef4444'; // Red for godlike speed boosts
+                } else if (isGodlike) {
+                  // For other godlike boosts, use set type color
+                  const isVoid = boost.id.includes('void');
+                  const isChaos = boost.id.includes('chaos');
+                  const isAbyss = boost.id.includes('abyss');
+                  if (isVoid) glowColor = '#4b0082'; // Purple
+                  else if (isChaos) glowColor = '#00ffff'; // Cyan
+                  else if (isAbyss) glowColor = '#6a0dad'; // Dark purple
+                }
+                
+                return (
+                  <div
+                    key={boost.id}
+                    className="relative bg-gray-800/80 backdrop-blur-sm rounded-lg p-1.5 border border-gray-600/50"
+                    style={{
+                      borderColor: `${glowColor}80`,
+                    }}
+                    title={boost.name}
+                  >
+                    <ItemPreview item={boost} size={32} />
+                    {/* Animated glow effect for godlike boosts */}
+                    {isGodlike && (
+                      <>
+                        <div 
+                          className="absolute inset-0 rounded-lg pointer-events-none animate-pulse"
+                          style={{
+                            boxShadow: `0 0 12px ${glowColor}60, 0 0 20px ${glowColor}40`,
+                            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                          }}
+                        />
+                        {/* Additional pulsing ring effect */}
+                        <div 
+                          className="absolute inset-0 rounded-lg pointer-events-none"
+                          style={{
+                            boxShadow: `0 0 8px ${glowColor}80`,
+                            animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                            animationDelay: '0.5s',
+                          }}
+                        />
+                      </>
+                    )}
+                    {/* Glow effect for legendary boosts */}
+                    {boost.rarity === 'legendary' && !isGodlike && (
+                      <div 
+                        className="absolute inset-0 rounded-lg pointer-events-none"
+                        style={{
+                          boxShadow: `0 0 8px ${boost.trailColor || '#ffd700'}40`,
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
           
@@ -674,6 +714,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                               style={{
                                 color: player.id === localPlayer?.id ? '#60a5fa' : undefined,
                                 fontWeight: player.id === localPlayer?.id ? 'bold' : 'normal',
+                                maxWidth: '120px',
                               }}
                               title={player.name}
                             >

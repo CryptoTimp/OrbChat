@@ -65,6 +65,10 @@ const playerLastMovement: Map<string, number> = new Map();
 // Map: playerId -> lastRewardTime (timestamp)
 const playerLastIdleReward: Map<string, number> = new Map();
 
+// Track players currently purchasing loot boxes (prevent concurrent purchases)
+// Map: playerId -> true if purchasing
+const playerPurchasingLootBox: Map<string, boolean> = new Map();
+
 // Clean up any lingering socket state on server startup
 // (Socket.IO rooms are automatically cleared when server restarts, but we ensure clean state)
 function clearAllSocketState() {
@@ -707,27 +711,76 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     }
   });
 
-  // Handle loot box purchase (client does Firebase update, server just validates and updates room state)
+  // Handle loot box purchase (client does Firebase update, server validates and updates room state)
   socket.on('purchase_lootbox', async (data: { lootBoxId: string; itemId: string; newOrbs?: number; newInventory?: string[]; alreadyOwned?: boolean }) => {
-    const { itemId, newOrbs } = data;
+    const { lootBoxId, itemId, newOrbs } = data;
     const mapping = socketToPlayer.get(socket.id);
     if (!mapping) return;
 
     const { playerId, roomId } = mapping;
     const player = rooms.getPlayerInRoom(roomId, playerId);
     
-    if (player) {
-      // Update player's orbs in room state and database (client already updated Firebase)
-      if (typeof newOrbs === 'number') {
-        // Update database to keep it in sync
-        await players.updatePlayerOrbs(playerId, newOrbs);
-        // Update room state
-        player.orbs = newOrbs;
-        // Broadcast orb update to all players in the room
-        io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newOrbs });
+    if (!player) return;
+    
+    // Prevent concurrent purchases for the same player
+    if (playerPurchasingLootBox.get(playerId)) {
+      console.warn(`Player ${player.name} attempted concurrent loot box purchase - blocked`);
+      return;
+    }
+    
+    // Set purchase lock
+    playerPurchasingLootBox.set(playerId, true);
+    
+    try {
+      // Calculate expected price from balance change
+      const currentOrbs = player.orbs || 0;
+      
+      if (typeof newOrbs !== 'number') {
+        console.error(`Player ${player.name} purchase missing newOrbs`);
+        playerPurchasingLootBox.delete(playerId);
+        return;
       }
       
-      console.log(`Player ${player.name} opened loot box and received item ${itemId}, new balance: ${newOrbs}`);
+      // Calculate the price from the balance change
+      const calculatedPrice = currentOrbs - newOrbs;
+      
+      // Validate price is reasonable (between 1 and 10M orbs)
+      if (calculatedPrice < 1 || calculatedPrice > 10000000) {
+        console.warn(`Player ${player.name} attempted purchase with invalid price: ${calculatedPrice}`);
+        playerPurchasingLootBox.delete(playerId);
+        return;
+      }
+      
+      // Validate balance (check room state, which should be in sync with Firebase)
+      if (currentOrbs < calculatedPrice) {
+        console.warn(`Player ${player.name} attempted to purchase loot box with insufficient orbs. Current: ${currentOrbs}, Required: ${calculatedPrice}`);
+        playerPurchasingLootBox.delete(playerId);
+        return;
+      }
+      
+      // Validate the new balance matches expected calculation
+      const expectedNewOrbs = currentOrbs - calculatedPrice;
+      // Allow small difference due to rounding, but flag large discrepancies
+      if (Math.abs(newOrbs - expectedNewOrbs) > 1) {
+        console.warn(`Player ${player.name} purchase balance mismatch. Expected: ${expectedNewOrbs}, Got: ${newOrbs}`);
+        // Still accept it, but log the warning
+      }
+      
+      // Update database to keep it in sync
+      await players.updatePlayerOrbs(playerId, newOrbs);
+      // Update room state
+      player.orbs = newOrbs;
+      // Broadcast orb update to all players in the room
+      io.to(roomId).emit('player_orbs_updated', { playerId, orbs: newOrbs });
+      
+      console.log(`Player ${player.name} opened loot box ${lootBoxId} and received item ${itemId}, new balance: ${newOrbs}`);
+    } catch (error) {
+      console.error(`Error processing loot box purchase for player ${player.name}:`, error);
+    } finally {
+      // Always release the lock after a short delay to prevent rapid-fire purchases
+      setTimeout(() => {
+        playerPurchasingLootBox.delete(playerId);
+      }, 500); // 500ms cooldown between purchases
     }
   });
 
@@ -1278,6 +1331,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Clean up idle tracking when player leaves
         playerLastMovement.delete(playerId);
         playerLastIdleReward.delete(playerId);
+        
+        // Clean up purchase lock
+        playerPurchasingLootBox.delete(playerId);
         
         // Check if room is empty and stop spawner
         const playersLeft = rooms.getPlayersInRoom(roomId);

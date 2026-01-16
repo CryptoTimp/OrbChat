@@ -7808,8 +7808,12 @@ export function drawPlayer(
   // Front accessories (sword, staff, etc) (scaledY already includes bounceY)
   drawFrontAccessories(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, time);
   
-  // Sleepy Zs when idle (only for local player, not NPCs)
-  if (!anim.isMoving && isLocal) {
+  // Sleepy Zs when idle (for all players, not NPCs)
+  // Exclude game NPCs (merchants) and centurions, but show for real players and background NPCs
+  const idParts = player.id.split('_');
+  const isGameNPC = player.id.startsWith('npc_') && idParts.length >= 3;
+  const isCenturion = player.id.startsWith('centurion_');
+  if (!anim.isMoving && !isGameNPC && !isCenturion) {
     drawSleepyZs(ctx, headX, headY, headW, p, time, anim.idleTime);
   }
   
