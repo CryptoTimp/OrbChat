@@ -162,6 +162,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   connected: false,
   playerId: getStoredPlayerId(),
   roomId: null,
+  previousRoomId: null,
   playerName: '',
   mapType: 'cafe' as MapType,
   players: new Map(),

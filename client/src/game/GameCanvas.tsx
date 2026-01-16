@@ -106,7 +106,7 @@ import {
   screenToWorld,
   isVisible 
 } from './Camera';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, GAME_CONSTANTS, PlayerWithChat, ItemRarity, WORLD_WIDTH, WORLD_HEIGHT } from '../types';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GAME_CONSTANTS, PlayerWithChat, ItemRarity, WORLD_WIDTH, WORLD_HEIGHT, MapType } from '../types';
 
 const { SCALE, PLAYER_WIDTH, PLAYER_HEIGHT } = GAME_CONSTANTS;
 
