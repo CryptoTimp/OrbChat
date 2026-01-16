@@ -152,6 +152,13 @@ export interface ClientToServerEvents {
   treasure_chest_relocate: (data: { chestId: string }) => void;
   sell_gold_coins: (data?: { coinCount?: number; orbsReceived?: number }) => void;
   idle_reward_confirmed: (data: { newOrbs: number }) => void;
+  join_blackjack_table: (data: { tableId: string }) => void;
+  leave_blackjack_table: (data: { tableId: string }) => void;
+  place_blackjack_bet: (data: { tableId: string; amount: number }) => void;
+  blackjack_hit: (data: { tableId: string; handIndex?: number }) => void;
+  blackjack_stand: (data: { tableId: string; handIndex?: number }) => void;
+  blackjack_double_down: (data: { tableId: string; handIndex?: number }) => void;
+  blackjack_split: (data: { tableId: string; handIndex?: number }) => void;
 }
 
 // Socket Events - Server to Client
@@ -207,7 +214,59 @@ export interface ServerToClientEvents {
   treasure_chest_interaction_error: (data: { chestId: string; message: string }) => void;
   gold_coins_sold: (data: { playerId: string; coinCount: number; orbsReceived: number; newBalance: number }) => void;
   portal_used: (data: { playerId: string; playerName: string; portalType: 'casino' | 'lounge' | 'return' }) => void;
+  blackjack_state_update: (data: { tableId: string; state: BlackjackTableState }) => void;
+  blackjack_error: (data: { tableId: string; message: string }) => void;
   error: (data: { message: string }) => void;
+}
+
+// Blackjack types
+export type CardSuit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
+export type CardRank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
+
+export interface BlackjackCard {
+  suit: CardSuit;
+  rank: CardRank;
+  value: number; // Numeric value for calculation (A can be 1 or 11)
+}
+
+export type BlackjackGameState = 'waiting' | 'betting' | 'dealing' | 'playing' | 'dealer_turn' | 'finished';
+
+export interface BlackjackHand {
+  cards: BlackjackCard[];
+  bet: number;
+  isSplit: boolean;
+  isDoubleDown: boolean;
+  isStand: boolean;
+  isBust: boolean;
+  isBlackjack: boolean;
+}
+
+export interface BlackjackPlayer {
+  playerId: string;
+  playerName: string;
+  seat: number; // 0-6 (7 seats per table)
+  hands: BlackjackHand[]; // Can have multiple hands if split
+  currentHandIndex: number; // Which hand is currently being played
+  hasPlacedBet: boolean;
+  isActive: boolean;
+}
+
+export interface BlackjackTableState {
+  tableId: string;
+  dealerId: string;
+  dealerHand: BlackjackCard[];
+  dealerHasBlackjack: boolean;
+  players: BlackjackPlayer[];
+  deck: BlackjackCard[];
+  gameState: BlackjackGameState;
+  currentPlayerIndex: number | null; // Index in players array
+  roundNumber: number;
+}
+
+export interface BlackjackTable {
+  id: string;
+  dealerId: string;
+  state: BlackjackTableState;
 }
 
 // Game constants
@@ -225,4 +284,12 @@ export const GAME_CONSTANTS = {
   CHAT_BUBBLE_DURATION: 5000, // ms
   MOVEMENT_SPEED: 3, // pixels per frame
   COLLECTION_RADIUS: 24, // pixels
+};
+
+export const BLACKJACK_CONSTANTS = {
+  MIN_BET: 10000,
+  MAX_BET: 1000000,
+  MAX_PLAYERS_PER_TABLE: 7,
+  BLACKJACK_PAYOUT: 1.5, // 3:2 payout
+  DEALER_STAND_VALUE: 17,
 };

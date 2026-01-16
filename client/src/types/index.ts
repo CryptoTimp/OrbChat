@@ -132,3 +132,47 @@ export const WORLD_HEIGHT = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT
 // Viewport/canvas size (what player sees)
 export const CANVAS_WIDTH = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.VIEWPORT_WIDTH * GAME_CONSTANTS.SCALE;
 export const CANVAS_HEIGHT = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.VIEWPORT_HEIGHT * GAME_CONSTANTS.SCALE;
+
+// Blackjack types
+export type CardSuit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
+export type CardRank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
+
+export interface BlackjackCard {
+  suit: CardSuit;
+  rank: CardRank;
+  value: number; // Numeric value for calculation (A can be 1 or 11)
+}
+
+export type BlackjackGameState = 'waiting' | 'betting' | 'dealing' | 'playing' | 'dealer_turn' | 'finished';
+
+export interface BlackjackHand {
+  cards: BlackjackCard[];
+  bet: number;
+  isSplit: boolean;
+  isDoubleDown: boolean;
+  isStand: boolean;
+  isBust: boolean;
+  isBlackjack: boolean;
+}
+
+export interface BlackjackPlayer {
+  playerId: string;
+  playerName: string;
+  seat: number; // 0-6 (7 seats per table)
+  hands: BlackjackHand[]; // Can have multiple hands if split
+  currentHandIndex: number; // Which hand is currently being played
+  hasPlacedBet: boolean;
+  isActive: boolean;
+}
+
+export interface BlackjackTableState {
+  tableId: string;
+  dealerId: string;
+  dealerHand: BlackjackCard[];
+  dealerHasBlackjack: boolean;
+  players: BlackjackPlayer[];
+  deck: BlackjackCard[];
+  gameState: BlackjackGameState;
+  currentPlayerIndex: number | null; // Index in players array
+  roundNumber: number;
+}

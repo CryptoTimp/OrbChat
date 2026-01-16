@@ -7,6 +7,7 @@ import { ShopModal } from './ui/ShopModal';
 import { InventoryModal } from './ui/InventoryModal';
 import { SettingsModal } from './ui/SettingsModal';
 import { LogDealerModal } from './ui/LogDealerModal';
+import { BlackjackModal } from './ui/BlackjackModal';
 import { LootBoxModal } from './ui/LootBoxModal';
 import { TreasureChestModal } from './ui/TreasureChestModal';
 import { TreasureChestDealerModal } from './ui/TreasureChestDealerModal';
@@ -123,6 +124,7 @@ function App() {
       
       {/* Log dealer modal */}
       <LogDealerModal />
+      <BlackjackModal />
       
       {/* Treasure chest modal */}
       <TreasureChestModal />

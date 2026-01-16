@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { PlayerWithChat, Orb, ShopItem, InventoryItem, Direction, GAME_CONSTANTS, MapType, ItemRarity, Shrine, TreasureChest, OrbType, TreeState } from '../types';
+import { PlayerWithChat, Orb, ShopItem, InventoryItem, Direction, GAME_CONSTANTS, MapType, ItemRarity, Shrine, TreasureChest, OrbType, TreeState, BlackjackTableState } from '../types';
 
 interface GameState {
   // Connection state
@@ -48,6 +48,9 @@ interface GameState {
   treasureChestModalOpen: boolean;
   selectedTreasureChest: TreasureChest | null;
   treasureChestDealerOpen: boolean;
+  blackjackTableOpen: boolean;
+  selectedTableId: string | null;
+  blackjackGameState: BlackjackTableState | null;
   confirmModal: {
     isOpen: boolean;
     title: string;
@@ -110,6 +113,9 @@ interface GameState {
   toggleTreasureChestModal: () => void;
   setSelectedTreasureChest: (chest: TreasureChest | null) => void;
   toggleTreasureChestDealer: () => void;
+  openBlackjackTable: (tableId: string) => void;
+  closeBlackjackTable: () => void;
+  updateBlackjackState: (state: BlackjackTableState | null) => void;
   setConfirmModal: (modal: GameState['confirmModal']) => void;
   
   // Audio actions
@@ -198,6 +204,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   treasureChestModalOpen: false,
   selectedTreasureChest: null,
   treasureChestDealerOpen: false,
+  blackjackTableOpen: false,
+  selectedTableId: null,
+  blackjackGameState: null,
   confirmModal: {
     isOpen: false,
     title: '',
@@ -281,7 +290,25 @@ export const useGameStore = create<GameState>((set, get) => ({
         players.set(player.id, { ...player, orbs: existingPlayer.orbs });
       } else {
         // Use new player data (has orb count or is a new player)
-        players.set(player.id, player);
+        // BUT: If this is the local player and we have a more recent balance, preserve it
+        if (player.id === currentState.playerId && existingPlayer && existingPlayer.orbs !== undefined) {
+          // For local player, always use the existing balance if it's more recent (higher or same)
+          // This prevents room_state from overwriting blackjack balance updates
+          const existingOrbs = existingPlayer.orbs;
+          const newOrbs = player.orbs || 0;
+          // Use the higher value (more recent) to prevent stale data from overwriting updates
+          // If new is significantly lower, it might be stale, so keep existing
+          if (existingOrbs >= newOrbs || Math.abs(existingOrbs - newOrbs) > 1000000) {
+            // Existing is higher or same, or difference is suspiciously large (stale data)
+            players.set(player.id, { ...player, orbs: existingOrbs });
+          } else {
+            // New is higher, use it
+            players.set(player.id, player);
+          }
+        } else {
+          // For other players, use new data
+          players.set(player.id, player);
+        }
       }
     }
     
@@ -292,7 +319,67 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
     
-    set({ players, orbs, shrines, treasureChests: treasureChests || [], treeStates: treeStatesMap, localPlayer: localPlayer || null });
+    // For localPlayer, always use the higher balance to preserve wins
+    // Blackjack balance updates come via player_orbs_updated events
+    // room_state events might have stale balance data
+    // Strategy: Use whichever balance is higher (wins increase balance, so higher = more recent)
+    let localPlayerToUse = localPlayer;
+    if (localPlayerToUse && currentState.localPlayer && currentState.localPlayer.orbs !== undefined) {
+      const existingOrbs = currentState.localPlayer.orbs;
+      const newOrbs = localPlayerToUse.orbs || 0;
+      
+      // Balance reconciliation logic for blackjack games
+      const difference = newOrbs - existingOrbs;
+      // CRITICAL: Check if blackjack modal is open (not just gameState) to protect balance even after game ends
+      const isInBlackjack = currentState.blackjackTableOpen; // Modal is open = we're playing blackjack
+      
+      if (isInBlackjack) {
+        // During blackjack (modal open), be VERY careful about balance updates
+        // CRITICAL: If new balance is higher, it's likely stale data (before bet deduction)
+        // Always prefer the LOWER balance during blackjack to prevent regaining lost bets
+        if (newOrbs > existingOrbs) {
+          // New is higher - this is almost certainly stale data (balance before bet was deducted)
+          // Reject it to prevent regaining the bet amount after a loss
+          console.warn(`[gameStore] setRoomStateWithLocalPlayer - REJECTING higher balance during blackjack:`, {
+            existingOrbs,
+            newOrbs,
+            difference,
+            reason: 'New balance is higher - likely stale data from before bet deduction (would regain lost bet)',
+            blackjackTableOpen: currentState.blackjackTableOpen,
+            hasGameState: !!currentState.blackjackGameState,
+            timestamp: new Date().toISOString()
+          });
+          localPlayerToUse = { ...localPlayerToUse, orbs: existingOrbs }; // Keep existing (lower) balance
+        } else if (existingOrbs > newOrbs) {
+          // Existing is higher - likely from recent blackjack update (win), preserve it
+          console.log(`[gameStore] setRoomStateWithLocalPlayer - Preserving existing balance:`, {
+            existingOrbs,
+            newOrbs,
+            difference: existingOrbs - newOrbs,
+            reason: 'Existing is higher (likely from blackjack update)',
+            timestamp: new Date().toISOString()
+          });
+          localPlayerToUse = { ...localPlayerToUse, orbs: existingOrbs };
+        } else {
+          // Same - use either
+          console.log(`[gameStore] setRoomStateWithLocalPlayer - Balances match:`, {
+            existingOrbs,
+            newOrbs,
+            timestamp: new Date().toISOString()
+          });
+          // localPlayerToUse already has newOrbs
+        }
+      } else {
+        // Not in blackjack - use standard logic (prefer higher)
+        if (existingOrbs > newOrbs) {
+          localPlayerToUse = { ...localPlayerToUse, orbs: existingOrbs };
+        } else {
+          // localPlayerToUse already has newOrbs
+        }
+      }
+    }
+    
+    set({ players, orbs, shrines, treasureChests: treasureChests || [], treeStates: treeStatesMap, localPlayer: localPlayerToUse || null });
   },
   
   setShrines: (shrines) => set({ shrines }),
@@ -434,19 +521,71 @@ export const useGameStore = create<GameState>((set, get) => ({
   updatePlayerOrbs: (playerId, orbs, lastOrbValue) => {
     const players = new Map(get().players);
     const player = players.get(playerId);
+    const currentState = get();
     
     if (player) {
+      const oldOrbs = player.orbs;
+      const oldLocalOrbs = currentState.localPlayer?.orbs;
+      
+      // CRITICAL: If this is a significant decrease for local player, check if it's legitimate
+      if (playerId === currentState.playerId && oldLocalOrbs && orbs < oldLocalOrbs - 1000) {
+        const decrease = oldLocalOrbs - orbs;
+        const isInBlackjack = currentState.blackjackTableOpen && currentState.blackjackGameState;
+        
+        // Check if this is a legitimate bet deduction
+        // If lastOrbValue is negative (a bet), calculate expected balance and use that instead of server's stale balance
+        const isBetDeduction = lastOrbValue !== undefined && lastOrbValue < 0;
+        
+        if (isBetDeduction && isInBlackjack) {
+          // This is a bet deduction - use client's current balance minus the bet amount
+          // This prevents stale server balances from blocking legitimate bets
+          const expectedBalance = oldLocalOrbs + lastOrbValue; // lastOrbValue is negative, so this subtracts
+          console.log(`[gameStore] ✓ Bet deduction detected: using expected balance ${expectedBalance} instead of server's ${orbs} (bet: ${Math.abs(lastOrbValue)})`);
+          orbs = expectedBalance; // Use calculated balance instead of server's potentially stale balance
+        } else if (!isBetDeduction && isInBlackjack) {
+          // This is a suspicious decrease during blackjack (likely stale data, not a bet)
+          console.error(`[gameStore] ⚠️ SUSPICIOUS BALANCE DECREASE:`, {
+            playerId,
+            oldLocalOrbs,
+            newOrbs: orbs,
+            decrease,
+            lastOrbValue,
+            isInBlackjack,
+            timestamp: new Date().toISOString(),
+            stackTrace: new Error().stack?.split('\n').slice(1, 6).join('\n')
+          });
+          
+          console.error(`[gameStore] ⚠️ BLOCKING balance decrease during blackjack - preserving ${oldLocalOrbs} instead of ${orbs}`);
+          orbs = oldLocalOrbs; // Use the higher balance
+        } else if (!isInBlackjack) {
+          // Not in blackjack, allow the decrease (might be a purchase or other transaction)
+          console.log(`[gameStore] Allowing balance decrease (not in blackjack): ${oldLocalOrbs} -> ${orbs}`);
+        }
+      }
+      
       players.set(playerId, { ...player, orbs });
       
-      if (playerId === get().playerId) {
+      if (playerId === currentState.playerId) {
+        console.log(`[gameStore] updatePlayerOrbs for local player:`, {
+          playerId,
+          oldOrbs,
+          newOrbs: orbs,
+          oldLocalOrbs,
+          change: orbs - (oldOrbs || 0),
+          lastOrbValue,
+          timestamp: new Date().toISOString(),
+          stackTrace: new Error().stack?.split('\n').slice(1, 4).join(' -> ')
+        });
         set({ 
           players, 
-          localPlayer: { ...get().localPlayer!, orbs },
+          localPlayer: { ...currentState.localPlayer!, orbs },
           lastOrbValue: lastOrbValue || undefined // Store last orb value for HUD
         });
       } else {
         set({ players });
       }
+    } else {
+      console.warn(`[gameStore] updatePlayerOrbs: Player ${playerId} not found in store`);
     }
   },
   
@@ -493,6 +632,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Also update local player orbs
     const localPlayer = get().localPlayer;
     if (localPlayer) {
+      const currentOrbs = localPlayer.orbs || 0;
+      
+      // CRITICAL: Don't overwrite higher balances with lower ones (prevents stale inventory data from overwriting wins)
+      if (currentOrbs > orbs && currentOrbs - orbs > 1000) {
+        console.warn(`[gameStore] setInventory - Preserving existing balance:`, {
+          currentOrbs,
+          inventoryOrbs: orbs,
+          difference: currentOrbs - orbs,
+          reason: 'Current balance is higher (likely from recent blackjack update)'
+        });
+        // Use current balance instead of inventory balance
+        orbs = currentOrbs;
+      }
+      
       const players = new Map(get().players);
       players.set(localPlayer.id, { ...localPlayer, orbs });
       set({ 
@@ -518,6 +671,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   toggleTreasureChestModal: () => set({ treasureChestModalOpen: !get().treasureChestModalOpen }),
   setSelectedTreasureChest: (chest) => set({ selectedTreasureChest: chest }),
   toggleTreasureChestDealer: () => set({ treasureChestDealerOpen: !get().treasureChestDealerOpen }),
+  openBlackjackTable: (tableId) => set({ blackjackTableOpen: true, selectedTableId: tableId }),
+  closeBlackjackTable: () => set({ blackjackTableOpen: false, selectedTableId: null, blackjackGameState: null }),
+  updateBlackjackState: (state) => set({ blackjackGameState: state }),
   setConfirmModal: (modal) => set({ confirmModal: modal }),
   
   // Audio actions

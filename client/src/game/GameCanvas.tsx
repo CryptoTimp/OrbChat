@@ -36,6 +36,9 @@ import {
   checkReturnPortalCollision,
   getReturnPortalPosition,
   setReturnPortalPosition,
+  drawBlackjackTables,
+  getClickedBlackjackTable,
+  getHoveredBlackjackTable,
   setCasinoRoomPlayerCount,
   setMillionairesLoungeRoomPlayerCount,
   checkMillionairesLoungePortalClick,
@@ -196,9 +199,11 @@ export function GameCanvas() {
   const pendingReturnPortalInteractionRef = useRef<boolean>(false);
   const pendingMillionairesLoungePortalInteractionRef = useRef<boolean>(false);
   const pendingMillionairesLoungeReturnPortalInteractionRef = useRef<boolean>(false);
+  const pendingBlackjackTableInteractionRef = useRef<string | null>(null);
   
   // Hovered dealer state
   const [hoveredDealerId, setHoveredDealerId] = useState<string | null>(null);
+  const hoveredBlackjackTableRef = useRef<string | null>(null);
   
   // Hovered NPC stall state
   const hoveredNPCStallRef = useRef<{ tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null>(null);
@@ -404,6 +409,11 @@ export function GameCanvas() {
         pendingNPCStallInteractionRef.current = null;
       }
       
+      // Clear pending blackjack table interaction if clicking elsewhere
+      if (pendingBlackjackTableInteractionRef.current) {
+        pendingBlackjackTableInteractionRef.current = null;
+      }
+      
       // Clear pending log dealer interaction if clicking elsewhere
       if (pendingLogDealerInteractionRef.current) {
         pendingLogDealerInteractionRef.current = false;
@@ -591,6 +601,39 @@ export function GameCanvas() {
             setClickTarget(returnPortalPos.x / SCALE, returnPortalPos.y / SCALE);
             // Set flag to indicate return portal was clicked
             pendingReturnPortalInteractionRef.current = true;
+          }
+          return; // Don't move via normal click handling
+        }
+        
+        // Check if clicking on blackjack table
+        const clickedTableId = getClickedBlackjackTable(worldXScaled, worldYScaled);
+        if (clickedTableId) {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer) {
+            playClickSound();
+            // Import blackjackTablePositions dynamically
+            import('./renderer').then(({ blackjackTablePositions }) => {
+              const tablePos = blackjackTablePositions.get(clickedTableId);
+              if (tablePos) {
+                // Check if player is in range (similar to NPC stall interaction)
+                const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+                const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+                const dx = tablePos.x - playerCenterX;
+                const dy = tablePos.y - playerCenterY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const interactionRange = 80 * SCALE;
+                
+                if (dist < interactionRange) {
+                  // Player is in range, open blackjack modal
+                  useGameStore.getState().openBlackjackTable(clickedTableId);
+                } else {
+                  // Player is far away, walk to table first
+                  setClickTarget(tablePos.x / SCALE, tablePos.y / SCALE);
+                  // Store pending interaction
+                  pendingBlackjackTableInteractionRef.current = clickedTableId;
+                }
+              }
+            });
           }
           return; // Don't move via normal click handling
         }
@@ -850,8 +893,17 @@ export function GameCanvas() {
         return dist < loungeReturnPortalPos.radius;
       })();
       
-      // Change cursor style when hovering over shrine, NPC stall, dealer, tree, or portal
-      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData || hoveredPortal || hoveredLoungePortal || hoveredReturnPortal || hoveredLoungeReturnPortal) {
+      // Check for hover on blackjack tables (casino map)
+      let hoveredBlackjackTable: string | null = null;
+      if (currentMapType === 'casino') {
+        hoveredBlackjackTable = getHoveredBlackjackTable(worldXScaled, worldYScaled);
+        hoveredBlackjackTableRef.current = hoveredBlackjackTable;
+      } else {
+        hoveredBlackjackTableRef.current = null;
+      }
+      
+      // Change cursor style when hovering over shrine, NPC stall, dealer, tree, portal, or blackjack table
+      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData || hoveredPortal || hoveredLoungePortal || hoveredReturnPortal || hoveredLoungeReturnPortal || hoveredBlackjackTable) {
         canvas.style.cursor = 'pointer';
       } else {
         canvas.style.cursor = 'default';
@@ -1851,6 +1903,38 @@ export function GameCanvas() {
         }
       }
       
+      // Check if player reached blackjack table after clicking it
+      if (pendingBlackjackTableInteractionRef.current && currentMapType === 'casino') {
+        const tableId = pendingBlackjackTableInteractionRef.current;
+        // Import blackjackTablePositions - use dynamic import to avoid circular dependency
+        import('./renderer').then((rendererModule) => {
+          const tablePos = rendererModule.blackjackTablePositions.get(tableId);
+          
+          if (tablePos) {
+            const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+            const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+            const dx = tablePos.x - playerCenterX;
+            const dy = tablePos.y - playerCenterY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const interactionRange = 80 * SCALE;
+            
+            if (dist < interactionRange) {
+              // Player is in range, open blackjack modal
+              playClickSound();
+              useGameStore.getState().openBlackjackTable(tableId);
+              pendingBlackjackTableInteractionRef.current = null; // Clear flag
+              setClickTarget(null, null); // Clear click target
+            }
+          } else {
+            // Table not found, clear pending interaction
+            pendingBlackjackTableInteractionRef.current = null;
+          }
+        }).catch(() => {
+          // If import fails, clear pending interaction
+          pendingBlackjackTableInteractionRef.current = null;
+        });
+      }
+      
       if (moved && direction) {
         setLocalPlayerPosition(x, y, direction);
         
@@ -2177,6 +2261,9 @@ export function GameCanvas() {
     } else if (currentMapType === 'casino') {
       // Draw return portal in casino map
       drawReturnPortal(ctx, currentTime, camera);
+      // Draw blackjack tables
+      const hoveredTableId = hoveredBlackjackTableRef.current;
+      drawBlackjackTables(ctx, currentTime, hoveredTableId);
     } else if (currentMapType === 'millionaires_lounge') {
       // Draw return portal in lounge map (background is drawn in drawBackground)
       drawMillionairesLoungeReturnPortal(ctx, currentTime, camera);

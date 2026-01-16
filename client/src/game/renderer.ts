@@ -5738,6 +5738,30 @@ const DEALER_TYPES: DealerType[] = [
     outfit: ['hat_golden', 'armor_golden', 'legs_gold', 'acc_wings_golden', 'acc_aura_golden', 'acc_weapon_golden'],
     messages: ['Buy orbs here!', 'Need more orbs?', 'Premium currency!', 'Golden deals!'],
   },
+  {
+    id: 'blackjack_dealer_1',
+    name: 'Blackjack Dealer',
+    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
+    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+  },
+  {
+    id: 'blackjack_dealer_2',
+    name: 'Blackjack Dealer',
+    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
+    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+  },
+  {
+    id: 'blackjack_dealer_3',
+    name: 'Blackjack Dealer',
+    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
+    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+  },
+  {
+    id: 'blackjack_dealer_4',
+    name: 'Blackjack Dealer',
+    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
+    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+  },
 ];
 
 // Update dealer speech bubbles (similar to NPC stalls)
@@ -7035,6 +7059,177 @@ export function checkReturnPortalCollision(x: number, y: number, width: number, 
 // Legacy function for backward compatibility (checks if log dealer is clicked)
 export function getClickedLogDealer(worldX: number, worldY: number): boolean {
   return getClickedDealer(worldX, worldY) === 'log_dealer';
+}
+
+// ============ BLACKJACK TABLES ============
+
+// Store blackjack table positions for click detection
+export const blackjackTablePositions: Map<string, { x: number; y: number; radius: number }> = new Map();
+
+// Draw blackjack tables on casino map
+export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number, hoveredTableId?: string | null): void {
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 300 * p;
+  
+  // Position 4 tables around the casino plaza
+  // Tables are positioned at angles: π/4, 3π/4, 5π/4, 7π/4 (45° intervals)
+  const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+  const tableRadius = plazaRadius * 0.6; // Position tables closer to center than dealers
+  
+  // Clear previous positions
+  blackjackTablePositions.clear();
+  
+  for (let i = 0; i < 4; i++) {
+    const tableId = `blackjack_table_${i + 1}`;
+    const dealerId = `blackjack_dealer_${i + 1}`;
+    const angle = tableAngles[i];
+    
+    const tableX = centerX + Math.cos(angle) * tableRadius;
+    const tableY = centerY + Math.sin(angle) * tableRadius;
+    const tableRadiusSize = 60 * p; // Table size
+    
+    // Store position for click detection
+    blackjackTablePositions.set(tableId, { x: tableX, y: tableY, radius: tableRadiusSize });
+    
+    const isHovered = hoveredTableId === tableId;
+    
+    // Draw table (green felt oval)
+    ctx.save();
+    
+    // Hover glow effect
+    if (isHovered) {
+      ctx.globalAlpha = 0.4;
+      const glowGradient = ctx.createRadialGradient(tableX, tableY, 0, tableX, tableY, tableRadiusSize * 1.3);
+      glowGradient.addColorStop(0, 'rgba(255, 215, 0, 0.8)');
+      glowGradient.addColorStop(0.5, 'rgba(255, 215, 0, 0.4)');
+      glowGradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+      ctx.fillStyle = glowGradient;
+      ctx.beginPath();
+      ctx.ellipse(tableX, tableY, tableRadiusSize * 1.3, tableRadiusSize * 0.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    
+    // Table base (dark wood)
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath();
+    ctx.ellipse(tableX, tableY, tableRadiusSize + 4 * p, tableRadiusSize * 0.6 + 4 * p, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Table edge (wood trim)
+    ctx.strokeStyle = '#5a4a3a';
+    ctx.lineWidth = 3 * p;
+    ctx.beginPath();
+    ctx.ellipse(tableX, tableY, tableRadiusSize + 4 * p, tableRadiusSize * 0.6 + 4 * p, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Green felt surface
+    ctx.fillStyle = '#0d4d0d';
+    ctx.beginPath();
+    ctx.ellipse(tableX, tableY, tableRadiusSize, tableRadiusSize * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Felt texture (subtle pattern)
+    ctx.fillStyle = 'rgba(0, 100, 0, 0.3)';
+    for (let row = -2; row <= 2; row++) {
+      for (let col = -3; col <= 3; col++) {
+        const x = tableX + col * 8 * p;
+        const y = tableY + row * 8 * p;
+        const dist = Math.sqrt(((x - tableX) / tableRadiusSize) ** 2 + ((y - tableY) / (tableRadiusSize * 0.6)) ** 2);
+        if (dist < 1) {
+          ctx.fillRect(x - 2 * p, y - 2 * p, 4 * p, 4 * p);
+        }
+      }
+    }
+    
+    // Table border (white)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2 * p;
+    ctx.beginPath();
+    ctx.ellipse(tableX, tableY, tableRadiusSize, tableRadiusSize * 0.6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Draw 7 seat positions around table (semi-circle facing dealer)
+    const seatRadius = tableRadiusSize * 0.8;
+    for (let seat = 0; seat < 7; seat++) {
+      const seatAngle = Math.PI + (seat - 3) * (Math.PI / 6); // Seats on player side (facing dealer)
+      const seatX = tableX + Math.cos(seatAngle) * seatRadius;
+      const seatY = tableY + Math.sin(seatAngle) * seatRadius;
+      
+      // Draw seat (small circle)
+      ctx.fillStyle = '#2a2a2a';
+      ctx.beginPath();
+      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#4a4a4a';
+      ctx.lineWidth = 1 * p;
+      ctx.beginPath();
+      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    
+    // Draw dealer position (opposite side from seats)
+    const dealerAngle = 0; // Dealer at top
+    const dealerX = tableX + Math.cos(dealerAngle) * (tableRadiusSize * 0.7);
+    const dealerY = tableY + Math.sin(dealerAngle) * (tableRadiusSize * 0.7);
+    
+    // Draw dealer marker
+    ctx.fillStyle = '#8a0000';
+    ctx.beginPath();
+    ctx.arc(dealerX, dealerY, 10 * p, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.strokeStyle = '#aa0000';
+    ctx.lineWidth = 2 * p;
+    ctx.beginPath();
+    ctx.arc(dealerX, dealerY, 10 * p, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Draw dealer NPC
+    const dealerType = DEALER_TYPES.find(d => d.id === dealerId);
+    if (dealerType) {
+      drawSingleDealer(ctx, dealerType, dealerX, dealerY, time, isHovered);
+    }
+    
+    ctx.restore();
+  }
+}
+
+// Check if click is on a blackjack table
+export function getClickedBlackjackTable(worldX: number, worldY: number): string | null {
+  const p = SCALE;
+  const clickRadius = 70 * p; // Slightly larger than table for easier clicking
+  
+  for (const [tableId, position] of blackjackTablePositions.entries()) {
+    const dx = worldX - position.x;
+    const dy = worldY - position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < clickRadius) {
+      return tableId;
+    }
+  }
+  
+  return null;
+}
+
+// Check if mouse is hovering over a blackjack table
+export function getHoveredBlackjackTable(worldX: number, worldY: number): string | null {
+  const p = SCALE;
+  const hoverRadius = 75 * p; // Slightly larger than click radius
+  
+  for (const [tableId, position] of blackjackTablePositions.entries()) {
+    const dx = worldX - position.x;
+    const dy = worldY - position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < hoverRadius) {
+      return tableId;
+    }
+  }
+  
+  return null;
 }
 
 // Get tree ID from position (for tree state lookup)

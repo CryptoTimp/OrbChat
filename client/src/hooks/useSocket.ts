@@ -31,7 +31,18 @@ async function syncOrbsFromFirebase(playerId: string): Promise<void> {
       
       // Only update if the value is different to avoid triggering floating text unnecessarily
       const currentOrbs = state.localPlayer?.orbs || 0;
+      
+      // CRITICAL: Don't overwrite higher balances with lower ones (prevents stale Firebase data from overwriting wins)
+      // If current balance is higher, it's likely from a recent blackjack update
       if (firebaseOrbs !== currentOrbs) {
+        if (currentOrbs > firebaseOrbs && currentOrbs - firebaseOrbs > 1000) {
+          // Current balance is significantly higher - likely from recent blackjack update
+          // Don't overwrite with stale Firebase data
+          console.log(`[useSocket] syncOrbsFromFirebase - Skipping update: current balance ${currentOrbs} is higher than Firebase ${firebaseOrbs} (likely recent blackjack update)`);
+          return;
+        }
+        
+        console.log(`[useSocket] syncOrbsFromFirebase - Updating balance: ${currentOrbs} -> ${firebaseOrbs}`);
         // Update game store with Firebase value (without lastOrbValue to avoid floating text)
         state.updatePlayerOrbs(playerId, firebaseOrbs);
       }
@@ -133,8 +144,21 @@ function attachListeners(sock: Socket) {
     }
     
     // Sync orb balance from Firebase (source of truth) when joining room
+    // BUT: Skip this if we're in a blackjack game to avoid overwriting recent updates
     if (yourPlayerId) {
-      await syncOrbsFromFirebase(yourPlayerId);
+      const currentState = useGameStore.getState();
+      const isInBlackjack = currentState.blackjackTableOpen && currentState.blackjackGameState;
+      const currentBalance = currentState.localPlayer?.orbs || 0;
+      
+      if (!isInBlackjack) {
+        await syncOrbsFromFirebase(yourPlayerId);
+      } else {
+        console.log('[useSocket] Skipping Firebase sync - in blackjack game, balance already updated via player_orbs_updated', {
+          currentBalance,
+          blackjackTableOpen: currentState.blackjackTableOpen,
+          hasGameState: !!currentState.blackjackGameState
+        });
+      }
     }
     
     const store = useGameStore.getState();
@@ -177,6 +201,28 @@ function attachListeners(sock: Socket) {
     
     // If this is a broadcast update (no yourPlayerId), preserve existing localPlayer
     const localPlayerToUse = yourPlayerId ? ourPlayer : (store.localPlayer || ourPlayer);
+    
+    // CRITICAL: If we're in a blackjack game, log the balance from room_state to detect stale data
+    if (store.blackjackTableOpen && localPlayerToUse) {
+      const currentBalance = store.localPlayer?.orbs || 0;
+      const roomStateBalance = localPlayerToUse.orbs || 0;
+      const difference = currentBalance - roomStateBalance;
+      const isStale = roomStateBalance > currentBalance && Math.abs(difference) > 1000;
+      
+      console.log('[useSocket] room_state received during blackjack (modal open):', {
+        currentBalance,
+        roomStateBalance,
+        difference,
+        isStale,
+        wouldRegainBet: isStale && Math.abs(difference) >= 10000, // Common bet amounts
+        blackjackGameState: store.blackjackGameState?.gameState || 'null'
+      });
+      
+      // CRITICAL: If room_state has higher balance (stale data), warn about it
+      if (isStale) {
+        console.error('[useSocket] ⚠️ STALE room_state detected during blackjack - will be rejected by gameStore');
+      }
+    }
     
     // Set room state with explicit localPlayer - this should set ALL players
     store.setRoomStateWithLocalPlayer(players, orbs, shrines || [], localPlayerToUse, treasureChests || [], treeStates);
@@ -382,8 +428,19 @@ function attachListeners(sock: Socket) {
       const currentOrbs = state.localPlayer?.orbs || 0;
       if (orbs === currentOrbs) {
         // Value already matches, no need to sync
+        console.log('[useSocket] Balance already matches, skipping update:', orbs);
         return;
       }
+      
+      console.log('[useSocket] player_orbs_updated received:', { 
+        playerId, 
+        newOrbs: orbs, 
+        currentOrbs, 
+        rewardAmount, 
+        rewardType,
+        netChange: orbs - currentOrbs,
+        timestamp: Date.now()
+      });
       
       // Special handling for idle rewards - show incremental update with floating text
       if (rewardType === 'idle' && rewardAmount && rewardAmount > 0) {
@@ -401,6 +458,48 @@ function attachListeners(sock: Socket) {
           
           // Use 'idle' as orb type for idle rewards (will use appropriate color)
           spawnFloatingText(playerHeadX, playerHeadY, rewardAmount, 'idle');
+        }
+      } else if (rewardType === 'blackjack') {
+        // For blackjack, update balance immediately (server already updated Firebase)
+        // rewardAmount can be:
+        // - Negative for bet deduction (e.g., -10000 when placing bet)
+        // - Positive for payout (e.g., 20000 when winning)
+        // - 0 for push (bet returned) - but we skip processing 0 payouts on server
+        // The `orbs` value is the authoritative new balance from the server
+        console.log('[useSocket] Blackjack balance update - using server value:', { 
+          playerId, 
+          newOrbs: orbs, 
+          currentOrbs, 
+          rewardAmount, 
+          netChange: orbs - currentOrbs 
+        });
+        // CRITICAL: Always use the `orbs` value directly - it's the source of truth from server
+        // Don't sync from Firebase as it might have stale data
+        const previousOrbs = state.localPlayer?.orbs;
+        state.updatePlayerOrbs(playerId, orbs, rewardAmount);
+        console.log('[useSocket] Blackjack balance update:', {
+          playerId,
+          previousOrbs,
+          newOrbs: orbs,
+          rewardAmount,
+          change: orbs - (previousOrbs || 0),
+          timestamp: new Date().toISOString()
+        });
+        
+        // Store the payout amount for the BlackjackModal to display
+        // Only store if it's a positive payout (win) or negative (bet deduction)
+        // Skip 0 payouts (losses) as they're not processed on server
+        if (rewardAmount !== undefined && rewardAmount !== 0) {
+          // Store in a way the modal can access it
+          // We'll use a custom event or store it in the game state
+          const blackjackGameState = state.blackjackGameState;
+          if (blackjackGameState && blackjackGameState.gameState === 'finished') {
+            // Store payout in a ref that the modal can access
+            // Actually, let's emit a custom event that the modal can listen to
+            window.dispatchEvent(new CustomEvent('blackjack_payout', { 
+              detail: { payout: rewardAmount, playerId } 
+            }));
+          }
         }
       } else {
         // For other balance updates (purchases, etc.), sync from Firebase (source of truth)
@@ -478,10 +577,28 @@ function attachListeners(sock: Socket) {
           }));
           
           // Use Firebase orbs as source of truth
+          // BUT: Don't overwrite balance during blackjack games (stale Firebase data)
           const firebaseOrbs = profile.orbs || 0;
-          state.setInventory(inventoryItems, firebaseOrbs);
-          state.updatePlayerOrbs(state.playerId, firebaseOrbs);
-          console.log('Loaded inventory from Firebase:', inventoryItems.length, 'items,', firebaseOrbs, 'orbs');
+          const currentOrbs = state.localPlayer?.orbs || 0;
+          const isInBlackjack = state.blackjackTableOpen && state.blackjackGameState;
+          
+          // If in blackjack and current balance is higher, preserve it
+          const orbsToUse = (isInBlackjack && currentOrbs > firebaseOrbs && currentOrbs - firebaseOrbs > 1000)
+            ? currentOrbs
+            : firebaseOrbs;
+          
+          if (isInBlackjack && currentOrbs > firebaseOrbs) {
+            console.warn(`[useSocket] inventory_loaded - Preserving balance during blackjack:`, {
+              currentOrbs,
+              firebaseOrbs,
+              difference: currentOrbs - firebaseOrbs,
+              using: orbsToUse
+            });
+          }
+          
+          state.setInventory(inventoryItems, orbsToUse);
+          state.updatePlayerOrbs(state.playerId, orbsToUse);
+          console.log('Loaded inventory from Firebase:', inventoryItems.length, 'items,', orbsToUse, 'orbs');
         }
       } catch (error) {
         console.error('Failed to load inventory from Firebase:', error);
@@ -730,6 +847,34 @@ function attachListeners(sock: Socket) {
       // For other players, just update from server
       state.updatePlayerOrbs(playerId, newBalance);
     }
+  });
+  
+  // Blackjack events
+  sock.on('blackjack_state_update', ({ tableId, state: gameState }) => {
+    console.log('[useSocket] Received blackjack_state_update for table:', tableId, 'state:', gameState);
+    const store = useGameStore.getState();
+    if (store.selectedTableId === tableId) {
+      console.log('[useSocket] Updating blackjack state for selected table');
+      // Only update if we have a valid state (not null)
+      if (gameState) {
+        store.updateBlackjackState(gameState);
+      } else {
+        console.log('[useSocket] Received null state, clearing blackjack state');
+        store.updateBlackjackState(null);
+      }
+    } else {
+      console.log('[useSocket] Table ID mismatch. Selected:', store.selectedTableId, 'Received:', tableId);
+    }
+  });
+  
+  sock.on('blackjack_error', ({ tableId, message }) => {
+    console.log('[useSocket] Blackjack error received:', tableId, message);
+    const store = useGameStore.getState();
+    // If this error is for the currently selected table, clear the joining state
+    if (store.selectedTableId === tableId) {
+      store.updateBlackjackState(null); // Clear state to show error
+    }
+    addNotification(`Blackjack Error: ${message}`, 'error');
   });
   
   sock.on('shrine_interaction_error', async ({ shrineId, message }) => {
@@ -1693,6 +1838,82 @@ export function useSocket() {
     }
   }, []);
   
+  // Blackjack functions
+  const joinBlackjackTable = useCallback((tableId: string) => {
+    const sock = getOrCreateSocket();
+    console.log('[useSocket] Emitting join_blackjack_table for table:', tableId, 'socket connected:', sock.connected, 'socket id:', sock.id);
+    
+    // Add error handler for this specific emit
+    const errorHandler = (error: any) => {
+      console.error('[useSocket] Error emitting join_blackjack_table:', error);
+    };
+    
+    sock.emit('join_blackjack_table', { tableId }, errorHandler);
+    
+    // Also listen for any errors
+    const oneTimeErrorListener = (error: any) => {
+      console.error('[useSocket] Socket error:', error);
+      sock.off('error', oneTimeErrorListener);
+    };
+    sock.once('error', oneTimeErrorListener);
+  }, []);
+  
+  const leaveBlackjackTable = useCallback((tableId: string) => {
+    const sock = getOrCreateSocket();
+    sock.emit('leave_blackjack_table', { tableId });
+  }, []);
+  
+  const placeBlackjackBet = useCallback((tableId: string, amount: number) => {
+    console.log('[useSocket] Emitting place_blackjack_bet:', { tableId, amount, amountType: typeof amount });
+    const sock = getOrCreateSocket();
+    if (!sock.connected) {
+      console.error('[useSocket] Socket not connected!');
+      return;
+    }
+    // Ensure amount is a number
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      console.error('[useSocket] Invalid bet amount:', amount);
+      return;
+    }
+    sock.emit('place_blackjack_bet', { tableId, amount: numericAmount });
+  }, []);
+  
+  const blackjackHit = useCallback((tableId: string, handIndex?: number) => {
+    console.log('[useSocket] Emitting blackjack_hit:', { tableId, handIndex });
+    const sock = getOrCreateSocket();
+    if (!sock.connected) {
+      console.error('[useSocket] Socket not connected!');
+      return;
+    }
+    sock.emit('blackjack_hit', { tableId, handIndex });
+  }, []);
+  
+  const blackjackStand = useCallback((tableId: string, handIndex?: number) => {
+    console.log('[useSocket] Emitting blackjack_stand:', { tableId, handIndex });
+    const sock = getOrCreateSocket();
+    if (!sock.connected) {
+      console.error('[useSocket] Socket not connected!');
+      return;
+    }
+    sock.emit('blackjack_stand', { tableId, handIndex });
+  }, []);
+  
+  const blackjackDoubleDown = useCallback((tableId: string, handIndex?: number) => {
+    console.log('[useSocket] Emitting blackjack_double_down:', { tableId, handIndex });
+    const sock = getOrCreateSocket();
+    if (!sock.connected) {
+      console.error('[useSocket] Socket not connected!');
+      return;
+    }
+    sock.emit('blackjack_double_down', { tableId, handIndex });
+  }, []);
+  
+  const blackjackSplit = useCallback((tableId: string, handIndex?: number) => {
+    const sock = getOrCreateSocket();
+    sock.emit('blackjack_split', { tableId, handIndex });
+  }, []);
+  
   const sellLogs = useCallback(async () => {
     const sock = getOrCreateSocket();
     if (sock.connected) {
@@ -1864,6 +2085,13 @@ export function useSocket() {
     sellLogs,
     interactWithTreasureChest,
     sellGoldCoins,
+    joinBlackjackTable,
+    leaveBlackjackTable,
+    placeBlackjackBet,
+    blackjackHit,
+    blackjackStand,
+    blackjackDoubleDown,
+    blackjackSplit,
   };
 }
 
