@@ -533,6 +533,22 @@ function attachListeners(sock: Socket) {
     }
   });
   
+  // Portal used event (broadcast to all players in room when someone uses a portal)
+  sock.on('portal_used', ({ playerId, playerName, portalType }) => {
+    const state = useGameStore.getState();
+    const currentPlayerId = state.playerId;
+    
+    // Don't play sound for the player who used the portal (they already heard it)
+    if (playerId === currentPlayerId) {
+      return;
+    }
+    
+    // Play portal sound for other players
+    import('../utils/sounds').then(({ playPortalSound }) => {
+      playPortalSound();
+    });
+  });
+  
   // Shrine interaction events
   sock.on('shrine_interacted', ({ shrineId, shrine, message, blessed, orbsSpawned }) => {
     const state = useGameStore.getState();

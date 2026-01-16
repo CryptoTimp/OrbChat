@@ -206,6 +206,7 @@ export interface ServerToClientEvents {
   }) => void;
   treasure_chest_interaction_error: (data: { chestId: string; message: string }) => void;
   gold_coins_sold: (data: { playerId: string; coinCount: number; orbsReceived: number; newBalance: number }) => void;
+  portal_used: (data: { playerId: string; playerName: string; portalType: 'casino' | 'lounge' | 'return' }) => void;
   error: (data: { message: string }) => void;
 }
 

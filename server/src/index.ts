@@ -436,6 +436,51 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           
           // Only remove player if no other active sockets exist for them in the old room
           if (!hasOtherSocketsInOldRoom) {
+            // Check if player is using a portal (joining casino/lounge or returning from one)
+            const isJoiningCasino = roomId.startsWith('casino-');
+            const isJoiningLounge = roomId.startsWith('millionaires_lounge-');
+            const isReturningFromCasino = oldRoomId.startsWith('casino-') && roomMapType === 'forest';
+            const isReturningFromLounge = oldRoomId.startsWith('millionaires_lounge-') && roomMapType === 'forest';
+            
+            // Broadcast portal sound to other players
+            if (isJoiningCasino || isJoiningLounge || isReturningFromCasino || isReturningFromLounge) {
+              let portalType: 'casino' | 'lounge' | 'return' = 'return';
+              if (isJoiningCasino) {
+                portalType = 'casino';
+              } else if (isJoiningLounge) {
+                portalType = 'lounge';
+              } else if (isReturningFromCasino || isReturningFromLounge) {
+                portalType = 'return';
+              }
+              
+              // Broadcast portal sound to other players in the room being left (for casino/lounge portals)
+              // For return portals, also broadcast to the room being entered (forest room)
+              if (isJoiningCasino || isJoiningLounge) {
+                // Player is leaving forest room to enter casino/lounge - broadcast to forest room
+                io.to(oldRoomId).emit('portal_used', {
+                  playerId: player.id,
+                  playerName: player.name,
+                  portalType
+                });
+                console.log(`Broadcasting portal_used event to room ${oldRoomId} for player ${player.name} using ${portalType} portal`);
+              } else if (isReturningFromCasino || isReturningFromLounge) {
+                // Player is returning from casino/lounge - broadcast to both rooms
+                // Broadcast to casino/lounge room (room being left)
+                io.to(oldRoomId).emit('portal_used', {
+                  playerId: player.id,
+                  playerName: player.name,
+                  portalType: 'return'
+                });
+                // Also broadcast to forest room (room being entered) so players there hear the return
+                io.to(roomId).emit('portal_used', {
+                  playerId: player.id,
+                  playerName: player.name,
+                  portalType: 'return'
+                });
+                console.log(`Broadcasting portal_used event to rooms ${oldRoomId} and ${roomId} for player ${player.name} returning`);
+              }
+            }
+            
             rooms.removePlayerFromRoom(oldRoomId, player.id);
             // Notify others in the old room that player left
             io.to(oldRoomId).emit('player_left', { playerId: player.id });
