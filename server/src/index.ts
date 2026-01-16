@@ -1540,6 +1540,21 @@ setInterval(() => {
       const treeStates = rooms.getTreeStatesInRoom(roomId);
       io.to(roomId).emit('tree_state_updated', { treeStates });
     }
+    
+    // Check and auto-relocate treasure chests whose cooldown has expired
+    const relocatedChests = rooms.checkTreasureChestRespawn(roomId);
+    for (const { chestId, chest, oldX, oldY, newX, newY } of relocatedChests) {
+      // Broadcast relocation to all players in room
+      io.to(roomId).emit('treasure_chest_relocated', {
+        chestId,
+        chest,
+        oldX,
+        oldY,
+        newX,
+        newY,
+      });
+      console.log(`[TreasureChest] Auto-relocated chest ${chestId} in room ${roomId}`);
+    }
   }
 }, 5000);
 

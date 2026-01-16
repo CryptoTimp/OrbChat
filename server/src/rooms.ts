@@ -1114,6 +1114,51 @@ export function relocateTreasureChest(roomId: string, chestId: string): { succes
   return { success: true, newX: newPosition.x, newY: newPosition.y };
 }
 
+// Check and automatically relocate treasure chests whose cooldown has expired
+// Only relocates chests that haven't been manually relocated by the client
+export function checkTreasureChestRespawn(roomId: string): Array<{ chestId: string; oldX: number; oldY: number; newX: number; newY: number; chest: TreasureChest }> {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  
+  const now = Date.now();
+  const COOLDOWN_DURATION = 60000; // 60 seconds
+  const relocatedChests: Array<{ chestId: string; oldX: number; oldY: number; newX: number; newY: number; chest: TreasureChest }> = [];
+  
+  // Check all chests in the room
+  for (const chest of room.treasureChests) {
+    // If chest has a cooldown that has expired (and it's been at least 5 seconds past cooldown to avoid race conditions)
+    if (chest.cooldownEndTime && now >= chest.cooldownEndTime + 5000) {
+      const oldX = chest.x;
+      const oldY = chest.y;
+      
+      // Relocate the chest
+      const result = relocateTreasureChest(roomId, chest.id);
+      
+      if (result.success && result.newX !== undefined && result.newY !== undefined) {
+        const updatedChest = room.treasureChests.find(c => c.id === chest.id);
+        if (updatedChest) {
+          relocatedChests.push({
+            chestId: chest.id,
+            oldX,
+            oldY,
+            newX: result.newX,
+            newY: result.newY,
+            chest: updatedChest
+          });
+          console.log(`[TreasureChest] Auto-relocated chest ${chest.id} from (${oldX}, ${oldY}) to (${result.newX}, ${result.newY}) after cooldown expired`);
+        }
+      } else {
+        // If relocation failed, clear the cooldown so it can be opened again in place
+        // This prevents chests from being permanently stuck on cooldown
+        chest.cooldownEndTime = undefined;
+        console.warn(`[TreasureChest] Failed to auto-relocate chest ${chest.id} (no valid position found), clearing cooldown so it can be opened again`);
+      }
+    }
+  }
+  
+  return relocatedChests;
+}
+
 // Tree state management
 export function getTreeState(roomId: string, treeId: string): TreeState | null {
   const room = rooms.get(roomId);
