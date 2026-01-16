@@ -5,7 +5,7 @@ import * as players from './players';
 import * as shop from './shop';
 
 // Global room IDs that persist even when empty
-export const GLOBAL_ROOM_IDS = ['eu-1', 'eu-2', 'eu-3'];
+export const GLOBAL_ROOM_IDS = ['eu-1', 'eu-2', 'eu-3', 'casino-eu-1', 'casino-eu-2', 'casino-eu-3', 'millionaires_lounge-eu-1', 'millionaires_lounge-eu-2', 'millionaires_lounge-eu-3'];
 
 // In-memory room storage
 const rooms: Map<string, Room> = new Map();
@@ -1202,12 +1202,23 @@ export function getAllRooms(): string[] {
 // Initialize global rooms on server startup
 export function initializeGlobalRooms(): void {
   for (const roomId of GLOBAL_ROOM_IDS) {
-    // Create global room if it doesn't exist (all use forest map)
+    // Determine map type based on room ID
+    const isCasino = roomId.startsWith('casino-');
+    const isMillionairesLounge = roomId.startsWith('millionaires_lounge-');
+    const mapType: MapType = isCasino ? 'casino' : isMillionairesLounge ? 'millionaires_lounge' : 'forest';
+    
+    // Create global room if it doesn't exist
     if (!rooms.has(roomId)) {
-      const room = createRoom(roomId, 'forest');
-      console.log(`Initialized global room: ${roomId} with ${room.shrines.length} shrines`);
+      const room = createRoom(roomId, mapType);
+      if (mapType === 'forest') {
+        console.log(`Initialized global room: ${roomId} with ${room.shrines.length} shrines`);
+      } else if (mapType === 'casino') {
+        console.log(`Initialized global casino room: ${roomId}`);
+      } else {
+        console.log(`Initialized global millionaire's lounge room: ${roomId}`);
+      }
     } else {
-      // Ensure existing global rooms have shrines (in case they were created before shrine code was added)
+      // Ensure existing global rooms have shrines (only for forest rooms)
       const room = rooms.get(roomId);
       if (room && room.mapType === 'forest' && (!room.shrines || room.shrines.length === 0)) {
         room.shrines = generateShrinesForRoom(roomId, 'forest');

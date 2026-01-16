@@ -207,3 +207,13 @@ export const playChestEmptySound = () => {
     sound.play().catch(() => {});
   }
 };
+
+// Play the portal sound (when entering casino or return portal)
+export const playPortalSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/sci-fi-portal-jump-02-416162.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch(() => {});
+  }
+};

@@ -6,6 +6,7 @@ interface GameState {
   connected: boolean;
   playerId: string | null;
   roomId: string | null;
+  previousRoomId: string | null; // Track previous room when entering casino
   playerName: string;
   mapType: MapType;
   
@@ -68,6 +69,7 @@ interface GameState {
   setConnected: (connected: boolean) => void;
   setPlayerId: (id: string) => void;
   setRoomId: (id: string) => void;
+  setPreviousRoomId: (id: string | null) => void;
   setPlayerName: (name: string) => void;
   setMapType: (mapType: MapType) => void;
   
@@ -222,6 +224,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   
   setRoomId: (id) => set({ roomId: id }),
+  setPreviousRoomId: (id) => set({ previousRoomId: id }),
   setPlayerName: (name) => set({ playerName: name }),
   setMapType: (mapType) => set({ mapType }),
   

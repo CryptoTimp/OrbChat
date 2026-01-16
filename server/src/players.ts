@@ -9,38 +9,117 @@ export function createPlayerFromFirebase(
   roomId: string,
   orbs: number,
   equippedItems: string[],
-  mapType?: string
+  mapType?: string,
+  returningFromCasino?: boolean,
+  returningFromLounge?: boolean
 ): PlayerWithChat {
   let spawnX: number;
   let spawnY: number;
   
+  // World dimensions in unscaled pixels (player coordinates are unscaled)
+  const WORLD_WIDTH_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH;
+  const WORLD_HEIGHT_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT;
+  const centerX = WORLD_WIDTH_UNSCALED / 2;
+  const centerY = WORLD_HEIGHT_UNSCALED / 2;
+  const SCALE = GAME_CONSTANTS.SCALE;
+  
   // For forest map, spawn on central podium (avoiding fountain tower)
+  // OR at casino portal if returning from casino
   if (mapType === 'forest') {
-    // World dimensions in unscaled pixels (player coordinates are unscaled)
-    const WORLD_WIDTH_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH;
-    const WORLD_HEIGHT_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT;
-    const centerX = WORLD_WIDTH_UNSCALED / 2;
-    const centerY = WORLD_HEIGHT_UNSCALED / 2;
-    const SCALE = GAME_CONSTANTS.SCALE;
+    // If returning from casino, spawn at casino portal
+    if (returningFromCasino) {
+      // Casino portal position in forest map:
+      // Portal is at angle -π/8 from center, at npcRadius distance
+      // npcRadius = plazaRadius * 0.7 = 160 * SCALE * 0.7 = 112 * SCALE (scaled pixels)
+      // Convert to unscaled: 112 * SCALE / SCALE = 112 (unscaled pixels)
+      const plazaRadius = 160 * SCALE; // 480 unscaled pixels
+      const npcRadius = plazaRadius * 0.7; // 336 unscaled pixels
+      const portalAngle = -Math.PI / 8;
+      const portalX = centerX + Math.cos(portalAngle) * npcRadius;
+      const portalY = centerY + Math.sin(portalAngle) * npcRadius;
+      const portalRadius = 30 * SCALE; // 90 unscaled pixels
+      
+      // Spawn near the portal (slightly offset to avoid being exactly on it)
+      // Add some randomness around the portal
+      const spawnRadius = portalRadius + 20 + Math.random() * 30; // 20-50 pixels from portal edge
+      const spawnAngle = Math.random() * Math.PI * 2;
+      
+      spawnX = portalX + Math.cos(spawnAngle) * spawnRadius - (GAME_CONSTANTS.PLAYER_WIDTH / 2);
+      spawnY = portalY + Math.sin(spawnAngle) * spawnRadius - (GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+      
+      // Clamp to map bounds
+      const maxX = WORLD_WIDTH_UNSCALED - GAME_CONSTANTS.PLAYER_WIDTH;
+      const maxY = WORLD_HEIGHT_UNSCALED - GAME_CONSTANTS.PLAYER_HEIGHT;
+      spawnX = Math.max(0, Math.min(spawnX, maxX));
+      spawnY = Math.max(0, Math.min(spawnY, maxY));
+    } else {
+      // Podium radius on client: 160 * SCALE (scaled pixels) = 160 * SCALE unscaled pixels
+      // Tower radius on client: 60 * SCALE (scaled pixels) = 60 * SCALE unscaled pixels
+      // Since player coordinates are in unscaled pixels, we use the unscaled values
+      const towerRadius = 60 * SCALE; // 180 unscaled pixels
+      const podiumRadius = 160 * SCALE; // 480 unscaled pixels
+      
+      // Spawn between tower and podium edge (with some margin)
+      const minRadius = towerRadius + 40; // Avoid tower by at least 40 unscaled pixels
+      const maxRadius = podiumRadius - 40; // Stay away from podium edge by 40 unscaled pixels
+      
+      // Random angle and distance
+      const angle = Math.random() * Math.PI * 2;
+      const radius = minRadius + Math.random() * (maxRadius - minRadius);
+      
+      // Calculate spawn position (player coordinates are top-left corner of sprite)
+      // Center the player sprite on the spawn point
+      spawnX = centerX + Math.cos(angle) * radius - (GAME_CONSTANTS.PLAYER_WIDTH / 2);
+      spawnY = centerY + Math.sin(angle) * radius - (GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+      
+      // Clamp to map bounds (in unscaled pixels)
+      const maxX = WORLD_WIDTH_UNSCALED - GAME_CONSTANTS.PLAYER_WIDTH;
+      const maxY = WORLD_HEIGHT_UNSCALED - GAME_CONSTANTS.PLAYER_HEIGHT;
+      spawnX = Math.max(0, Math.min(spawnX, maxX));
+      spawnY = Math.max(0, Math.min(spawnY, maxY));
+    }
+  } else if (mapType === 'casino') {
+    // For casino map, spawn around the return portal (which is at the center of the map)
+    // Portal radius on client: 30 * SCALE (scaled pixels) = 30 * SCALE unscaled pixels
+    const portalRadius = 30 * SCALE; // 90 unscaled pixels
     
-    // Podium radius on client: 160 * SCALE (scaled pixels) = 160 * SCALE unscaled pixels
-    // Tower radius on client: 60 * SCALE (scaled pixels) = 60 * SCALE unscaled pixels
-    // Since player coordinates are in unscaled pixels, we use the unscaled values
-    const towerRadius = 60 * SCALE; // 180 unscaled pixels
-    const podiumRadius = 160 * SCALE; // 480 unscaled pixels
+    // Return portal is at the center of the map (centerX, centerY)
+    const portalX = centerX;
+    const portalY = centerY;
     
-    // Spawn between tower and podium edge (with some margin)
-    const minRadius = towerRadius + 40; // Avoid tower by at least 40 unscaled pixels
-    const maxRadius = podiumRadius - 40; // Stay away from podium edge by 40 unscaled pixels
-    
-    // Random angle and distance
-    const angle = Math.random() * Math.PI * 2;
-    const radius = minRadius + Math.random() * (maxRadius - minRadius);
+    // Spawn near the portal (slightly offset to avoid being exactly on it)
+    // Add some randomness around the portal
+    const spawnRadius = portalRadius + 20 + Math.random() * 40; // 20-60 pixels from portal edge
+    const spawnAngle = Math.random() * Math.PI * 2;
     
     // Calculate spawn position (player coordinates are top-left corner of sprite)
     // Center the player sprite on the spawn point
-    spawnX = centerX + Math.cos(angle) * radius - (GAME_CONSTANTS.PLAYER_WIDTH / 2);
-    spawnY = centerY + Math.sin(angle) * radius - (GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+    spawnX = portalX + Math.cos(spawnAngle) * spawnRadius - (GAME_CONSTANTS.PLAYER_WIDTH / 2);
+    spawnY = portalY + Math.sin(spawnAngle) * spawnRadius - (GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+    
+    // Clamp to map bounds (in unscaled pixels)
+    const maxX = WORLD_WIDTH_UNSCALED - GAME_CONSTANTS.PLAYER_WIDTH;
+    const maxY = WORLD_HEIGHT_UNSCALED - GAME_CONSTANTS.PLAYER_HEIGHT;
+    spawnX = Math.max(0, Math.min(spawnX, maxX));
+    spawnY = Math.max(0, Math.min(spawnY, maxY));
+  } else if (mapType === 'millionaires_lounge') {
+    // For millionaire's lounge map, spawn around the return portal (which is at the center of the map)
+    // Portal radius on client: 30 * SCALE (scaled pixels) = 30 * SCALE unscaled pixels
+    const portalRadius = 30 * SCALE; // 90 unscaled pixels
+    
+    // Return portal is at the center of the map (centerX, centerY)
+    const portalX = centerX;
+    const portalY = centerY;
+    
+    // Spawn near the portal (slightly offset to avoid being exactly on it)
+    // Add some randomness around the portal
+    const spawnRadius = portalRadius + 20 + Math.random() * 40; // 20-60 pixels from portal edge
+    const spawnAngle = Math.random() * Math.PI * 2;
+    
+    // Calculate spawn position (player coordinates are top-left corner of sprite)
+    // Center the player sprite on the spawn point
+    spawnX = portalX + Math.cos(spawnAngle) * spawnRadius - (GAME_CONSTANTS.PLAYER_WIDTH / 2);
+    spawnY = portalY + Math.sin(spawnAngle) * spawnRadius - (GAME_CONSTANTS.PLAYER_HEIGHT / 2);
     
     // Clamp to map bounds (in unscaled pixels)
     const maxX = WORLD_WIDTH_UNSCALED - GAME_CONSTANTS.PLAYER_WIDTH;

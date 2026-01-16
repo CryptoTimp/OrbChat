@@ -5,7 +5,8 @@ import { useGameStore } from '../state/gameStore';
 import { signOut, getUserProfile, UserProfile } from '../firebase/auth';
 import { MapType, RoomInfo } from '../types';
 import { BackgroundNPCs } from './BackgroundNPCs';
-import { playClickSound } from '../utils/sounds';
+import { playClickSound, playShrineRejectionSound } from '../utils/sounds';
+import { addNotification } from './Notifications';
 
 interface JoinScreenProps {
   onJoin: () => void;
@@ -20,8 +21,10 @@ const MAP_OPTIONS: { id: MapType; name: string; emoji: string; description: stri
 
 const MAP_EMOJI: Record<MapType, string> = {
   market: '🏰',
-  forest: '🌲',
+  forest: '🏛️',
   cafe: '☕',
+  casino: '🎰',
+  millionaires_lounge: '💎',
 };
 
 type Tab = 'join' | 'create';
@@ -30,6 +33,13 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
   const defaultName = user.displayName || user.email?.split('@')[0] || 'Player';
   const [playerName, setPlayerName] = useState(defaultName);
   const [activeTab, setActiveTab] = useState<Tab>('join');
+  
+  // Force activeTab to 'join' if it's 'create' (since create tab is hidden)
+  useEffect(() => {
+    if (activeTab === 'create') {
+      setActiveTab('join');
+    }
+  }, [activeTab]);
   const [isJoining, setIsJoining] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   
@@ -247,6 +257,29 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
   
   const handleRoomClick = (room: RoomInfo) => {
     playClickSound();
+    
+    // Check casino orb requirement
+    if (room.mapType === 'casino') {
+      const playerOrbs = profile?.orbs || 0;
+      const CASINO_ORB_REQUIREMENT = 5000000;
+      if (playerOrbs < CASINO_ORB_REQUIREMENT) {
+        playShrineRejectionSound(); // Play negative sound
+        addNotification(`You need ${CASINO_ORB_REQUIREMENT.toLocaleString()} orbs to access the casino!`, 'error');
+        return;
+      }
+    }
+    
+    // Check millionaire's lounge orb requirement
+    if (room.mapType === 'millionaires_lounge') {
+      const playerOrbs = profile?.orbs || 0;
+      const LOUNGE_ORB_REQUIREMENT = 25000000;
+      if (playerOrbs < LOUNGE_ORB_REQUIREMENT) {
+        playShrineRejectionSound(); // Play negative sound
+        addNotification(`You need ${LOUNGE_ORB_REQUIREMENT.toLocaleString()} orbs to access the Millionaire's Lounge!`, 'error');
+        return;
+      }
+    }
+    
     if (room.isPrivate) {
       // Show password modal for private rooms - never join directly
       setRoomToJoin(room);
@@ -256,13 +289,7 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
       setSelectedRoom(room.id); // Also select it for visual feedback
     } else {
       // For public rooms, join directly
-      if (selectedRoom === room.id) {
-        // If already selected, join it
-        handleJoinRoom(room.id, room.mapType);
-      } else {
-        // Otherwise, just select it
-        setSelectedRoom(room.id);
-      }
+      handleJoinRoom(room.id, room.mapType);
     }
   };
   
@@ -379,7 +406,8 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
             </svg>
             Join Room
           </button>
-          <button
+          {/* Create Room button hidden for now */}
+          {/* <button
             onClick={() => setActiveTab('create')}
             className={`flex-1 py-3 rounded-lg font-pixel text-sm transition-all duration-200 flex items-center justify-center gap-2
               ${activeTab === 'create' 
@@ -390,7 +418,7 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Create Room
-          </button>
+          </button> */}
         </div>
         
         {/* Content area */}
@@ -429,48 +457,160 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
                       Global Rooms
                     </h4>
                     <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
-                      {rooms.filter(r => r.isGlobal).length === 0 ? (
+                      {rooms.filter(r => r.isGlobal && r.mapType !== 'casino' && r.mapType !== 'millionaires_lounge').length === 0 ? (
                         <p className="text-slate-500 font-pixel text-xs text-center py-2">No global rooms available</p>
                       ) : (
-                        rooms.filter(r => r.isGlobal).map((room) => (
-                          <button
-                            key={room.id}
-                            onClick={() => {
-                              playClickSound();
-                              setSelectedRoom(selectedRoom === room.id ? null : room.id);
-                            }}
-                            className={`w-full p-3 rounded-lg border transition-all duration-200 text-left
-                              ${selectedRoom === room.id 
-                                ? 'bg-emerald-900/30 border-emerald-500' 
-                                : 'bg-slate-800/50 border-slate-700 hover:border-slate-600 hover:bg-slate-800'}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl">{MAP_EMOJI[room.mapType]}</span>
-                                <div>
-                                  <p className="text-slate-200 font-pixel text-sm">
-                                    {room.id === 'eu-1' ? 'EU 1' : room.id === 'eu-2' ? 'EU 2' : room.id === 'eu-3' ? 'EU 3' : room.id.toUpperCase()}
-                                  </p>
-                                  <p className="text-slate-500 font-pixel text-xs capitalize">{room.mapType}</p>
+                        rooms.filter(r => r.isGlobal && r.mapType !== 'casino' && r.mapType !== 'millionaires_lounge').map((room) => {
+                          // Find casino room for this base room
+                          const casinoRoom = rooms.find(r => r.isGlobal && r.mapType === 'casino' && r.id === `casino-${room.id}`);
+                          // Find millionaire's lounge room for this base room
+                          const loungeRoom = rooms.find(r => r.isGlobal && r.mapType === 'millionaires_lounge' && r.id === `millionaires_lounge-${room.id}`);
+                          const isSelected = selectedRoom === room.id;
+                          const isCasinoSelected = casinoRoom && selectedRoom === casinoRoom.id;
+                          const isLoungeSelected = loungeRoom && selectedRoom === loungeRoom.id;
+                          // Show casino dropdown if forest is selected OR if casino is selected (keep it open)
+                          const showCasinoDropdown = isSelected || isCasinoSelected;
+                          // Show lounge dropdown if forest is selected OR if lounge is selected (keep it open)
+                          const showLoungeDropdown = isSelected || isLoungeSelected;
+                          
+                          return (
+                            <div key={room.id} className="space-y-1">
+                              <button
+                                onClick={() => {
+                                  playClickSound();
+                                  // If clicking the same room, deselect. Otherwise select it.
+                                  setSelectedRoom(selectedRoom === room.id ? null : room.id);
+                                }}
+                                className={`w-full p-3 rounded-lg border-2 transition-all duration-200 text-left
+                                  ${isSelected 
+                                    ? 'bg-emerald-900/30 border-emerald-500 shadow-lg shadow-emerald-500/20' 
+                                    : 'bg-slate-800/50 border-slate-700 hover:border-slate-600 hover:bg-slate-800'}`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-2xl">{MAP_EMOJI[room.mapType]}</span>
+                                    <div>
+                                      <p className="text-slate-200 font-pixel text-sm">
+                                        {room.id === 'eu-1' ? 'EU 1' : room.id === 'eu-2' ? 'EU 2' : room.id === 'eu-3' ? 'EU 3' : room.id.toUpperCase()}
+                                      </p>
+                                      <p className="text-slate-500 font-pixel text-xs capitalize">{room.mapType === 'forest' ? 'Plaza' : room.mapType}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-emerald-400 font-pixel text-sm">{room.playerCount} 👤</p>
+                                    <p className="text-slate-500 font-pixel text-xs truncate max-w-[100px]">
+                                      {room.players.length > 0 
+                                        ? room.players.slice(0, 2).join(', ') + (room.players.length > 2 ? '...' : '')
+                                        : 'Empty'}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-emerald-400 font-pixel text-sm">{room.playerCount} 👤</p>
-                                <p className="text-slate-500 font-pixel text-xs truncate max-w-[100px]">
-                                  {room.players.length > 0 
-                                    ? room.players.slice(0, 2).join(', ') + (room.players.length > 2 ? '...' : '')
-                                    : 'Empty'}
-                                </p>
-                              </div>
+                              </button>
+                              
+                              {/* Casino room dropdown below selected room - keep open if casino is selected */}
+                              {showCasinoDropdown && casinoRoom && (
+                                <div className="ml-4 mt-1 mb-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      playClickSound();
+                                      
+                                      const playerOrbs = profile?.orbs || 0;
+                                      const CASINO_ORB_REQUIREMENT = 5000000;
+                                      
+                                      if (playerOrbs < CASINO_ORB_REQUIREMENT) {
+                                        playShrineRejectionSound(); // Play negative sound
+                                        addNotification(`You need ${CASINO_ORB_REQUIREMENT.toLocaleString()} orbs to access the casino!`, 'error');
+                                        return;
+                                      }
+                                      
+                                      // Toggle casino selection (if already selected, deselect. Otherwise select it)
+                                      setSelectedRoom(selectedRoom === casinoRoom.id ? null : casinoRoom.id);
+                                    }}
+                                    className={`w-full p-2 rounded-lg border-2 transition-all duration-200 text-left
+                                               ${isCasinoSelected
+                                                 ? 'bg-amber-900/30 border-amber-500 shadow-lg shadow-amber-500/20'
+                                                 : 'bg-amber-900/20 border-amber-700/50 hover:border-amber-600 hover:bg-amber-900/30'}`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xl">🎰</span>
+                                        <div>
+                                          <p className={`font-pixel text-xs ${isCasinoSelected ? 'text-amber-200' : 'text-amber-200'}`}>
+                                            Casino - {room.id === 'eu-1' ? 'EU 1' : room.id === 'eu-2' ? 'EU 2' : room.id === 'eu-3' ? 'EU 3' : room.id.toUpperCase()}
+                                          </p>
+                                          {((profile?.orbs || 0) < 5000000) && (
+                                            <p className="text-red-400 font-pixel text-[10px]">
+                                              Requires 5,000,000 orbs
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-amber-400 font-pixel text-xs">{casinoRoom.playerCount} 👤</p>
+                                      </div>
+                                    </div>
+                                  </button>
+                                </div>
+                              )}
+                              
+                              {/* Millionaire's Lounge room dropdown below selected room - keep open if lounge is selected */}
+                              {showLoungeDropdown && loungeRoom && (
+                                <div className="ml-4 mt-1 mb-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      playClickSound();
+                                      
+                                      const playerOrbs = profile?.orbs || 0;
+                                      const LOUNGE_ORB_REQUIREMENT = 25000000;
+                                      
+                                      if (playerOrbs < LOUNGE_ORB_REQUIREMENT) {
+                                        playShrineRejectionSound(); // Play negative sound
+                                        addNotification(`You need ${LOUNGE_ORB_REQUIREMENT.toLocaleString()} orbs to access the Millionaire's Lounge!`, 'error');
+                                        return;
+                                      }
+                                      
+                                      // Toggle lounge selection (if already selected, deselect. Otherwise select it)
+                                      setSelectedRoom(selectedRoom === loungeRoom.id ? null : loungeRoom.id);
+                                    }}
+                                    className={`w-full p-2 rounded-lg border-2 transition-all duration-200 text-left
+                                               ${isLoungeSelected
+                                                 ? 'bg-yellow-900/30 border-yellow-500 shadow-lg shadow-yellow-500/20'
+                                                 : 'bg-yellow-900/20 border-yellow-700/50 hover:border-yellow-600 hover:bg-yellow-900/30'}`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xl">💎</span>
+                                        <div>
+                                          <p className={`font-pixel text-xs ${isLoungeSelected ? 'text-yellow-200' : 'text-yellow-200'}`}>
+                                            Millionaire's Lounge - {room.id === 'eu-1' ? 'EU 1' : room.id === 'eu-2' ? 'EU 2' : room.id === 'eu-3' ? 'EU 3' : room.id.toUpperCase()}
+                                          </p>
+                                          {((profile?.orbs || 0) < 25000000) && (
+                                            <p className="text-red-400 font-pixel text-[10px]">
+                                              Requires 25,000,000 orbs
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-yellow-400 font-pixel text-xs">{loungeRoom.playerCount} 👤</p>
+                                      </div>
+                                    </div>
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                          </button>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
                   
-                  {/* Player Rooms Section */}
-                  <div>
+                  {/* Player Rooms Section - hidden for now */}
+                  {/* <div>
                     <h4 className="text-slate-400 font-pixel text-xs mb-2 flex items-center gap-2">
                       <span className="text-cyan-400">👥</span>
                       Player Rooms
@@ -518,194 +658,68 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
                         ))
                       )}
                     </div>
-                  </div>
+                  </div> */}
                 </div>
               )}
               
               {/* Join selected room button */}
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!selectedRoom || !playerName.trim()) return;
-                  playClickSound();
-                  const room = rooms.find(r => r.id === selectedRoom);
-                  if (room) {
-                    // Always use handleRoomClick which will show modal for private rooms
-                    handleRoomClick(room);
-                  }
-                }}
-                disabled={!selectedRoom || !playerName.trim() || isJoining || showPasswordModal}
-                className="w-full mt-4 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 
-                           hover:from-cyan-500 hover:to-blue-500
-                           disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed
-                           text-white font-pixel text-sm rounded-lg
-                           shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50
-                           transition-all duration-200
-                           flex items-center justify-center gap-2"
-              >
-                {isJoining ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Joining...
-                  </>
-                ) : (
-                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                    </svg>
-                    {selectedRoom ? `Join ${selectedRoom}` : 'Select a Room'}
-                  </>
-                )}
-              </button>
+              {selectedRoom && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!playerName.trim() || isJoining || showPasswordModal) return;
+                    playClickSound();
+                    const room = rooms.find(r => r.id === selectedRoom);
+                    if (room) {
+                      handleRoomClick(room);
+                    }
+                  }}
+                  disabled={!playerName.trim() || isJoining || showPasswordModal}
+                  className="w-full mt-4 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 
+                             hover:from-cyan-500 hover:to-blue-500
+                             disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed
+                             text-white font-pixel text-sm rounded-lg
+                             shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50
+                             transition-all duration-200
+                             flex items-center justify-center gap-2"
+                >
+                  {isJoining ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Joining...
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                      </svg>
+                      {(() => {
+                        const room = rooms.find(r => r.id === selectedRoom);
+                        if (!room) return 'Select a Room';
+                        if (room.mapType === 'casino') {
+                          const baseRoomId = room.id.replace(/^casino-/, '');
+                          const displayName = baseRoomId === 'eu-1' ? 'EU 1' : baseRoomId === 'eu-2' ? 'EU 2' : baseRoomId === 'eu-3' ? 'EU 3' : baseRoomId.toUpperCase();
+                          return `Join Casino ${displayName}`;
+                        } else if (room.mapType === 'millionaires_lounge') {
+                          const baseRoomId = room.id.replace(/^millionaires_lounge-/, '');
+                          const displayName = baseRoomId === 'eu-1' ? 'EU 1' : baseRoomId === 'eu-2' ? 'EU 2' : baseRoomId === 'eu-3' ? 'EU 3' : baseRoomId.toUpperCase();
+                          return `Join Millionaire's Lounge ${displayName}`;
+                        } else {
+                          const displayName = room.id === 'eu-1' ? 'EU 1' : room.id === 'eu-2' ? 'EU 2' : room.id === 'eu-3' ? 'EU 3' : room.id.toUpperCase();
+                          const roomTypeName = room.mapType === 'forest' ? 'Plaza' : room.mapType === 'market' ? 'Market' : room.mapType === 'cafe' ? 'Cafe' : room.mapType;
+                          return `Join ${roomTypeName} ${displayName}`;
+                        }
+                      })()}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
-          ) : (
-            /* CREATE TAB */
-            <form onSubmit={handleCreateRoom} className="p-4">
-              <div className="mb-4">
-                <label className="block text-slate-400 font-pixel text-xs mb-2">
-                  Room Name
-                </label>
-                <input
-                  type="text"
-                  value={newRoomId}
-                  onChange={(e) => setNewRoomId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                  placeholder="my-cool-room"
-                  maxLength={20}
-                  required
-                  className="w-full bg-slate-800 text-slate-100 rounded-lg px-4 py-3 text-sm 
-                             placeholder-slate-500 border border-slate-600
-                             focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent
-                             font-pixel"
-                />
-                <p className="text-slate-500 text-xs mt-1 font-pixel">
-                  Letters, numbers, and dashes only
-                </p>
-              </div>
-              
-              {/* Map Selector */}
-              <div className="mb-4">
-                <label className="block text-slate-400 font-pixel text-xs mb-2">
-                  Select Map
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {MAP_OPTIONS.map((map) => {
-                    const isAvailable = map.id === 'forest';
-                    const isSelected = selectedMap === map.id;
-                    return (
-                      <button
-                        key={map.id}
-                        type="button"
-                        onClick={() => {
-                          if (isAvailable) {
-                            playClickSound();
-                            setSelectedMap(map.id);
-                          }
-                        }}
-                        disabled={!isAvailable}
-                        className={`
-                          relative p-3 rounded-lg border-2 transition-all duration-200
-                          ${isSelected && isAvailable
-                            ? `bg-gradient-to-br ${map.color} border-white/50 shadow-lg scale-105` 
-                            : isAvailable
-                            ? 'bg-slate-800 border-slate-600 hover:border-slate-500 hover:bg-slate-750'
-                            : 'bg-slate-800/50 border-slate-700 opacity-50 cursor-not-allowed'}
-                        `}
-                      >
-                        <div className="text-2xl mb-1">{map.emoji}</div>
-                        <p className={`font-pixel text-xs ${isSelected && isAvailable ? 'text-white' : isAvailable ? 'text-slate-300' : 'text-slate-500'}`}>
-                          {map.name}
-                        </p>
-                        {!isAvailable && (
-                          <p className="font-pixel text-[8px] text-slate-500 mt-1">Coming Soon</p>
-                        )}
-                        {isSelected && isAvailable && (
-                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-slate-500 text-xs mt-2 font-pixel text-center">
-                  {MAP_OPTIONS.find(m => m.id === selectedMap)?.description}
-                </p>
-              </div>
-              
-              {/* Private Room Toggle */}
-              <div className="mb-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isPrivate}
-                    onChange={(e) => {
-                      setIsPrivate(e.target.checked);
-                      if (!e.target.checked) {
-                        setRoomPassword('');
-                      }
-                    }}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
-                  />
-                  <span className="text-slate-400 font-pixel text-xs">Private Room</span>
-                </label>
-                
-                {isPrivate && (
-                  <div className="mt-2">
-                    <input
-                      type="password"
-                      value={roomPassword}
-                      onChange={(e) => setRoomPassword(e.target.value)}
-                      placeholder="Enter password"
-                      maxLength={50}
-                      required={isPrivate}
-                      className="w-full bg-slate-800 text-slate-100 rounded-lg px-4 py-3 text-sm 
-                                 placeholder-slate-500 border border-slate-600
-                                 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent
-                                 font-pixel"
-                    />
-                    <p className="text-slate-500 text-xs mt-1 font-pixel">
-                      Only users with the password can join
-                    </p>
-                  </div>
-                )}
-              </div>
-              
-              <button
-                type="submit"
-                disabled={!playerName.trim() || !newRoomId.trim() || isJoining || (isPrivate && !roomPassword.trim())}
-                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 
-                           hover:from-emerald-500 hover:to-teal-500
-                           disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed
-                           text-white font-pixel text-sm rounded-lg
-                           shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50
-                           transition-all duration-200
-                           flex items-center justify-center gap-2"
-              >
-                {isJoining ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Create Room
-                  </>
-                )}
-              </button>
-            </form>
-          )}
+          ) : null}
         </div>
         
         {/* Features */}

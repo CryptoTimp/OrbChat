@@ -347,8 +347,52 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const roomMapType = room.mapType;
     console.log(`Room ${roomId} mapType: ${roomMapType} (requested: ${mapType}), isPrivate: ${room.isPrivate}, passwordHash: ${room.passwordHash ? 'set' : 'none'}`);
     
+    // Check if player is returning from casino or lounge (before creating player, so we can check old rooms)
+    // This needs to be done before we remove them from old rooms, so we check first
+    let wasInCasinoRoom = false;
+    let wasInLoungeRoom = false;
+    const allRoomIds = rooms.getAllRooms();
+    for (const oldRoomId of allRoomIds) {
+      if (oldRoomId !== roomId && oldRoomId.startsWith('casino-')) {
+        const wasInOldRoom = rooms.getPlayerInRoom(oldRoomId, playerId);
+        if (wasInOldRoom) {
+          // Check if player has other active sockets in the old room
+          const hasOtherSocketsInOldRoom = Array.from(socketToPlayer.entries()).some(
+            ([otherSocketId, otherMapping]) => 
+              otherSocketId !== socket.id && 
+              otherMapping.playerId === playerId && 
+              otherMapping.roomId === oldRoomId
+          );
+          // If no other sockets, they're switching from casino
+          if (!hasOtherSocketsInOldRoom) {
+            wasInCasinoRoom = true;
+            break;
+          }
+        }
+      } else if (oldRoomId !== roomId && oldRoomId.startsWith('millionaires_lounge-')) {
+        const wasInOldRoom = rooms.getPlayerInRoom(oldRoomId, playerId);
+        if (wasInOldRoom) {
+          // Check if player has other active sockets in the old room
+          const hasOtherSocketsInOldRoom = Array.from(socketToPlayer.entries()).some(
+            ([otherSocketId, otherMapping]) => 
+              otherSocketId !== socket.id && 
+              otherMapping.playerId === playerId && 
+              otherMapping.roomId === oldRoomId
+          );
+          // If no other sockets, they're switching from lounge
+          if (!hasOtherSocketsInOldRoom) {
+            wasInLoungeRoom = true;
+            break;
+          }
+        }
+      }
+    }
+    
     // Create player with data from Firebase
-    const player = players.createPlayerFromFirebase(playerId, playerName, roomId, orbs || 0, equippedItems || [], roomMapType);
+    // If joining forest room and was in casino/lounge, spawn at portal
+    const returningFromCasino = wasInCasinoRoom && roomMapType === 'forest';
+    const returningFromLounge = wasInLoungeRoom && roomMapType === 'forest';
+    const player = players.createPlayerFromFirebase(playerId, playerName, roomId, orbs || 0, equippedItems || [], roomMapType, returningFromCasino, returningFromLounge);
     
     // Initialize player movement tracking for idle rewards
     playerLastMovement.set(player.id, Date.now());
@@ -372,6 +416,42 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       player.x = existingPlayer.x;
       player.y = existingPlayer.y;
       player.direction = existingPlayer.direction;
+    }
+    
+    // IMPORTANT: Check if player is switching rooms and remove them from ALL other rooms
+    // Check ALL rooms to see if player exists in any other room (more robust than just checking sockets)
+    // Reuse allRoomIds from above (already declared)
+    for (const oldRoomId of allRoomIds) {
+      if (oldRoomId !== roomId) {
+        // Check if player exists in this room
+        const wasInOldRoom = rooms.getPlayerInRoom(oldRoomId, player.id);
+        if (wasInOldRoom) {
+          // Check if player has other active sockets in the old room
+          const hasOtherSocketsInOldRoom = Array.from(socketToPlayer.entries()).some(
+            ([otherSocketId, otherMapping]) => 
+              otherSocketId !== socket.id && 
+              otherMapping.playerId === player.id && 
+              otherMapping.roomId === oldRoomId
+          );
+          
+          // Only remove player if no other active sockets exist for them in the old room
+          if (!hasOtherSocketsInOldRoom) {
+            rooms.removePlayerFromRoom(oldRoomId, player.id);
+            // Notify others in the old room that player left
+            io.to(oldRoomId).emit('player_left', { playerId: player.id });
+            console.log(`Player ${player.name} (${player.id}) left room ${oldRoomId} to join ${roomId}`);
+            
+            // Stop spawners if room is now empty
+            const playersLeft = rooms.getPlayersInRoom(oldRoomId);
+            if (playersLeft.length === 0) {
+              stopOrbSpawner(oldRoomId);
+              stopFountainOrbSpawner(oldRoomId);
+            }
+          } else {
+            console.log(`Player ${player.name} (${player.id}) has other sockets in room ${oldRoomId}, not removing`);
+          }
+        }
+      }
     }
     
     // IMPORTANT: Clean up any old sockets for this player in this room BEFORE adding the new one
@@ -530,23 +610,59 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   // Handle leaving a room
   socket.on('leave_room', () => {
     const mapping = socketToPlayer.get(socket.id);
-    if (!mapping) return;
+    if (!mapping) {
+      // Socket wasn't in mapping, but might still be in a room - clean it up
+      const socketRooms = Array.from(socket.rooms);
+      for (const room of socketRooms) {
+        // Skip the default room (socket.id) and system rooms
+        if (room !== socket.id && !room.startsWith('_')) {
+          socket.leave(room);
+        }
+      }
+      return;
+    }
 
     const { playerId, roomId } = mapping;
     
-    // Remove player from room
-    rooms.removePlayerFromRoom(roomId, playerId);
-    
-    // Leave socket room
+    // Leave socket room first
     socket.leave(roomId);
     
-    // Remove mapping
+    // Remove mapping for this socket
     socketToPlayer.delete(socket.id);
     
-    // Notify others
-    socket.to(roomId).emit('player_left', { playerId });
+    // Check if player has other sockets in this room
+    const hasOtherSockets = Array.from(socketToPlayer.entries()).some(
+      ([otherSocketId, otherMapping]) => 
+        otherSocketId !== socket.id && 
+        otherMapping.playerId === playerId && 
+        otherMapping.roomId === roomId
+    );
     
-    console.log(`Player ${playerId} left room ${roomId}`);
+    // Only remove player from room if no other sockets exist for this player
+    if (!hasOtherSockets) {
+      rooms.removePlayerFromRoom(roomId, playerId);
+      
+      // Clean up idle tracking when player leaves
+      playerLastMovement.delete(playerId);
+      playerLastIdleReward.delete(playerId);
+      
+      // Clean up purchase lock
+      playerPurchasingLootBox.delete(playerId);
+      
+      // Check if room is empty and stop spawner
+      const playersLeft = rooms.getPlayersInRoom(roomId);
+      if (playersLeft.length === 0) {
+        stopOrbSpawner(roomId);
+        stopFountainOrbSpawner(roomId);
+      }
+      
+      // Notify others
+      io.to(roomId).emit('player_left', { playerId });
+      
+      console.log(`Player ${playerId} left room ${roomId} (no more sockets)`);
+    } else {
+      console.log(`Socket ${socket.id} left room ${roomId} for player ${playerId}, but player still has other sockets`);
+    }
   });
 
   // Handle movement

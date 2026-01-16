@@ -3256,6 +3256,146 @@ function drawMarketBackground(ctx: CanvasRenderingContext2D): void {
   }
 }
 
+// ============ CASINO MAP ============
+
+function drawCasinoBackground(ctx: CanvasRenderingContext2D): void {
+  const p = SCALE;
+  const tileW = TILE_SIZE * SCALE;
+  
+  // Dark void background (full world)
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+  
+  // Add some subtle stars/particles in the void
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  for (let i = 0; i < 200; i++) {
+    const x = (i * 137 + 50) % WORLD_WIDTH;
+    const y = (i * 283 + 100) % WORLD_HEIGHT;
+    const size = ((i * 17) % 3) + 1;
+    ctx.beginPath();
+    ctx.arc(x, y, size * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Floating plaza at center of map
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 300 * p;
+  
+  // Draw floating platform base (dark stone)
+  ctx.fillStyle = '#2a1a1a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw platform top (lighter stone with checkered pattern)
+  ctx.fillStyle = '#3a2a2a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius - 4 * p, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Checkered pattern on platform
+  const checkSize = 20 * p;
+  for (let row = -Math.floor(plazaRadius / checkSize); row <= Math.floor(plazaRadius / checkSize); row++) {
+    for (let col = -Math.floor(plazaRadius / checkSize); col <= Math.floor(plazaRadius / checkSize); col++) {
+      const x = centerX + col * checkSize;
+      const y = centerY + row * checkSize;
+      const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+      if (dist < plazaRadius - 4 * p) {
+        const isLight = (row + col) % 2 === 0;
+        ctx.fillStyle = isLight ? '#4a3a3a' : '#3a2a2a';
+        ctx.fillRect(x - checkSize / 2, y - checkSize / 2, checkSize, checkSize);
+      }
+    }
+  }
+  
+  // Platform edge highlight
+  ctx.strokeStyle = '#5a4a4a';
+  ctx.lineWidth = 4 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Inner decorative ring
+  ctx.strokeStyle = '#6a5a5a';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius - 20 * p, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Note: Return portal is drawn separately on top of this background (not cached)
+}
+
+// ============ MILLIONAIRE'S LOUNGE MAP ============
+
+export function drawMillionairesLoungeBackground(ctx: CanvasRenderingContext2D): void {
+  const p = SCALE;
+  const tileW = TILE_SIZE * SCALE;
+  
+  // Dark void background (full world)
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+  
+  // Add some subtle stars/particles in the void
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  for (let i = 0; i < 200; i++) {
+    const x = (i * 137 + 50) % WORLD_WIDTH;
+    const y = (i * 283 + 100) % WORLD_HEIGHT;
+    const size = ((i * 17) % 3) + 1;
+    ctx.beginPath();
+    ctx.arc(x, y, size * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Floating plaza at center of map
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 300 * p;
+  
+  // Draw floating platform base (dark stone)
+  ctx.fillStyle = '#2a1a1a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Draw platform top (lighter stone with checkered pattern)
+  ctx.fillStyle = '#3a2a2a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius - 4 * p, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Checkered pattern on platform
+  const checkSize = 20 * p;
+  for (let row = -Math.floor(plazaRadius / checkSize); row <= Math.floor(plazaRadius / checkSize); row++) {
+    for (let col = -Math.floor(plazaRadius / checkSize); col <= Math.floor(plazaRadius / checkSize); col++) {
+      const x = centerX + col * checkSize;
+      const y = centerY + row * checkSize;
+      const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+      if (dist < plazaRadius - 4 * p) {
+        const isLight = (row + col) % 2 === 0;
+        ctx.fillStyle = isLight ? '#4a3a3a' : '#3a2a2a';
+        ctx.fillRect(x - checkSize / 2, y - checkSize / 2, checkSize, checkSize);
+      }
+    }
+  }
+  
+  // Platform edge highlight
+  ctx.strokeStyle = '#5a4a4a';
+  ctx.lineWidth = 4 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Inner decorative ring
+  ctx.strokeStyle = '#6a5a5a';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius - 20 * p, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Note: Return portal is drawn separately on top of this background (not cached)
+}
+
 // ============ FOREST MAP ============
 
 function drawForestBackground(ctx: CanvasRenderingContext2D): void {
@@ -5306,7 +5446,7 @@ function buildPlazaWallTopCache(): void {
   plazaWallTopCacheInitialized = true;
 }
 
-export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, deltaTime?: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null, hoveredDealerId?: string | null, camera?: Camera): void {
+export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, deltaTime?: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null, hoveredDealerId?: string | null, camera?: Camera, playerOrbs?: number): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
@@ -5452,6 +5592,12 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
   // Draw dealers around the plaza (between flags)
   drawDealers(ctx, centerX, centerY, plazaRadius, time, hoveredDealerId);
   
+  // Draw casino portal between hat dealer (angle 0) and pet dealer (angle 7π/4)
+  drawCasinoPortal(ctx, centerX, centerY, plazaRadius, time, playerOrbs || 0);
+  
+  // Draw Millionaire's Lounge portal between boost dealer (angle 3π/2) and pet dealer (angle 7π/4)
+  drawMillionairesLoungePortal(ctx, centerX, centerY, plazaRadius, time, playerOrbs || 0);
+  
   // Update NPC stall data for click detection
   updateNPCClickAreas(centerX, centerY, plazaRadius);
   
@@ -5477,6 +5623,35 @@ export function drawFlagBunting(ctx: CanvasRenderingContext2D, centerX: number, 
 
 // Dealer positions (exported for click detection)
 export const dealerPositions: Map<string, { x: number; y: number }> = new Map();
+
+// Portal position for collision/click detection
+export let casinoPortalPosition: { x: number; y: number; radius: number } | null = null;
+
+// Casino room player count (for display above portal)
+let casinoRoomPlayerCount: number | null = null;
+
+// Setter function for casino room player count
+export function setCasinoRoomPlayerCount(count: number | null): void {
+  casinoRoomPlayerCount = count;
+}
+
+// Getter function for casino room player count
+export function getCasinoRoomPlayerCount(): number | null {
+  return casinoRoomPlayerCount;
+}
+
+// Return portal position (in casino map)
+let returnPortalPosition: { x: number; y: number; radius: number } | null = null;
+
+// Setter function for return portal position
+export function setReturnPortalPosition(position: { x: number; y: number; radius: number } | null): void {
+  returnPortalPosition = position;
+}
+
+// Getter function for return portal position
+export function getReturnPortalPosition(): { x: number; y: number; radius: number } | null {
+  return returnPortalPosition;
+}
 
 // Dealer type definitions
 interface DealerType {
@@ -5717,6 +5892,928 @@ function drawDealers(ctx: CanvasRenderingContext2D, centerX: number, centerY: nu
   }
 }
 
+// Draw casino portal with stairs around it
+function drawCasinoPortal(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, plazaRadius: number, time: number, playerOrbs: number = 0): void {
+  const p = SCALE;
+  const npcRadius = plazaRadius * 0.7;
+  
+  // Portal position: between hat dealer (angle 0) and pet dealer (angle 7π/4)
+  // Angle is -π/8 (or 15π/8, which wraps to -π/8)
+  const portalAngle = -Math.PI / 8;
+  const portalX = centerX + Math.cos(portalAngle) * npcRadius;
+  const portalY = centerY + Math.sin(portalAngle) * npcRadius;
+  const portalRadius = 30 * p;
+  
+  // Store portal position for collision/click detection
+  casinoPortalPosition = { x: portalX, y: portalY, radius: portalRadius + 10 * p };
+  
+  // Draw circular stairs around portal (3 steps)
+  const stairCount = 3;
+  for (let i = 0; i < stairCount; i++) {
+    const stairRadius = portalRadius + (i + 1) * 8 * p;
+    const stairHeight = 4 * p;
+    
+    // Stair base (dark stone)
+    ctx.fillStyle = '#2a1a1a';
+    ctx.beginPath();
+    ctx.arc(portalX, portalY, stairRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair top (lighter stone)
+    ctx.fillStyle = '#3a2a2a';
+    ctx.beginPath();
+    ctx.arc(portalX, portalY, stairRadius - 2 * p, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair edge highlight
+    ctx.strokeStyle = '#4a3a3a';
+    ctx.lineWidth = 2 * p;
+    ctx.beginPath();
+    ctx.arc(portalX, portalY, stairRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
+  // Portal base (dark mystical)
+  ctx.fillStyle = '#1a0a1a';
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Animated portal effect - swirling energy
+  const swirlPhase = (time * 0.001) % (Math.PI * 2);
+  const pulsePhase = Math.sin(time * 0.002) * 0.3 + 0.7; // Pulse between 0.4 and 1.0
+  
+  // Outer glow ring (pulsing)
+  const glowGradient = ctx.createRadialGradient(portalX, portalY, 0, portalX, portalY, portalRadius * 1.5);
+  glowGradient.addColorStop(0, `rgba(138, 43, 226, ${0.6 * pulsePhase})`); // Purple
+  glowGradient.addColorStop(0.5, `rgba(75, 0, 130, ${0.4 * pulsePhase})`); // Indigo
+  glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glowGradient;
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Swirling energy inside portal
+  for (let i = 0; i < 8; i++) {
+    const angle = swirlPhase + (i * Math.PI / 4);
+    const spiralRadius = portalRadius * 0.7;
+    const spiralX = portalX + Math.cos(angle) * spiralRadius * pulsePhase;
+    const spiralY = portalY + Math.sin(angle) * spiralRadius * pulsePhase;
+    
+    // Energy particle
+    const particleGradient = ctx.createRadialGradient(spiralX, spiralY, 0, spiralX, spiralY, 6 * p);
+    particleGradient.addColorStop(0, `rgba(255, 215, 0, ${pulsePhase})`); // Gold
+    particleGradient.addColorStop(0.5, `rgba(138, 43, 226, ${0.7 * pulsePhase})`); // Purple
+    particleGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = particleGradient;
+    ctx.beginPath();
+    ctx.arc(spiralX, spiralY, 6 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Portal center (void)
+  ctx.fillStyle = '#0a0a0a';
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Portal rim (golden)
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 3 * p;
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Inner rim (purple)
+  ctx.strokeStyle = '#8a2be2';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius * 0.9, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Mystical symbols around portal (decorative)
+  for (let i = 0; i < 6; i++) {
+    const symbolAngle = (i * Math.PI / 3) + swirlPhase * 0.5;
+    const symbolRadius = portalRadius + 15 * p;
+    const symbolX = portalX + Math.cos(symbolAngle) * symbolRadius;
+    const symbolY = portalY + Math.sin(symbolAngle) * symbolRadius;
+    
+    ctx.fillStyle = `rgba(255, 215, 0, ${0.6 * pulsePhase})`;
+    ctx.beginPath();
+    ctx.arc(symbolX, symbolY, 3 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Draw polished casino status box above portal
+  const zoom = ctx.getTransform().a || 1;
+  const CASINO_ORB_REQUIREMENT = 5000000;
+  const hasEnoughOrbs = playerOrbs >= CASINO_ORB_REQUIREMENT;
+  
+  // Format orb values
+  const formatOrbs = (orbs: number): string => {
+    if (orbs >= 1000000) {
+      return (orbs / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    }
+    return orbs.toLocaleString();
+  };
+  
+  const playerOrbsFormatted = formatOrbs(playerOrbs);
+  const requiredOrbsFormatted = formatOrbs(CASINO_ORB_REQUIREMENT);
+  const orbProgress = Math.min(playerOrbs / CASINO_ORB_REQUIREMENT, 1);
+  
+  // Colors and styling
+  const accentColor = hasEnoughOrbs ? '#00ff88' : '#ff6b6b';
+  const accentGlow = hasEnoughOrbs ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 107, 107, 0.4)';
+  const goldColor = '#ffd700';
+  const darkBg = 'rgba(10, 10, 15, 0.98)';
+  
+  // Get current player count
+  const currentPlayerCount = getCasinoRoomPlayerCount();
+  
+  // Text content
+  const statusText = hasEnoughOrbs ? 'CASINO OPEN' : 'CASINO CLOSED';
+  const playerText = currentPlayerCount !== null 
+    ? `${currentPlayerCount} ${currentPlayerCount === 1 ? 'Player' : 'Players'}`
+    : 'Loading...';
+  
+  // Font sizes
+  const titleFontSize = 8 / zoom;
+  const detailFontSize = 7 / zoom;
+  const smallFontSize = 6 / zoom;
+  
+  ctx.font = `${titleFontSize}px "Press Start 2P", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Measure text
+  const statusMetrics = ctx.measureText(statusText);
+  ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+  const orbReqText = `${requiredOrbsFormatted} Orbs Required`;
+  const orbReqMetrics = ctx.measureText(orbReqText);
+  ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+  const playerMetrics = ctx.measureText(playerText);
+  
+  // Box dimensions
+  const padding = 8 / zoom;
+  const lineSpacing = 6 / zoom;
+  const progressBarHeight = 4 / zoom;
+  const progressBarSpacing = 4 / zoom;
+  const boxWidth = Math.max(statusMetrics.width, orbReqMetrics.width, playerMetrics.width) + padding * 2 + 20 / zoom;
+  const boxHeight = titleFontSize + lineSpacing + detailFontSize + lineSpacing + progressBarHeight + progressBarSpacing + lineSpacing + detailFontSize + padding * 2;
+  
+  // Position - directly above portal
+  const boxY = portalY - portalRadius - 20 * p;
+  const boxX = portalX - boxWidth / 2;
+  
+  // Draw outer glow
+  ctx.shadowBlur = 12 / zoom;
+  ctx.shadowColor = accentGlow;
+  ctx.fillStyle = darkBg;
+  ctx.fillRect(boxX - 2 / zoom, boxY - 2 / zoom, boxWidth + 4 / zoom, boxHeight + 4 / zoom);
+  ctx.shadowBlur = 0;
+  
+  // Draw main box with gradient-like effect
+  const borderRadius = 6 / zoom;
+  ctx.fillStyle = darkBg;
+  ctx.beginPath();
+  ctx.moveTo(boxX + borderRadius, boxY);
+  ctx.lineTo(boxX + boxWidth - borderRadius, boxY);
+  ctx.quadraticCurveTo(boxX + boxWidth, boxY, boxX + boxWidth, boxY + borderRadius);
+  ctx.lineTo(boxX + boxWidth, boxY + boxHeight - borderRadius);
+  ctx.quadraticCurveTo(boxX + boxWidth, boxY + boxHeight, boxX + boxWidth - borderRadius, boxY + boxHeight);
+  ctx.lineTo(boxX + borderRadius, boxY + boxHeight);
+  ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - borderRadius);
+  ctx.lineTo(boxX, boxY + borderRadius);
+  ctx.quadraticCurveTo(boxX, boxY, boxX + borderRadius, boxY);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Draw accent border
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 2 / zoom;
+  ctx.stroke();
+  
+  // Draw inner highlight
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.1)`;
+  ctx.lineWidth = 1 / zoom;
+  ctx.strokeRect(boxX + 1 / zoom, boxY + 1 / zoom, boxWidth - 2 / zoom, boxHeight - 2 / zoom);
+  
+  // Calculate positions
+  let currentY = boxY + padding;
+  
+  // Draw status (top)
+  ctx.font = `${titleFontSize}px "Press Start 2P", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  currentY += titleFontSize / 2;
+  
+  // Status with glow
+  ctx.save();
+  ctx.shadowBlur = 8 / zoom;
+  ctx.shadowColor = accentColor;
+  ctx.fillStyle = accentColor;
+  ctx.fillText(statusText, portalX, currentY);
+  ctx.restore();
+  
+  // Draw separator line
+  currentY += titleFontSize / 2 + lineSpacing / 2;
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.15)`;
+  ctx.lineWidth = 1 / zoom;
+  ctx.beginPath();
+  ctx.moveTo(boxX + padding, currentY);
+  ctx.lineTo(boxX + boxWidth - padding, currentY);
+  ctx.stroke();
+  currentY += lineSpacing / 2;
+  
+  // Draw orb requirement
+  ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+  currentY += detailFontSize / 2;
+  ctx.fillStyle = goldColor;
+  ctx.fillText(orbReqText, portalX, currentY);
+  
+  // Draw progress bar background
+  currentY += detailFontSize / 2 + progressBarSpacing;
+  const progressBarWidth = boxWidth - padding * 2;
+  const progressBarX = boxX + padding;
+  const progressBarY = currentY;
+  
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight);
+  
+  // Draw progress bar fill
+  const progressWidth = progressBarWidth * orbProgress;
+  if (progressWidth > 0) {
+    const progressGradient = ctx.createLinearGradient(progressBarX, progressBarY, progressBarX + progressWidth, progressBarY);
+    progressGradient.addColorStop(0, hasEnoughOrbs ? '#00ff88' : '#ff6b6b');
+    progressGradient.addColorStop(1, hasEnoughOrbs ? '#00cc6a' : '#cc5555');
+    ctx.fillStyle = progressGradient;
+    ctx.fillRect(progressBarX, progressBarY, progressWidth, progressBarHeight);
+    
+    // Progress bar highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fillRect(progressBarX, progressBarY, progressWidth, progressBarHeight / 2);
+  }
+  
+  // Draw progress bar border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 1 / zoom;
+  ctx.strokeRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight);
+  
+  // Draw separator
+  currentY += progressBarHeight + progressBarSpacing + lineSpacing / 2;
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.15)`;
+  ctx.lineWidth = 1 / zoom;
+  ctx.beginPath();
+  ctx.moveTo(boxX + padding, currentY);
+  ctx.lineTo(boxX + boxWidth - padding, currentY);
+  ctx.stroke();
+  currentY += lineSpacing / 2;
+  
+  // Draw player count
+  ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+  currentY += detailFontSize / 2;
+  ctx.fillStyle = goldColor;
+  ctx.fillText(playerText, portalX, currentY);
+  
+  // Reset
+  ctx.textAlign = 'center';
+}
+
+// Millionaire's Lounge portal position for collision/click detection
+let millionairesLoungePortalPosition: { x: number; y: number; radius: number } | null = null;
+
+// Setter function for millionaire's lounge portal position
+export function setMillionairesLoungePortalPosition(position: { x: number; y: number; radius: number } | null): void {
+  millionairesLoungePortalPosition = position;
+}
+
+// Getter function for millionaire's lounge portal position
+export function getMillionairesLoungePortalPosition(): { x: number; y: number; radius: number } | null {
+  return millionairesLoungePortalPosition;
+}
+
+// Millionaire's Lounge room player count (for display above portal)
+let millionairesLoungeRoomPlayerCount: number | null = null;
+
+// Setter function for millionaire's lounge room player count
+export function setMillionairesLoungeRoomPlayerCount(count: number | null): void {
+  millionairesLoungeRoomPlayerCount = count;
+}
+
+// Getter function for millionaire's lounge room player count
+export function getMillionairesLoungeRoomPlayerCount(): number | null {
+  return millionairesLoungeRoomPlayerCount;
+}
+
+// Draw Millionaire's Lounge portal with stairs around it (golden theme)
+function drawMillionairesLoungePortal(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, plazaRadius: number, time: number, playerOrbs: number = 0): void {
+  const p = SCALE;
+  const npcRadius = plazaRadius * 0.7;
+  
+  // Portal position: between boost dealer (angle 3π/2) and pet dealer (angle 7π/4)
+  // Angle is -3π/8 (middle of boost and pet dealers)
+  const portalAngle = -3 * Math.PI / 8;
+  const portalX = centerX + Math.cos(portalAngle) * npcRadius;
+  const portalY = centerY + Math.sin(portalAngle) * npcRadius;
+  const portalRadius = 30 * p;
+  
+  // Store portal position for collision/click detection
+  setMillionairesLoungePortalPosition({ x: portalX, y: portalY, radius: portalRadius + 10 * p });
+  
+  // Draw circular stairs around portal (3 steps)
+  const stairCount = 3;
+  for (let i = 0; i < stairCount; i++) {
+    const stairRadius = portalRadius + (i + 1) * 8 * p;
+    const stairHeight = 4 * p;
+    
+    // Stair base (dark stone)
+    ctx.fillStyle = '#2a1a1a';
+    ctx.beginPath();
+    ctx.arc(portalX, portalY, stairRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair top (lighter stone)
+    ctx.fillStyle = '#3a2a2a';
+    ctx.beginPath();
+    ctx.arc(portalX, portalY, stairRadius - 2 * p, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair edge highlight
+    ctx.strokeStyle = '#4a3a3a';
+    ctx.lineWidth = 2 * p;
+    ctx.beginPath();
+    ctx.arc(portalX, portalY, stairRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
+  // Portal base (dark mystical)
+  ctx.fillStyle = '#1a0a1a';
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Animated portal effect - swirling energy (golden theme)
+  const swirlPhase = (time * 0.001) % (Math.PI * 2);
+  const pulsePhase = Math.sin(time * 0.002) * 0.3 + 0.7; // Pulse between 0.4 and 1.0
+  
+  // Outer glow ring (pulsing golden)
+  const glowGradient = ctx.createRadialGradient(portalX, portalY, 0, portalX, portalY, portalRadius * 1.5);
+  glowGradient.addColorStop(0, `rgba(255, 215, 0, ${0.6 * pulsePhase})`); // Gold
+  glowGradient.addColorStop(0.5, `rgba(255, 165, 0, ${0.4 * pulsePhase})`); // Orange
+  glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glowGradient;
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Swirling energy inside portal
+  for (let i = 0; i < 8; i++) {
+    const angle = swirlPhase + (i * Math.PI / 4);
+    const spiralRadius = portalRadius * 0.7;
+    const spiralX = portalX + Math.cos(angle) * spiralRadius * pulsePhase;
+    const spiralY = portalY + Math.sin(angle) * spiralRadius * pulsePhase;
+    
+    // Energy particle (golden)
+    const particleGradient = ctx.createRadialGradient(spiralX, spiralY, 0, spiralX, spiralY, 6 * p);
+    particleGradient.addColorStop(0, `rgba(255, 215, 0, ${pulsePhase})`); // Gold
+    particleGradient.addColorStop(0.5, `rgba(255, 223, 0, ${0.7 * pulsePhase})`); // Bright gold
+    particleGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = particleGradient;
+    ctx.beginPath();
+    ctx.arc(spiralX, spiralY, 6 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Portal center (void)
+  ctx.fillStyle = '#0a0a0a';
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Portal rim (golden)
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 3 * p;
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Inner rim (bright gold)
+  ctx.strokeStyle = '#ffed4e';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(portalX, portalY, portalRadius * 0.9, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Mystical symbols around portal (decorative)
+  for (let i = 0; i < 6; i++) {
+    const symbolAngle = (i * Math.PI / 3) + swirlPhase * 0.5;
+    const symbolRadius = portalRadius + 15 * p;
+    const symbolX = portalX + Math.cos(symbolAngle) * symbolRadius;
+    const symbolY = portalY + Math.sin(symbolAngle) * symbolRadius;
+    
+    ctx.fillStyle = `rgba(255, 215, 0, ${0.6 * pulsePhase})`;
+    ctx.beginPath();
+    ctx.arc(symbolX, symbolY, 3 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Draw polished millionaire's lounge status box above portal
+  const zoom = ctx.getTransform().a || 1;
+  const LOUNGE_ORB_REQUIREMENT = 25000000;
+  const hasEnoughOrbs = playerOrbs >= LOUNGE_ORB_REQUIREMENT;
+  
+  // Format orb values
+  const formatOrbs = (orbs: number): string => {
+    if (orbs >= 1000000) {
+      return (orbs / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    }
+    return orbs.toLocaleString();
+  };
+  
+  const playerOrbsFormatted = formatOrbs(playerOrbs);
+  const requiredOrbsFormatted = formatOrbs(LOUNGE_ORB_REQUIREMENT);
+  const orbProgress = Math.min(playerOrbs / LOUNGE_ORB_REQUIREMENT, 1);
+  
+  // Colors and styling (golden theme)
+  const accentColor = hasEnoughOrbs ? '#ffd700' : '#ff6b6b';
+  const accentGlow = hasEnoughOrbs ? 'rgba(255, 215, 0, 0.4)' : 'rgba(255, 107, 107, 0.4)';
+  const goldColor = '#ffd700';
+  const darkBg = 'rgba(10, 10, 15, 0.98)';
+  
+  // Get current player count
+  const currentPlayerCount = getMillionairesLoungeRoomPlayerCount();
+  
+  // Text content
+  const statusText = hasEnoughOrbs ? 'LOUNGE OPEN' : 'LOUNGE CLOSED';
+  const playerText = currentPlayerCount !== null 
+    ? `${currentPlayerCount} ${currentPlayerCount === 1 ? 'Player' : 'Players'}`
+    : 'Loading...';
+  
+  // Font sizes
+  const titleFontSize = 8 / zoom;
+  const detailFontSize = 7 / zoom;
+  const smallFontSize = 6 / zoom;
+  
+  ctx.font = `${titleFontSize}px "Press Start 2P", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Measure text
+  const statusMetrics = ctx.measureText(statusText);
+  ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+  const orbReqText = `${requiredOrbsFormatted} Orbs Required`;
+  const orbReqMetrics = ctx.measureText(orbReqText);
+  const playerMetrics = ctx.measureText(playerText);
+  
+  // Box dimensions
+  const padding = 8 / zoom;
+  const lineSpacing = 6 / zoom;
+  const progressBarHeight = 4 / zoom;
+  const progressBarSpacing = 4 / zoom;
+  const boxWidth = Math.max(statusMetrics.width, orbReqMetrics.width, playerMetrics.width) + padding * 2 + 20 / zoom;
+  const boxHeight = titleFontSize + lineSpacing + detailFontSize + lineSpacing + progressBarHeight + progressBarSpacing + lineSpacing + detailFontSize + padding * 2;
+  
+  // Position - directly above portal
+  const boxY = portalY - portalRadius - 20 * p;
+  const boxX = portalX - boxWidth / 2;
+  
+  // Draw outer glow
+  ctx.shadowBlur = 12 / zoom;
+  ctx.shadowColor = accentGlow;
+  ctx.fillStyle = darkBg;
+  ctx.fillRect(boxX - 2 / zoom, boxY - 2 / zoom, boxWidth + 4 / zoom, boxHeight + 4 / zoom);
+  ctx.shadowBlur = 0;
+  
+  // Draw main box with gradient-like effect
+  const borderRadius = 6 / zoom;
+  ctx.fillStyle = darkBg;
+  ctx.beginPath();
+  ctx.moveTo(boxX + borderRadius, boxY);
+  ctx.lineTo(boxX + boxWidth - borderRadius, boxY);
+  ctx.quadraticCurveTo(boxX + boxWidth, boxY, boxX + boxWidth, boxY + borderRadius);
+  ctx.lineTo(boxX + boxWidth, boxY + boxHeight - borderRadius);
+  ctx.quadraticCurveTo(boxX + boxWidth, boxY + boxHeight, boxX + boxWidth - borderRadius, boxY + boxHeight);
+  ctx.lineTo(boxX + borderRadius, boxY + boxHeight);
+  ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - borderRadius);
+  ctx.lineTo(boxX, boxY + borderRadius);
+  ctx.quadraticCurveTo(boxX, boxY, boxX + borderRadius, boxY);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Draw accent border (golden)
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 2 / zoom;
+  ctx.stroke();
+  
+  // Draw inner highlight
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.1)`;
+  ctx.lineWidth = 1 / zoom;
+  ctx.strokeRect(boxX + 1 / zoom, boxY + 1 / zoom, boxWidth - 2 / zoom, boxHeight - 2 / zoom);
+  
+  // Calculate positions
+  let currentY = boxY + padding;
+  
+  // Draw status (top)
+  ctx.font = `${titleFontSize}px "Press Start 2P", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  currentY += titleFontSize / 2;
+  
+  // Status with glow
+  ctx.save();
+  ctx.shadowBlur = 8 / zoom;
+  ctx.shadowColor = accentColor;
+  ctx.fillStyle = accentColor;
+  ctx.fillText(statusText, portalX, currentY);
+  ctx.restore();
+  
+  // Draw separator line
+  currentY += titleFontSize / 2 + lineSpacing / 2;
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.15)`;
+  ctx.lineWidth = 1 / zoom;
+  ctx.beginPath();
+  ctx.moveTo(boxX + padding, currentY);
+  ctx.lineTo(boxX + boxWidth - padding, currentY);
+  ctx.stroke();
+  currentY += lineSpacing / 2;
+  
+  // Draw orb requirement
+  ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+  currentY += detailFontSize / 2;
+  ctx.fillStyle = goldColor;
+  ctx.fillText(orbReqText, portalX, currentY);
+  
+  // Draw progress bar background
+  currentY += detailFontSize / 2 + progressBarSpacing;
+  const progressBarWidth = boxWidth - padding * 2;
+  const progressBarX = boxX + padding;
+  const progressBarY = currentY;
+  
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight);
+  
+  // Draw progress bar fill
+  const progressWidth = progressBarWidth * orbProgress;
+  if (progressWidth > 0) {
+    const progressGradient = ctx.createLinearGradient(progressBarX, progressBarY, progressBarX + progressWidth, progressBarY);
+    progressGradient.addColorStop(0, hasEnoughOrbs ? '#ffd700' : '#ff6b6b');
+    progressGradient.addColorStop(1, hasEnoughOrbs ? '#ffed4e' : '#cc5555');
+    ctx.fillStyle = progressGradient;
+    ctx.fillRect(progressBarX, progressBarY, progressWidth, progressBarHeight);
+    
+    // Progress bar highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fillRect(progressBarX, progressBarY, progressWidth, progressBarHeight / 2);
+  }
+  
+  // Draw progress bar border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 1 / zoom;
+  ctx.strokeRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight);
+  
+  // Draw separator
+  currentY += progressBarHeight + progressBarSpacing + lineSpacing / 2;
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.15)`;
+  ctx.lineWidth = 1 / zoom;
+  ctx.beginPath();
+  ctx.moveTo(boxX + padding, currentY);
+  ctx.lineTo(boxX + boxWidth - padding, currentY);
+  ctx.stroke();
+  currentY += lineSpacing / 2;
+  
+  // Draw player count
+  ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+  currentY += detailFontSize / 2;
+  ctx.fillStyle = goldColor;
+  ctx.fillText(playerText, portalX, currentY);
+  
+  // Reset
+  ctx.textAlign = 'center';
+}
+
+// Check if player position collides with millionaire's lounge portal
+export function checkMillionairesLoungePortalCollision(x: number, y: number, width: number, height: number): boolean {
+  const portalPos = getMillionairesLoungePortalPosition();
+  if (!portalPos) return false;
+  
+  const p = SCALE;
+  const padding = 2 * p;
+  const portalRadius = portalPos.radius;
+  
+  // Get player center
+  const playerCenterX = x + width / 2;
+  const playerCenterY = y + height / 2;
+  
+  // Check distance from portal center
+  const dx = playerCenterX - portalPos.x;
+  const dy = playerCenterY - portalPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  // Check if player is within portal radius (with padding)
+  return dist < portalRadius + padding;
+}
+
+// Check if click is on millionaire's lounge portal
+export function checkMillionairesLoungePortalClick(worldX: number, worldY: number): boolean {
+  const portalPos = getMillionairesLoungePortalPosition();
+  if (!portalPos) return false;
+  
+  const clickRadius = portalPos.radius;
+  
+  const dx = worldX - portalPos.x;
+  const dy = worldY - portalPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  return dist < clickRadius;
+}
+
+// Check if mouse is hovering over millionaire's lounge portal
+export function getHoveredMillionairesLoungePortal(worldX: number, worldY: number): boolean {
+  const portalPos = getMillionairesLoungePortalPosition();
+  if (!portalPos) return false;
+  
+  const hoverRadius = portalPos.radius;
+  
+  const dx = worldX - portalPos.x;
+  const dy = worldY - portalPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  return dist < hoverRadius;
+}
+
+// Millionaire's Lounge return portal position (in lounge map)
+let millionairesLoungeReturnPortalPosition: { x: number; y: number; radius: number } | null = null;
+
+// Setter function for millionaire's lounge return portal position
+export function setMillionairesLoungeReturnPortalPosition(position: { x: number; y: number; radius: number } | null): void {
+  millionairesLoungeReturnPortalPosition = position;
+}
+
+// Getter function for millionaire's lounge return portal position
+export function getMillionairesLoungeReturnPortalPosition(): { x: number; y: number; radius: number } | null {
+  return millionairesLoungeReturnPortalPosition;
+}
+
+// Draw return portal in millionaire's lounge map (golden portal to return to previous room)
+export function drawMillionairesLoungeReturnPortal(ctx: CanvasRenderingContext2D, time: number, camera?: Camera): void {
+  const p = SCALE;
+  
+  // Position return portal in center of lounge map (world coordinates)
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const portalRadius = 30 * p;
+  
+  // Store portal position for collision/click detection (in world/scaled coordinates)
+  setMillionairesLoungeReturnPortalPosition({ x: centerX, y: centerY, radius: portalRadius + 10 * p });
+  
+  // Camera transform is already applied in gameLoop, so we draw directly in world coordinates
+  // No need to apply camera transform here since it's already applied to the context
+  
+  // Draw circular stairs around portal (3 steps)
+  const stairCount = 3;
+  for (let i = 0; i < stairCount; i++) {
+    const stairRadius = portalRadius + (i + 1) * 8 * p;
+    
+    // Stair base (dark stone)
+    ctx.fillStyle = '#1a2a1a';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, stairRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair top (lighter stone)
+    ctx.fillStyle = '#2a3a2a';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, stairRadius - 2 * p, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair edge highlight
+    ctx.strokeStyle = '#3a4a3a';
+    ctx.lineWidth = 2 * p;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, stairRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
+  // Portal base (dark mystical)
+  ctx.fillStyle = '#0a1a0a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Animated portal effect - swirling energy (golden theme)
+  const swirlPhase = (time * 0.001) % (Math.PI * 2);
+  const pulsePhase = Math.sin(time * 0.002) * 0.3 + 0.7; // Pulse between 0.4 and 1.0
+  
+  // Outer glow ring (pulsing golden)
+  const glowGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, portalRadius * 1.5);
+  glowGradient.addColorStop(0, `rgba(255, 215, 0, ${0.6 * pulsePhase})`); // Gold
+  glowGradient.addColorStop(0.5, `rgba(255, 165, 0, ${0.4 * pulsePhase})`); // Orange
+  glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glowGradient;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Swirling energy inside portal
+  for (let i = 0; i < 8; i++) {
+    const angle = swirlPhase + (i * Math.PI / 4);
+    const spiralRadius = portalRadius * 0.7;
+    const spiralX = centerX + Math.cos(angle) * spiralRadius * pulsePhase;
+    const spiralY = centerY + Math.sin(angle) * spiralRadius * pulsePhase;
+    
+    // Energy particle (golden)
+    const particleGradient = ctx.createRadialGradient(spiralX, spiralY, 0, spiralX, spiralY, 6 * p);
+    particleGradient.addColorStop(0, `rgba(255, 215, 0, ${pulsePhase})`); // Gold
+    particleGradient.addColorStop(0.5, `rgba(255, 223, 0, ${0.7 * pulsePhase})`); // Bright gold
+    particleGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = particleGradient;
+    ctx.beginPath();
+    ctx.arc(spiralX, spiralY, 6 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Portal center (void)
+  ctx.fillStyle = '#0a0a0a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Portal rim (golden)
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 3 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Inner rim (bright gold)
+  ctx.strokeStyle = '#ffed4e';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius * 0.9, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Mystical symbols around portal (decorative)
+  for (let i = 0; i < 6; i++) {
+    const symbolAngle = (i * Math.PI / 3) + swirlPhase * 0.5;
+    const symbolRadius = portalRadius + 15 * p;
+    const symbolX = centerX + Math.cos(symbolAngle) * symbolRadius;
+    const symbolY = centerY + Math.sin(symbolAngle) * symbolRadius;
+    
+    ctx.fillStyle = `rgba(255, 215, 0, ${0.6 * pulsePhase})`;
+    ctx.beginPath();
+    ctx.arc(symbolX, symbolY, 3 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Check if click is on millionaire's lounge return portal
+export function checkMillionairesLoungeReturnPortalClick(worldX: number, worldY: number): boolean {
+  const portalPos = getMillionairesLoungeReturnPortalPosition();
+  if (!portalPos) return false;
+  
+  const clickRadius = portalPos.radius;
+  
+  const dx = worldX - portalPos.x;
+  const dy = worldY - portalPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  return dist < clickRadius;
+}
+
+// Check if player position collides with millionaire's lounge return portal
+export function checkMillionairesLoungeReturnPortalCollision(x: number, y: number, width: number, height: number): boolean {
+  const portalPos = getMillionairesLoungeReturnPortalPosition();
+  if (!portalPos) return false;
+  
+  const p = SCALE;
+  const padding = 2 * p;
+  const portalRadius = portalPos.radius;
+  
+  // Get player center
+  const playerCenterX = x + width / 2;
+  const playerCenterY = y + height / 2;
+  
+  // Check distance from portal center
+  const dx = playerCenterX - portalPos.x;
+  const dy = playerCenterY - portalPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  // Check if player is within portal radius (with padding)
+  return dist < portalRadius + padding;
+}
+
+// Draw return portal in casino map (green/blue portal to return to previous room)
+export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, camera?: Camera): void {
+  const p = SCALE;
+  
+  // Position return portal in center of casino map (world coordinates)
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const portalRadius = 30 * p;
+  
+  // Store portal position for collision/click detection (in world/scaled coordinates)
+  setReturnPortalPosition({ x: centerX, y: centerY, radius: portalRadius + 10 * p });
+  
+  // Camera transform is already applied in gameLoop, so we draw directly in world coordinates
+  // No need to apply camera transform here since it's already applied to the context
+  
+  // Draw circular stairs around portal (3 steps)
+  const stairCount = 3;
+  for (let i = 0; i < stairCount; i++) {
+    const stairRadius = portalRadius + (i + 1) * 8 * p;
+    
+    // Stair base (dark stone)
+    ctx.fillStyle = '#1a2a1a';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, stairRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair top (lighter stone)
+    ctx.fillStyle = '#2a3a2a';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, stairRadius - 2 * p, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Stair edge highlight
+    ctx.strokeStyle = '#3a4a3a';
+    ctx.lineWidth = 2 * p;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, stairRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
+  // Portal base (dark mystical)
+  ctx.fillStyle = '#0a1a0a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Animated portal effect - swirling energy (green/blue theme)
+  const swirlPhase = (time * 0.001) % (Math.PI * 2);
+  const pulsePhase = Math.sin(time * 0.002) * 0.3 + 0.7; // Pulse between 0.4 and 1.0
+  
+  // Outer glow ring (pulsing green/blue)
+  const glowGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, portalRadius * 1.5);
+  glowGradient.addColorStop(0, `rgba(0, 255, 127, ${0.6 * pulsePhase})`); // Spring green
+  glowGradient.addColorStop(0.5, `rgba(0, 191, 255, ${0.4 * pulsePhase})`); // Deep sky blue
+  glowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glowGradient;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Swirling energy inside portal
+  for (let i = 0; i < 8; i++) {
+    const angle = swirlPhase + (i * Math.PI / 4);
+    const spiralRadius = portalRadius * 0.7;
+    const spiralX = centerX + Math.cos(angle) * spiralRadius * pulsePhase;
+    const spiralY = centerY + Math.sin(angle) * spiralRadius * pulsePhase;
+    
+    // Energy particle (green/blue)
+    const particleGradient = ctx.createRadialGradient(spiralX, spiralY, 0, spiralX, spiralY, 6 * p);
+    particleGradient.addColorStop(0, `rgba(0, 255, 127, ${pulsePhase})`); // Spring green
+    particleGradient.addColorStop(0.5, `rgba(0, 191, 255, ${0.7 * pulsePhase})`); // Deep sky blue
+    particleGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = particleGradient;
+    ctx.beginPath();
+    ctx.arc(spiralX, spiralY, 6 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Portal center (void)
+  ctx.fillStyle = '#0a0a0a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Portal rim (green)
+  ctx.strokeStyle = '#00ff7f';
+  ctx.lineWidth = 3 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Inner rim (blue)
+  ctx.strokeStyle = '#00bfff';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, portalRadius * 0.9, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Mystical symbols around portal (decorative)
+  for (let i = 0; i < 6; i++) {
+    const symbolAngle = (i * Math.PI / 3) + swirlPhase * 0.5;
+    const symbolRadius = portalRadius + 15 * p;
+    const symbolX = centerX + Math.cos(symbolAngle) * symbolRadius;
+    const symbolY = centerY + Math.sin(symbolAngle) * symbolRadius;
+    
+    ctx.fillStyle = `rgba(0, 255, 127, ${0.6 * pulsePhase})`;
+    ctx.beginPath();
+    ctx.arc(symbolX, symbolY, 3 * p, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 // Draw a single dealer NPC
 function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType, dealerX: number, dealerY: number, time: number, isHovered: boolean = false): void {
   const p = SCALE;
@@ -5839,6 +6936,90 @@ export function getClickedDealer(worldX: number, worldY: number): string | null 
   }
   
   return null;
+}
+
+// Check if player position collides with casino portal
+export function checkPortalCollision(x: number, y: number, width: number, height: number): boolean {
+  if (!casinoPortalPosition) return false;
+  
+  const p = SCALE;
+  const padding = 2 * p;
+  const portalRadius = casinoPortalPosition.radius;
+  
+  // Get player center
+  const playerCenterX = x + width / 2;
+  const playerCenterY = y + height / 2;
+  
+  // Check distance from portal center
+  const dx = playerCenterX - casinoPortalPosition.x;
+  const dy = playerCenterY - casinoPortalPosition.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  // Check if player is within portal radius (with padding)
+  return dist < portalRadius + padding;
+}
+
+// Check if click is on casino portal
+export function checkPortalClick(worldX: number, worldY: number): boolean {
+  if (!casinoPortalPosition) return false;
+  
+  const p = SCALE;
+  const clickRadius = casinoPortalPosition.radius;
+  
+  const dx = worldX - casinoPortalPosition.x;
+  const dy = worldY - casinoPortalPosition.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  return dist < clickRadius;
+}
+
+// Check if mouse is hovering over casino portal
+export function getHoveredPortal(worldX: number, worldY: number): boolean {
+  if (!casinoPortalPosition) return false;
+  
+  const hoverRadius = casinoPortalPosition.radius;
+  
+  const dx = worldX - casinoPortalPosition.x;
+  const dy = worldY - casinoPortalPosition.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  return dist < hoverRadius;
+}
+
+// Check if click is on return portal (in casino)
+export function checkReturnPortalClick(worldX: number, worldY: number): boolean {
+  const portalPos = getReturnPortalPosition();
+  if (!portalPos) return false;
+  
+  const clickRadius = portalPos.radius;
+  
+  const dx = worldX - portalPos.x;
+  const dy = worldY - portalPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  return dist < clickRadius;
+}
+
+// Check if player position collides with return portal
+export function checkReturnPortalCollision(x: number, y: number, width: number, height: number): boolean {
+  const portalPos = getReturnPortalPosition();
+  if (!portalPos) return false;
+  
+  const p = SCALE;
+  const padding = 2 * p;
+  const portalRadius = portalPos.radius;
+  
+  // Get player center
+  const playerCenterX = x + width / 2;
+  const playerCenterY = y + height / 2;
+  
+  // Check distance from portal center
+  const dx = playerCenterX - portalPos.x;
+  const dy = playerCenterY - portalPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  // Check if player is within portal radius (with padding)
+  return dist < portalRadius + padding;
 }
 
 // Legacy function for backward compatibility (checks if log dealer is clicked)
@@ -6151,6 +7332,12 @@ export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType,
           drawForestBackground(cacheCtx);
           console.log(`Forest background drawn, forestTrees.length: ${forestTrees.length}`);
           break;
+        case 'casino':
+          drawCasinoBackground(cacheCtx);
+          break;
+        case 'millionaires_lounge':
+          drawMillionairesLoungeBackground(cacheCtx);
+          break;
         case 'cafe':
         default:
           drawCafeBackground(cacheCtx);
@@ -6165,6 +7352,8 @@ export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType,
         market: '#7a7a6e',
         forest: '#2d3a1f',
         cafe: '#2a2a2a',
+        casino: '#1a0d0d',
+        millionaires_lounge: '#1a0d0d',
       };
       cacheCtx.fillStyle = fallbackColors[map] || '#2a2a2a';
       cacheCtx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);

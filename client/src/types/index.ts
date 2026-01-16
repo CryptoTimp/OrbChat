@@ -1,7 +1,7 @@
 // Client-side type definitions (mirrors server types)
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
-export type MapType = 'market' | 'forest' | 'cafe';
+export type MapType = 'market' | 'forest' | 'cafe' | 'casino' | 'millionaires_lounge';
 
 export interface PlayerSprite {
   body: string;

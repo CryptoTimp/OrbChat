@@ -27,6 +27,27 @@ import {
   getClickedDealer,
   getHoveredDealer,
   dealerPositions,
+  checkPortalClick,
+  checkPortalCollision,
+  casinoPortalPosition,
+  getHoveredPortal,
+  drawReturnPortal,
+  checkReturnPortalClick,
+  checkReturnPortalCollision,
+  getReturnPortalPosition,
+  setReturnPortalPosition,
+  setCasinoRoomPlayerCount,
+  setMillionairesLoungeRoomPlayerCount,
+  checkMillionairesLoungePortalClick,
+  checkMillionairesLoungePortalCollision,
+  getMillionairesLoungePortalPosition,
+  getHoveredMillionairesLoungePortal,
+  drawMillionairesLoungeReturnPortal,
+  checkMillionairesLoungeReturnPortalClick,
+  checkMillionairesLoungeReturnPortalCollision,
+  getMillionairesLoungeReturnPortalPosition,
+  setMillionairesLoungeReturnPortalPosition,
+  drawMillionairesLoungeBackground,
   type TreeData,
   drawForestFountain,
   drawGuardTower,
@@ -74,7 +95,7 @@ import {
   updateInterpolation,
   setTargetPosition 
 } from './Player';
-import { playShopBellSound, playOrbCollectionSound, playShrineRejectionSound, playClickSound, playLogReceivedSound, playChoppingSound, playBuyOrbsSound } from '../utils/sounds';
+import { playShopBellSound, playOrbCollectionSound, playShrineRejectionSound, playClickSound, playLogReceivedSound, playChoppingSound, playBuyOrbsSound, playPortalSound } from '../utils/sounds';
 import { addNotification } from '../ui/Notifications';
 import { 
   Camera, 
@@ -96,10 +117,14 @@ export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { getKeys } = useKeyboard();
-  const { move, collectOrb, interactWithShrine, interactWithTreasureChest, startCuttingTree, completeCuttingTree, cancelCuttingTree } = useSocket();
+  const { move, collectOrb, interactWithShrine, interactWithTreasureChest, startCuttingTree, completeCuttingTree, cancelCuttingTree, joinRoom, listRooms } = useSocket();
   const toggleLogDealer = useGameStore(state => state.toggleLogDealer);
   const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
   const toggleTreasureChestDealer = useGameStore(state => state.toggleTreasureChestDealer);
+  const playerName = useGameStore(state => state.playerName);
+  const roomId = useGameStore(state => state.roomId);
+  const previousRoomId = useGameStore(state => state.previousRoomId);
+  const setPreviousRoomId = useGameStore(state => state.setPreviousRoomId);
   
   // Track container size for responsive canvas
   const [canvasSize, setCanvasSize] = useState({ width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
@@ -167,6 +192,10 @@ export function GameCanvas() {
   const pendingLootBoxDealerInteractionRef = useRef<boolean>(false);
   const pendingOrbDealerInteractionRef = useRef<boolean>(false);
   const pendingTreasureChestDealerInteractionRef = useRef<boolean>(false);
+  const pendingPortalInteractionRef = useRef<boolean>(false);
+  const pendingReturnPortalInteractionRef = useRef<boolean>(false);
+  const pendingMillionairesLoungePortalInteractionRef = useRef<boolean>(false);
+  const pendingMillionairesLoungeReturnPortalInteractionRef = useRef<boolean>(false);
   
   // Hovered dealer state
   const [hoveredDealerId, setHoveredDealerId] = useState<string | null>(null);
@@ -510,6 +539,89 @@ export function GameCanvas() {
           }
           return; // Don't move via normal click handling
         }
+        
+        // Check if clicking on casino portal (only in forest map)
+        if (currentMapType === 'forest' && checkPortalClick(worldXScaled, worldYScaled)) {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer && casinoPortalPosition) {
+            playClickSound();
+            // Always walk to portal first, then auto-enter when reached
+            setClickTarget(casinoPortalPosition.x / SCALE, casinoPortalPosition.y / SCALE);
+            // Set flag to indicate portal was clicked (for auto-entry when reached)
+            pendingPortalInteractionRef.current = true;
+          }
+          return; // Don't move via normal click handling
+        }
+        
+        // Check if clicking on Millionaire's Lounge portal (only in forest map)
+        if (currentMapType === 'forest' && checkMillionairesLoungePortalClick(worldXScaled, worldYScaled)) {
+          const localPlayer = useGameStore.getState().localPlayer;
+          const loungePortalPos = getMillionairesLoungePortalPosition();
+          if (localPlayer && loungePortalPos) {
+            playClickSound();
+            // Always walk to portal first, then auto-enter when reached
+            setClickTarget(loungePortalPos.x / SCALE, loungePortalPos.y / SCALE);
+            // Set flag to indicate portal was clicked (for auto-entry when reached)
+            pendingMillionairesLoungePortalInteractionRef.current = true;
+          }
+          return; // Don't move via normal click handling
+        }
+      }
+      
+      // Check if clicking on return portal (in casino map) - OUTSIDE the forest check
+      if (currentMapType === 'casino') {
+        // Ensure return portal position is set (in case it hasn't been drawn yet)
+        let returnPortalPos = getReturnPortalPosition();
+        if (!returnPortalPos) {
+          const centerX = WORLD_WIDTH / 2;
+          const centerY = WORLD_HEIGHT / 2;
+          const portalRadius = 30 * SCALE;
+          returnPortalPos = { x: centerX, y: centerY, radius: portalRadius + 10 * SCALE };
+          setReturnPortalPosition(returnPortalPos);
+        }
+        
+        // Check if click is on return portal
+        const isClickOnPortal = checkReturnPortalClick(worldXScaled, worldYScaled);
+        if (isClickOnPortal) {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer && returnPortalPos) {
+            playClickSound();
+            // Always walk to portal first, then auto-enter when reached
+            // Convert from scaled coordinates to unscaled for click target
+            setClickTarget(returnPortalPos.x / SCALE, returnPortalPos.y / SCALE);
+            // Set flag to indicate return portal was clicked
+            pendingReturnPortalInteractionRef.current = true;
+          }
+          return; // Don't move via normal click handling
+        }
+      }
+      
+      // Check if clicking on return portal (in millionaire's lounge map)
+      if (currentMapType === 'millionaires_lounge') {
+        // Ensure return portal position is set (in case it hasn't been drawn yet)
+        let returnPortalPos = getMillionairesLoungeReturnPortalPosition();
+        if (!returnPortalPos) {
+          const centerX = WORLD_WIDTH / 2;
+          const centerY = WORLD_HEIGHT / 2;
+          const portalRadius = 30 * SCALE;
+          returnPortalPos = { x: centerX, y: centerY, radius: portalRadius + 10 * SCALE };
+          setMillionairesLoungeReturnPortalPosition(returnPortalPos);
+        }
+        
+        // Check if click is on return portal
+        const isClickOnPortal = checkMillionairesLoungeReturnPortalClick(worldXScaled, worldYScaled);
+        if (isClickOnPortal) {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer && returnPortalPos) {
+            playClickSound();
+            // Always walk to portal first, then auto-enter when reached
+            // Convert from scaled coordinates to unscaled for click target
+            setClickTarget(returnPortalPos.x / SCALE, returnPortalPos.y / SCALE);
+            // Set flag to indicate return portal was clicked
+            pendingMillionairesLoungeReturnPortalInteractionRef.current = true;
+          }
+          return; // Don't move via normal click handling
+        }
       }
       
       // Check if clicking on an NPC (villager or centurion)
@@ -541,9 +653,8 @@ export function GameCanvas() {
               const playerId = useGameStore.getState().playerId;
               const duration = 5000; // 5 seconds
               const startTime = Date.now();
-              const currentLocalPlayer = useGameStore.getState().localPlayer;
-              const startX = currentLocalPlayer?.x || 0;
-              const startY = currentLocalPlayer?.y || 0;
+              const startX = localPlayer.x || 0;
+              const startY = localPlayer.y || 0;
               cuttingTreeRef.current = { treeId, startTime, duration, startX, startY };
               // Set progress bar state immediately
               setCuttingTree({ treeId, progress: 0 });
@@ -715,8 +826,32 @@ export function GameCanvas() {
         hoveredTreeData = getHoveredTree(worldXScaled, worldYScaled);
       }
       
-      // Change cursor style when hovering over shrine, NPC stall, dealer, or tree
-      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData) {
+      // Check for hover on casino portal (forest map)
+      const hoveredPortal = currentMapType === 'forest' && getHoveredPortal(worldXScaled, worldYScaled);
+      
+      // Check for hover on Millionaire's Lounge portal (forest map)
+      const hoveredLoungePortal = currentMapType === 'forest' && getHoveredMillionairesLoungePortal(worldXScaled, worldYScaled);
+      
+      // Check for hover on return portal (casino map)
+      const returnPortalPos = getReturnPortalPosition();
+      const hoveredReturnPortal = currentMapType === 'casino' && returnPortalPos && (() => {
+        const dx = worldXScaled - returnPortalPos.x;
+        const dy = worldYScaled - returnPortalPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return dist < returnPortalPos.radius;
+      })();
+      
+      // Check for hover on return portal (millionaire's lounge map)
+      const loungeReturnPortalPos = getMillionairesLoungeReturnPortalPosition();
+      const hoveredLoungeReturnPortal = currentMapType === 'millionaires_lounge' && loungeReturnPortalPos && (() => {
+        const dx = worldXScaled - loungeReturnPortalPos.x;
+        const dy = worldYScaled - loungeReturnPortalPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return dist < loungeReturnPortalPos.radius;
+      })();
+      
+      // Change cursor style when hovering over shrine, NPC stall, dealer, tree, or portal
+      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData || hoveredPortal || hoveredLoungePortal || hoveredReturnPortal || hoveredLoungeReturnPortal) {
         canvas.style.cursor = 'pointer';
       } else {
         canvas.style.cursor = 'default';
@@ -729,6 +864,84 @@ export function GameCanvas() {
       canvas.style.cursor = 'default';
     };
   }, [canvasSize]);
+  
+  const currentMapType = useGameStore(state => state.mapType);
+  
+  // Initialize return portal position when entering casino map
+  useEffect(() => {
+    if (currentMapType === 'casino' && !getReturnPortalPosition()) {
+      const centerX = WORLD_WIDTH / 2;
+      const centerY = WORLD_HEIGHT / 2;
+      const portalRadius = 30 * SCALE;
+      setReturnPortalPosition({ x: centerX, y: centerY, radius: portalRadius + 10 * SCALE });
+    }
+    
+    // Initialize return portal position for millionaire's lounge map
+    if (currentMapType === 'millionaires_lounge' && !getMillionairesLoungeReturnPortalPosition()) {
+      const centerX = WORLD_WIDTH / 2;
+      const centerY = WORLD_HEIGHT / 2;
+      const portalRadius = 30 * SCALE;
+      setMillionairesLoungeReturnPortalPosition({ x: centerX, y: centerY, radius: portalRadius + 10 * SCALE });
+    }
+  }, [currentMapType]);
+  
+  // Update casino room player count periodically (only in forest map)
+  useEffect(() => {
+    if (currentMapType !== 'forest') {
+      setCasinoRoomPlayerCount(null);
+      setMillionairesLoungeRoomPlayerCount(null);
+      return;
+    }
+    
+    const updateCasinoPlayerCount = () => {
+      listRooms((rooms) => {
+        // Find casino room for current room
+        const currentRoomId = roomId || '';
+        let casinoRoomId = 'casino-eu-1';
+        if (currentRoomId === 'eu-1' || currentRoomId === 'eu-2' || currentRoomId === 'eu-3') {
+          casinoRoomId = `casino-${currentRoomId}`;
+        }
+        
+        const casinoRoom = rooms.find(r => r.id === casinoRoomId);
+        if (casinoRoom) {
+          setCasinoRoomPlayerCount(casinoRoom.playerCount);
+        } else {
+          setCasinoRoomPlayerCount(null);
+        }
+      });
+    };
+    
+    const updateLoungePlayerCount = () => {
+      listRooms((rooms) => {
+        // Find millionaire's lounge room for current room
+        const currentRoomId = roomId || '';
+        let loungeRoomId = 'millionaires_lounge-eu-1';
+        if (currentRoomId === 'eu-1' || currentRoomId === 'eu-2' || currentRoomId === 'eu-3') {
+          loungeRoomId = `millionaires_lounge-${currentRoomId}`;
+        }
+        
+        const loungeRoom = rooms.find(r => r.id === loungeRoomId);
+        if (loungeRoom) {
+          setMillionairesLoungeRoomPlayerCount(loungeRoom.playerCount);
+        } else {
+          setMillionairesLoungeRoomPlayerCount(null);
+        }
+      });
+    };
+    
+    // Update immediately and then every 5 seconds
+    updateCasinoPlayerCount();
+    updateLoungePlayerCount();
+    const casinoInterval = setInterval(updateCasinoPlayerCount, 5000);
+    const loungeInterval = setInterval(updateLoungePlayerCount, 5000);
+    
+    return () => {
+      clearInterval(casinoInterval);
+      clearInterval(loungeInterval);
+      setCasinoRoomPlayerCount(null);
+      setMillionairesLoungeRoomPlayerCount(null);
+    };
+  }, [currentMapType, roomId, listRooms]);
   
   // Game loop
   const gameLoop = useCallback((deltaTime: number) => {
@@ -1012,6 +1225,22 @@ export function GameCanvas() {
         if (pendingTreasureChestDealerInteractionRef.current) {
           pendingTreasureChestDealerInteractionRef.current = false;
         }
+        // Clear pending portal interaction if player moves manually
+        if (pendingPortalInteractionRef.current) {
+          pendingPortalInteractionRef.current = false;
+        }
+        // Clear pending return portal interaction if player moves manually
+        if (pendingReturnPortalInteractionRef.current) {
+          pendingReturnPortalInteractionRef.current = false;
+        }
+        // Clear pending millionaire's lounge portal interaction if player moves manually
+        if (pendingMillionairesLoungePortalInteractionRef.current) {
+          pendingMillionairesLoungePortalInteractionRef.current = false;
+        }
+        // Clear pending millionaire's lounge return portal interaction if player moves manually
+        if (pendingMillionairesLoungeReturnPortalInteractionRef.current) {
+          pendingMillionairesLoungeReturnPortalInteractionRef.current = false;
+        }
       }
       
       // Lock player position if cutting a tree
@@ -1079,6 +1308,7 @@ export function GameCanvas() {
           setClickTarget(null, null);
         }
       }
+      
       
       // Check if player reached pending log dealer interaction
       if (pendingLogDealerInteractionRef.current) {
@@ -1155,6 +1385,177 @@ export function GameCanvas() {
             playClickSound();
             toggleTreasureChestDealer();
             pendingTreasureChestDealerInteractionRef.current = false;
+          }
+        }
+      }
+      
+      // Check if player reached portal after clicking it (only in forest map)
+      if (pendingPortalInteractionRef.current && currentMapType === 'forest' && casinoPortalPosition) {
+        const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+        const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+        const dx = casinoPortalPosition.x - playerCenterX;
+        const dy = casinoPortalPosition.y - playerCenterY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const INTERACTION_RANGE = 25 * SCALE;
+        
+        if (dist < INTERACTION_RANGE) {
+          // Player reached portal - transport them
+          const playerOrbs = freshLocalPlayer.orbs || 0;
+          const CASINO_ORB_REQUIREMENT = 5000000;
+          
+          if (playerOrbs >= CASINO_ORB_REQUIREMENT) {
+            // Player has enough orbs - join casino room
+            const currentPlayerName = playerName || 'Player';
+            
+            // Determine which casino room to join based on current room
+            // If in eu-1, eu-2, or eu-3, join corresponding casino room
+            // Otherwise default to casino-eu-1
+            let casinoRoomId = 'casino-eu-1';
+            const currentRoomId = roomId || '';
+            if (currentRoomId === 'eu-1' || currentRoomId === 'eu-2' || currentRoomId === 'eu-3') {
+              casinoRoomId = `casino-${currentRoomId}`;
+            }
+            
+            // Store previous room before joining casino
+            if (currentRoomId && currentRoomId !== casinoRoomId) {
+              setPreviousRoomId(currentRoomId);
+            }
+            
+            // Play portal sound
+            playPortalSound();
+            
+            // Join the casino room
+            joinRoom(casinoRoomId, currentPlayerName, 'casino');
+            pendingPortalInteractionRef.current = false; // Clear flag
+          } else {
+            // Player doesn't have enough orbs
+            playShrineRejectionSound(); // Play negative sound
+            addNotification(`You need ${CASINO_ORB_REQUIREMENT.toLocaleString()} orbs to access the casino!`, 'error');
+            pendingPortalInteractionRef.current = false; // Clear flag
+          }
+        }
+      }
+      
+      // Check if player reached return portal after clicking it (only in casino map)
+      const returnPortalPos = getReturnPortalPosition();
+      if (pendingReturnPortalInteractionRef.current && currentMapType === 'casino' && returnPortalPos) {
+        const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+        const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+        const dx = returnPortalPos.x - playerCenterX;
+        const dy = returnPortalPos.y - playerCenterY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const INTERACTION_RANGE = 25 * SCALE;
+        
+        if (dist < INTERACTION_RANGE) {
+          // Player reached return portal - transport back to previous room
+          const currentPlayerName = playerName || 'Player';
+          const returnRoomId = previousRoomId || 'eu-1'; // Default to eu-1 if no previous room
+          
+          // Determine map type based on room ID
+          let returnMapType: MapType = 'forest';
+          if (returnRoomId.startsWith('casino-')) {
+            returnMapType = 'casino';
+          } else if (returnRoomId === 'market') {
+            returnMapType = 'market';
+          } else if (returnRoomId === 'cafe') {
+            returnMapType = 'cafe';
+          }
+          
+          // Play portal sound
+          playPortalSound();
+          
+          // Join the previous room
+          joinRoom(returnRoomId, currentPlayerName, returnMapType);
+          pendingReturnPortalInteractionRef.current = false; // Clear flag
+          setPreviousRoomId(null); // Clear previous room after returning
+        }
+      }
+      
+      // Check if player reached Millionaire's Lounge portal after clicking it (only in forest map)
+      if (pendingMillionairesLoungePortalInteractionRef.current && currentMapType === 'forest') {
+        const loungePortalPos = getMillionairesLoungePortalPosition();
+        if (loungePortalPos) {
+          const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+          const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+          const dx = loungePortalPos.x - playerCenterX;
+          const dy = loungePortalPos.y - playerCenterY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const INTERACTION_RANGE = 25 * SCALE;
+          
+          if (dist < INTERACTION_RANGE) {
+            // Player reached portal - transport them
+            const playerOrbs = freshLocalPlayer.orbs || 0;
+            const LOUNGE_ORB_REQUIREMENT = 25000000;
+            
+            if (playerOrbs >= LOUNGE_ORB_REQUIREMENT) {
+              // Player has enough orbs - join lounge room
+              const currentPlayerName = playerName || 'Player';
+              
+              // Determine which lounge room to join based on current room
+              // If in eu-1, eu-2, or eu-3, join corresponding lounge room
+              // Otherwise default to millionaires_lounge-eu-1
+              let loungeRoomId = 'millionaires_lounge-eu-1';
+              const currentRoomId = roomId || '';
+              if (currentRoomId === 'eu-1' || currentRoomId === 'eu-2' || currentRoomId === 'eu-3') {
+                loungeRoomId = `millionaires_lounge-${currentRoomId}`;
+              }
+              
+              // Store previous room before joining lounge
+              if (currentRoomId && currentRoomId !== loungeRoomId) {
+                setPreviousRoomId(currentRoomId);
+              }
+              
+              // Play portal sound
+              playPortalSound();
+              
+              // Join the lounge room
+              joinRoom(loungeRoomId, currentPlayerName, 'millionaires_lounge');
+              pendingMillionairesLoungePortalInteractionRef.current = false; // Clear flag
+            } else {
+              // Player doesn't have enough orbs
+              playShrineRejectionSound(); // Play negative sound
+              addNotification(`You need ${(LOUNGE_ORB_REQUIREMENT / 1000000).toFixed(0)}M orbs to access the Millionaire's Lounge!`, 'error');
+              pendingMillionairesLoungePortalInteractionRef.current = false; // Clear flag
+            }
+          }
+        }
+      }
+      
+      // Check if player reached return portal after clicking it (in millionaire's lounge map)
+      if (pendingMillionairesLoungeReturnPortalInteractionRef.current && currentMapType === 'millionaires_lounge') {
+        const returnPortalPos = getMillionairesLoungeReturnPortalPosition();
+        if (returnPortalPos) {
+          const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+          const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+          const dx = returnPortalPos.x - playerCenterX;
+          const dy = returnPortalPos.y - playerCenterY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const INTERACTION_RANGE = 25 * SCALE;
+          
+          if (dist < INTERACTION_RANGE) {
+            // Player reached return portal - return to previous room
+            const currentPlayerName = playerName || 'Player';
+            const returnRoomId = previousRoomId || 'eu-1'; // Default to eu-1 if no previous room
+            
+            // Determine map type based on room ID
+            let returnMapType: MapType = 'forest';
+            if (returnRoomId.startsWith('casino-')) {
+              returnMapType = 'casino';
+            } else if (returnRoomId.startsWith('millionaires_lounge-')) {
+              returnMapType = 'millionaires_lounge';
+            } else if (returnRoomId === 'market') {
+              returnMapType = 'market';
+            } else if (returnRoomId === 'cafe') {
+              returnMapType = 'cafe';
+            }
+            
+            // Play portal sound
+            playPortalSound();
+            
+            // Join the previous room
+            joinRoom(returnRoomId, currentPlayerName, returnMapType);
+            pendingMillionairesLoungeReturnPortalInteractionRef.current = false; // Clear flag
+            setPreviousRoomId(null); // Clear previous room after returning
           }
         }
       }
@@ -1720,7 +2121,14 @@ export function GameCanvas() {
     // Draw animated fountain (before foliage so it's behind trees)
     // This includes trader NPCs (bodies and speech bubbles)
     if (currentMapType === 'forest') {
-      drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId, camera);
+      const playerOrbs = currentLocalPlayer?.orbs || 0;
+      drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId, camera, playerOrbs);
+    } else if (currentMapType === 'casino') {
+      // Draw return portal in casino map
+      drawReturnPortal(ctx, currentTime, camera);
+    } else if (currentMapType === 'millionaires_lounge') {
+      // Draw return portal in lounge map (background is drawn in drawBackground)
+      drawMillionairesLoungeReturnPortal(ctx, currentTime, camera);
     }
     
     // Draw forest foliage on TOP of players (so they walk behind full trees)
