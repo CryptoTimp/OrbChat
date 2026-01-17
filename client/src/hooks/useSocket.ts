@@ -21,24 +21,29 @@ let hasAttemptedRejoin = false;  // Track if we've attempted rejoin in this sess
 let isJoiningRoom = false;  // Prevent concurrent join attempts
 let isPurchasingLootBox = false;  // Prevent concurrent loot box purchases
 
-// Sync orb balance from Firebase (source of truth)
+// Sync orb balance from Firebase (source of truth for non-blackjack transactions)
+// CRITICAL: For blackjack, server is the source of truth - do NOT sync from Firebase during blackjack
 async function syncOrbsFromFirebase(playerId: string): Promise<void> {
   try {
+    const state = useGameStore.getState();
+    const isInBlackjack = state.blackjackTableOpen;
+    
+    // NEVER sync from Firebase during blackjack - server manages all balance updates
+    if (isInBlackjack) {
+      console.log(`[useSocket] syncOrbsFromFirebase - Skipping: in blackjack game, server manages balance`);
+      return;
+    }
+    
     const profile = await getUserProfile(playerId);
     if (profile) {
       const firebaseOrbs = profile.orbs || 0;
-      const state = useGameStore.getState();
-      
-      // Only update if the value is different to avoid triggering floating text unnecessarily
       const currentOrbs = state.localPlayer?.orbs || 0;
       
-      // CRITICAL: Don't overwrite higher balances with lower ones (prevents stale Firebase data from overwriting wins)
-      // If current balance is higher, it's likely from a recent blackjack update
+      // Only update if the value is different to avoid triggering floating text unnecessarily
       if (firebaseOrbs !== currentOrbs) {
+        // For non-blackjack, prefer higher balance (might be from recent transaction)
         if (currentOrbs > firebaseOrbs && currentOrbs - firebaseOrbs > 1000) {
-          // Current balance is significantly higher - likely from recent blackjack update
-          // Don't overwrite with stale Firebase data
-          console.log(`[useSocket] syncOrbsFromFirebase - Skipping update: current balance ${currentOrbs} is higher than Firebase ${firebaseOrbs} (likely recent blackjack update)`);
+          console.log(`[useSocket] syncOrbsFromFirebase - Skipping update: current balance ${currentOrbs} is higher than Firebase ${firebaseOrbs}`);
           return;
         }
         
@@ -143,17 +148,18 @@ function attachListeners(sock: Socket) {
       return;
     }
     
-    // Sync orb balance from Firebase (source of truth) when joining room
-    // BUT: Skip this if we're in a blackjack game to avoid overwriting recent updates
+    // CRITICAL: For blackjack, server manages all balance updates and updates Firebase
+    // Client should NOT sync from Firebase during blackjack - server is the source of truth
     if (yourPlayerId) {
       const currentState = useGameStore.getState();
-      const isInBlackjack = currentState.blackjackTableOpen && currentState.blackjackGameState;
+      const isInBlackjack = currentState.blackjackTableOpen;
       const currentBalance = currentState.localPlayer?.orbs || 0;
       
       if (!isInBlackjack) {
+        // Only sync from Firebase when NOT in blackjack (server manages blackjack balances)
         await syncOrbsFromFirebase(yourPlayerId);
       } else {
-        console.log('[useSocket] Skipping Firebase sync - in blackjack game, balance already updated via player_orbs_updated', {
+        console.log('[useSocket] Skipping Firebase sync - in blackjack game, server manages all balance updates', {
           currentBalance,
           blackjackTableOpen: currentState.blackjackTableOpen,
           hasGameState: !!currentState.blackjackGameState
@@ -460,24 +466,28 @@ function attachListeners(sock: Socket) {
           spawnFloatingText(playerHeadX, playerHeadY, rewardAmount, 'idle');
         }
       } else if (rewardType === 'blackjack') {
-        // For blackjack, update balance immediately (server already updated Firebase)
+        // CRITICAL: For blackjack, server is the source of truth
+        // Server manages all balance updates and updates Firebase
+        // Client only receives and displays the balance from server events
         // rewardAmount can be:
         // - Negative for bet deduction (e.g., -10000 when placing bet)
         // - Positive for payout (e.g., 20000 when winning)
         // - 0 for push (bet returned) - but we skip processing 0 payouts on server
-        // The `orbs` value is the authoritative new balance from the server
-        console.log('[useSocket] Blackjack balance update - using server value:', { 
+        // The `orbs` value is the authoritative new balance from the server (server already updated Firebase)
+        console.log('[useSocket] Blackjack balance update - server is source of truth:', { 
           playerId, 
           newOrbs: orbs, 
           currentOrbs, 
           rewardAmount, 
-          netChange: orbs - currentOrbs 
+          netChange: orbs - currentOrbs,
+          note: 'Server already updated Firebase, client just displays'
         });
-        // CRITICAL: Always use the `orbs` value directly - it's the source of truth from server
-        // Don't sync from Firebase as it might have stale data
+        
+        // CRITICAL: Always use the `orbs` value directly from server - it's the source of truth
+        // Server has already updated Firebase, so we just update local state
         const previousOrbs = state.localPlayer?.orbs;
         state.updatePlayerOrbs(playerId, orbs, rewardAmount);
-        console.log('[useSocket] Blackjack balance update:', {
+        console.log('[useSocket] Blackjack balance update applied:', {
           playerId,
           previousOrbs,
           newOrbs: orbs,
@@ -490,12 +500,8 @@ function attachListeners(sock: Socket) {
         // Only store if it's a positive payout (win) or negative (bet deduction)
         // Skip 0 payouts (losses) as they're not processed on server
         if (rewardAmount !== undefined && rewardAmount !== 0) {
-          // Store in a way the modal can access it
-          // We'll use a custom event or store it in the game state
           const blackjackGameState = state.blackjackGameState;
           if (blackjackGameState && blackjackGameState.gameState === 'finished') {
-            // Store payout in a ref that the modal can access
-            // Actually, let's emit a custom event that the modal can listen to
             window.dispatchEvent(new CustomEvent('blackjack_payout', { 
               detail: { payout: rewardAmount, playerId } 
             }));

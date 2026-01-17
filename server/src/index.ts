@@ -608,8 +608,21 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     io.to(roomId).emit('player_joined', player);
     
     // Refresh orb values from database for all players before broadcasting
-    // Prioritize current player orb value (from Firebase) if it's valid, otherwise use database
+    // CRITICAL: Always prefer room state over database to avoid stale data (especially during blackjack)
     for (const p of allPlayers) {
+      // First, check room state (most up-to-date, especially during blackjack)
+      const roomPlayer = rooms.getPlayerInRoom(roomId, p.id);
+      if (roomPlayer && roomPlayer.orbs !== undefined && roomPlayer.orbs > 0) {
+        // Room state has the most recent balance - use it
+        p.orbs = roomPlayer.orbs;
+        // Ensure database is in sync (but don't overwrite room state)
+        const dbPlayer = db.getPlayer(p.id);
+        if (!dbPlayer || dbPlayer.orbs !== roomPlayer.orbs) {
+          db.updatePlayerOrbs(p.id, roomPlayer.orbs);
+        }
+        continue;
+      }
+      
       // If player already has a valid orb value (from Firebase), keep it
       if (p.orbs && p.orbs > 0) {
         // Player has a valid orb value, ensure it's in the database
@@ -628,7 +641,6 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Update from database if it has a valid value
         p.orbs = dbPlayer.orbs;
         // Update in room as well
-        const roomPlayer = rooms.getPlayerInRoom(roomId, p.id);
         if (roomPlayer) {
           roomPlayer.orbs = dbPlayer.orbs;
         }
@@ -1578,26 +1590,32 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     console.log(`[Blackjack] Placing bet: player=${playerId}, amount=${numericAmount}, currentOrbs=${currentOrbs} (from ${player.orbs > 0 ? 'room state' : 'Firebase'})`);
     const result = blackjack.placeBet(tableId, playerId, numericAmount, currentOrbs);
     if (result.success) {
+      // CRITICAL: Server manages ALL balance updates for blackjack
+      // 1. Calculate new balance
+      // 2. Update Firebase (server is source of truth)
+      // 3. Update room state
+      // 4. Broadcast to clients (clients only receive and display, never update Firebase)
+      
       // Deduct bet from player orbs
       const newBalance = currentOrbs - numericAmount;
       console.log(`[Blackjack] Bet placed: deducting ${numericAmount}, balance ${currentOrbs} -> ${newBalance}`);
       
-      // Update Firebase database
+      // Update Firebase database (SERVER is source of truth)
       const { updateUserOrbs } = await import('./firebase');
       await updateUserOrbs(playerId, newBalance);
       console.log(`[Blackjack] Updated Firebase: ${playerId} -> ${newBalance} orbs`);
       
-      // Update room state
+      // Update room state (keep in sync with Firebase)
       player.orbs = newBalance;
       players.updatePlayerOrbs(playerId, newBalance);
       console.log(`[Blackjack] Updated room state: ${playerId} -> ${newBalance} orbs`);
       
-      // Broadcast orb update with reward info for blackjack
+      // Broadcast orb update to clients (clients receive and display only, do NOT update Firebase)
       // CRITICAL: Only emit AFTER Firebase update is complete to prevent race conditions
       console.log(`[Blackjack] Emitting player_orbs_updated: playerId=${playerId}, orbs=${newBalance}, rewardAmount=${-numericAmount}, rewardType=blackjack`);
       io.to(mapping.roomId).emit('player_orbs_updated', { 
         playerId, 
-        orbs: newBalance, // This is the new balance after deduction
+        orbs: newBalance, // This is the new balance after deduction (server already updated Firebase)
         rewardAmount: -numericAmount, // Negative to show deduction (for UI feedback)
         rewardType: 'blackjack'
       });
@@ -1669,6 +1687,10 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                     
                     const roomPlayer = rooms.getPlayerInRoom(roomIdForPayouts, payoutPlayerId);
                     if (roomPlayer) {
+                      // CRITICAL: Server manages ALL balance updates for blackjack
+                      // 1. Update Firebase (SERVER is source of truth)
+                      // 2. Update room state
+                      // 3. Broadcast to clients (clients only receive and display, never update Firebase)
                       const { getUserData, updateUserOrbs } = await import('./firebase');
                       const userData = await getUserData(payoutPlayerId);
                       const currentOrbs = userData?.orbs || roomPlayer.orbs || 0;
@@ -1680,7 +1702,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                       
                       io.to(roomIdForPayouts).emit('player_orbs_updated', { 
                         playerId: payoutPlayerId, 
-                        orbs: newBalance,
+                        orbs: newBalance, // Server already updated Firebase
                         rewardAmount: payout,
                         rewardType: 'blackjack'
                       });
@@ -1816,22 +1838,25 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
               console.log(`[Blackjack] Net change: ${newBalance - currentOrbs} orbs`);
               console.log(`[Blackjack] ===== END PAYOUT PROCESSING =====`);
               
-              // Update Firebase database
+              // CRITICAL: Server manages ALL balance updates for blackjack
+              // 1. Update Firebase (SERVER is source of truth)
+              // 2. Update room state
+              // 3. Broadcast to clients (clients only receive and display, never update Firebase)
               await updateUserOrbs(payoutPlayerId, newBalance);
               console.log(`[Blackjack] Updated Firebase: ${payoutPlayerId} -> ${newBalance} orbs`);
               
-              // Update room state
+              // Update room state (keep in sync with Firebase)
               roomPlayer.orbs = newBalance;
               players.updatePlayerOrbs(payoutPlayerId, newBalance);
               console.log(`[Blackjack] Updated room state: ${payoutPlayerId} -> ${newBalance} orbs`);
               
-              // Emit update with payout info
+              // Broadcast to clients (clients receive and display only, do NOT update Firebase)
               // payout is the TOTAL amount to add (includes bet return + winnings)
               // For a 10k bet win: payout = 20k (10k bet return + 10k win)
               // For blackjack: payout = 25k (10k bet return + 15k win at 3:2)
               io.to(mapping.roomId).emit('player_orbs_updated', { 
                 playerId: payoutPlayerId, 
-                orbs: newBalance,
+                orbs: newBalance, // Server already updated Firebase
                 rewardAmount: payout, // Total payout amount (bet return + winnings)
                 rewardType: 'blackjack'
               });
@@ -1915,6 +1940,10 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
             
             const roomPlayer = rooms.getPlayerInRoom(mapping.roomId, payoutPlayerId);
             if (roomPlayer) {
+              // CRITICAL: Server manages ALL balance updates for blackjack
+              // 1. Update Firebase (SERVER is source of truth)
+              // 2. Update room state
+              // 3. Broadcast to clients (clients only receive and display, never update Firebase)
               const { getUserData, updateUserOrbs } = await import('./firebase');
               const userData = await getUserData(payoutPlayerId);
               const currentOrbs = userData?.orbs || roomPlayer.orbs || 0;
@@ -1926,7 +1955,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
               
               io.to(mapping.roomId).emit('player_orbs_updated', { 
                 playerId: payoutPlayerId, 
-                orbs: newBalance,
+                orbs: newBalance, // Server already updated Firebase
                 rewardAmount: payout, // Total payout amount (bet return + winnings)
                 rewardType: 'blackjack'
               });
@@ -2042,27 +2071,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         const payouts = blackjack.calculatePayouts(tableId);
         
         payouts.forEach(async (payout, payoutPlayerId) => {
-          // CRITICAL: For losses (payout = 0), send confirmation that bet was deducted
+          // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
+          // Don't send any event for losses - bet deduction event was already sent when bet was placed
           if (payout === 0) {
-            console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted`);
-            
-            // Send confirmation event to client so they know the bet was deducted
-            const roomPlayer = rooms.getPlayerInRoom(mapping.roomId, payoutPlayerId);
-            if (roomPlayer) {
-              const currentBalance = roomPlayer.orbs || 0;
-              console.log(`[Blackjack] Sending loss confirmation for ${payoutPlayerId}: balance=${currentBalance} (bet already deducted)`);
-              io.to(mapping.roomId).emit('player_orbs_updated', { 
-                playerId: payoutPlayerId, 
-                orbs: currentBalance,
-                rewardAmount: 0, // 0 indicates loss (no payout, bet already deducted)
-                rewardType: 'blackjack'
-              });
-            }
+            console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted (no event sent)`);
             return; // Don't process further - bet was already deducted when placed
           }
           
           const roomPlayer = rooms.getPlayerInRoom(mapping.roomId, payoutPlayerId);
           if (roomPlayer) {
+            // CRITICAL: Server manages ALL balance updates for blackjack
+            // 1. Update Firebase (SERVER is source of truth)
+            // 2. Update room state
+            // 3. Broadcast to clients (clients only receive and display, never update Firebase)
             const { getUserData, updateUserOrbs } = await import('./firebase');
             const userData = await getUserData(payoutPlayerId);
             const currentOrbs = userData?.orbs || roomPlayer.orbs || 0;
@@ -2074,7 +2095,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
             
             io.to(mapping.roomId).emit('player_orbs_updated', { 
               playerId: payoutPlayerId, 
-              orbs: newBalance,
+              orbs: newBalance, // Server already updated Firebase
               rewardAmount: payout, // Total payout amount (bet return + winnings)
               rewardType: 'blackjack'
             });
