@@ -334,8 +334,19 @@ function attachListeners(sock: Socket) {
   sock.on('player_moved', ({ playerId, x, y, direction }) => {
     const state = useGameStore.getState();
     if (playerId === state.playerId) {
-      // Update local player position (e.g., when joining blackjack table)
-      state.setLocalPlayerPosition(x, y, direction);
+      // Only update local player position if it's a significant change (e.g., blackjack table teleport)
+      // This prevents feedback loops from normal movement while still handling special positioning
+      const localPlayer = state.localPlayer;
+      if (localPlayer) {
+        const dx = Math.abs(x - localPlayer.x);
+        const dy = Math.abs(y - localPlayer.y);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        // If position change is significant (>50 pixels), it's likely a special teleport (e.g., blackjack table)
+        // Otherwise, ignore it to prevent feedback loops from normal movement
+        if (distance > 50) {
+          state.setLocalPlayerPosition(x, y, direction);
+        }
+      }
     } else {
       state.updatePlayerPosition(playerId, x, y, direction);
     }
