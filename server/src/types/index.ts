@@ -183,7 +183,7 @@ export interface ServerToClientEvents {
   player_joined: (player: PlayerWithChat) => void;
   player_moved: (data: { playerId: string; x: number; y: number; direction: Direction }) => void;
   player_left: (data: { playerId: string }) => void;
-  chat_message: (data: { playerId: string; text: string; createdAt: number }) => void;
+  chat_message: (data: { playerId: string; text: string; createdAt: number; textColor?: string }) => void;
   orb_spawned: (orb: Orb) => void;
   orb_collected: (data: { orbId: string; playerId: string; newBalance: number; orbValue?: number }) => void;
   fountain_next_spawn: (data: { nextSpawnTime: number }) => void;
@@ -226,7 +226,7 @@ export interface ServerToClientEvents {
   trade_opened: (data: { otherPlayerId: string; otherPlayerName: string }) => void;
   trade_modified: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number; accepted: boolean }) => void;
   trade_accepted: (data: { playerId: string }) => void;
-  trade_completed: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number }) => void;
+  trade_completed: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number; newBalance?: number }) => void;
   trade_declined: () => void;
   trade_cancelled: () => void;
   trade_error: (data: { message: string }) => void;
