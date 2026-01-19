@@ -7062,10 +7062,20 @@ export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, ca
   }
   
   // Determine return room ID (use previousRoomId if available, otherwise infer from current casino room)
-  let returnRoomId = previousRoomId;
-  if (!returnRoomId && currentRoomId && currentRoomId.startsWith('casino-')) {
-    // Infer from current casino room ID (e.g., casino-eu-1 -> eu-1)
-    returnRoomId = currentRoomId.replace('casino-', '');
+  let returnRoomId = previousRoomId || null;
+  if (!returnRoomId && currentRoomId) {
+    if (currentRoomId.startsWith('casino-')) {
+      // Infer from current casino room ID (e.g., casino-eu-1 -> eu-1)
+      returnRoomId = currentRoomId.replace('casino-', '');
+    } else if (currentRoomId.startsWith('millionaires_lounge-')) {
+      // Infer from current lounge room ID (e.g., millionaires_lounge-eu-1 -> eu-1)
+      returnRoomId = currentRoomId.replace('millionaires_lounge-', '');
+    }
+  }
+  
+  // Debug: Log if returnRoomId is still null
+  if (!returnRoomId) {
+    console.warn('[drawReturnPortal] Could not determine returnRoomId', { previousRoomId, currentRoomId });
   }
   
   // Draw server name and player count above portal (similar to enter casino portal)
