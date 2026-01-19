@@ -172,7 +172,7 @@ export const playLevelUpSound = () => {
 export const playSellSound = () => {
   const state = useGameStore.getState();
   if (state.sfxEnabled) {
-    const sound = new Audio('/purchase-success-384963.mp3');
+    const sound = new Audio('/click-sound-432501.mp3');
     sound.volume = state.sfxVolume / 100;
     sound.play().catch(() => {});
   }
@@ -213,6 +213,16 @@ export const playPortalSound = () => {
   const state = useGameStore.getState();
   if (state.sfxEnabled) {
     const sound = new Audio('/sci-fi-portal-jump-02-416162.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch(() => {});
+  }
+};
+
+// Play the blackjack loss sound
+export const playBlackjackLossSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/classic-game-action-negative-8-224414.mp3');
     sound.volume = state.sfxVolume / 100;
     sound.play().catch(() => {});
   }

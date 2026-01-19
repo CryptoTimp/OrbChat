@@ -140,7 +140,7 @@ export function joinTable(tableId: string, playerId: string, playerName: string)
     return { success: false, message: 'Table is full' };
   }
   
-  // Find available seat (0-6)
+  // Find available seat (0-3)
   const occupiedSeats = new Set(table.state.players.map(p => p.seat));
   let seat = -1;
   for (let i = 0; i < BLACKJACK_CONSTANTS.MAX_PLAYERS_PER_TABLE; i++) {
@@ -178,7 +178,8 @@ export function leaveTable(tableId: string, playerId: string): { success: boolea
   
   const playerIndex = table.state.players.findIndex(p => p.playerId === playerId);
   if (playerIndex === -1) {
-    return { success: false, message: 'Player not at table' };
+    // Player is already not at the table - this is fine, just return success
+    return { success: true };
   }
   
   const player = table.state.players[playerIndex];
@@ -637,21 +638,44 @@ function advanceToNextPlayer(table: BlackjackTable): void {
     return;
   }
   
+  // currentPlayerIndex is an index into table.state.players, not activePlayers
+  // We need to find the corresponding index in activePlayers, then find the next player
+  const currentPlayer = table.state.players[table.state.currentPlayerIndex];
+  if (!currentPlayer) {
+    console.error('[Blackjack] advanceToNextPlayer: Current player not found at index', table.state.currentPlayerIndex);
+    return;
+  }
+  
+  // Find the index of current player in activePlayers array
+  const currentActiveIndex = activePlayers.findIndex(p => p.playerId === currentPlayer.playerId);
+  if (currentActiveIndex === -1) {
+    console.error('[Blackjack] advanceToNextPlayer: Current player not in activePlayers');
+    return;
+  }
+  
   // Find next player with an active hand
-  let nextIndex = table.state.currentPlayerIndex;
   let found = false;
   
+  // Start searching from the next player (wrapping around)
   for (let i = 0; i < activePlayers.length; i++) {
-    nextIndex = (table.state.currentPlayerIndex + i + 1) % activePlayers.length;
-    const player = activePlayers[nextIndex];
+    const nextActiveIndex = (currentActiveIndex + i + 1) % activePlayers.length;
+    const nextPlayer = activePlayers[nextActiveIndex];
     
     // Check if player has any hands that need to be played
-    for (let handIdx = 0; handIdx < player.hands.length; handIdx++) {
-      const hand = player.hands[handIdx];
+    for (let handIdx = 0; handIdx < nextPlayer.hands.length; handIdx++) {
+      const hand = nextPlayer.hands[handIdx];
       if (!hand.isStand && !hand.isBust && !hand.isBlackjack) {
-        table.state.currentPlayerIndex = nextIndex;
-        player.currentHandIndex = handIdx;
+        // Find the index of this player in the full players array
+        const nextPlayerIndex = table.state.players.findIndex(p => p.playerId === nextPlayer.playerId);
+        if (nextPlayerIndex === -1) {
+          console.error('[Blackjack] advanceToNextPlayer: Next player not found in players array');
+          continue;
+        }
+        
+        table.state.currentPlayerIndex = nextPlayerIndex;
+        nextPlayer.currentHandIndex = handIdx;
         found = true;
+        console.log(`[Blackjack] advanceToNextPlayer: Moving to player ${nextPlayer.playerId} (index ${nextPlayerIndex} in players, ${nextActiveIndex} in activePlayers)`);
         break;
       }
     }
@@ -661,6 +685,7 @@ function advanceToNextPlayer(table: BlackjackTable): void {
   
   // If no more players need to play, move to dealer turn
   if (!found) {
+    console.log('[Blackjack] advanceToNextPlayer: No more players with active hands, moving to dealer turn');
     table.state.gameState = 'dealer_turn';
     table.state.currentPlayerIndex = null;
     playDealerHand(table);
@@ -711,6 +736,8 @@ export function calculatePayouts(tableId: string): Map<string, number> {
       console.log(`  - cards=${hand.cards.length}`);
       console.log(`  - isBust=${hand.isBust}`);
       console.log(`  - isBlackjack=${hand.isBlackjack}`);
+      console.log(`  - isDoubleDown=${hand.isDoubleDown}`);
+      console.log(`  - isSplit=${hand.isSplit}`);
       
       // CRITICAL: Validate bet amount
       const numericBet = Number(hand.bet);
@@ -729,6 +756,14 @@ export function calculatePayouts(tableId: string): Map<string, number> {
       // Use numeric bet for all calculations
       const bet = numericBet;
       
+      // Log bet type for verification
+      if (hand.isDoubleDown) {
+        console.log(`[Blackjack Payout] *** DOUBLE-DOWN HAND *** Bet is doubled: ${bet} (original was ${bet / 2})`);
+      }
+      if (hand.isSplit) {
+        console.log(`[Blackjack Payout] *** SPLIT HAND *** Bet: ${bet} (each split hand has its own bet)`);
+      }
+      
       // CRITICAL: Recalculate hand value and bust status to ensure accuracy
       // The isBust flag might not be set correctly, so we recalculate it here
       const playerHandValue = calculateHandValue(hand.cards);
@@ -736,45 +771,65 @@ export function calculatePayouts(tableId: string): Map<string, number> {
       
       console.log(`[Blackjack Payout] Hand value calculation: playerHandValue=${playerHandValue}, actuallyBust=${actuallyBust}, hand.isBust=${hand.isBust}`);
       
+      // Calculate payout for this hand (will be added to totalPayout)
+      let handPayout = 0;
+      
       // If the hand is actually bust (value > 21), treat it as a loss regardless of the flag
       if (actuallyBust || hand.isBust) {
         // Player loses - bet already deducted, no payout (net loss = -bet)
         console.log(`[Blackjack Payout] *** PLAYER BUST (LOSS) ***`);
         console.log(`[Blackjack Payout] Hand value ${playerHandValue} > 21, player loses`);
         console.log(`[Blackjack Payout] Bet was ${bet}, payout=0 (bet already deducted, no return)`);
-        totalPayout = 0; // Use assignment, not +=
+        handPayout = 0; // Loss - no payout
       } else if (hand.isBlackjack && !table.state.dealerHasBlackjack) {
         // Player blackjack pays 3:2
         // Return bet + win (bet * 1.5) = bet * 2.5 total
+        // For split blackjack: currently pays 3:2 (same as regular blackjack)
+        // For double-down: bet is already doubled, so blackjack payout = doubled bet * 2.5
         const blackjackWin = Math.floor(bet * BLACKJACK_CONSTANTS.BLACKJACK_PAYOUT);
         const blackjackPayout = bet + blackjackWin;
-        console.log(`[Blackjack Payout] Player blackjack: bet=${bet}, win=${blackjackWin}, total payout=${blackjackPayout} (should be ${bet * 2.5})`);
+        console.log(`[Blackjack Payout] *** PLAYER BLACKJACK ***`);
+        console.log(`[Blackjack Payout] Player blackjack: bet=${bet}, win=${blackjackWin}, total payout=${blackjackPayout} (should be ${Math.floor(bet * 2.5)})`);
+        if (hand.isDoubleDown) {
+          console.log(`  - DOUBLE-DOWN: Bet was doubled, so blackjack payout is doubled bet * 2.5 = ${blackjackPayout}`);
+        }
+        if (hand.isSplit) {
+          console.log(`  - SPLIT: This is a split hand that got blackjack, payout is bet * 2.5 = ${blackjackPayout} (will be summed with other split hands)`);
+        }
         if (blackjackPayout !== Math.floor(bet * 2.5)) {
           console.error(`[Blackjack Payout] CRITICAL ERROR: Blackjack payout wrong! Expected ${Math.floor(bet * 2.5)}, got ${blackjackPayout}`);
         }
-        totalPayout = blackjackPayout; // Use assignment, not +=
+        handPayout = blackjackPayout;
       } else if (table.state.dealerHasBlackjack) {
         // Dealer blackjack beats all (except player blackjack which is handled above)
         if (!hand.isBlackjack) {
           // Player loses - bet already deducted, no payout (net loss = -bet)
           console.log(`[Blackjack Payout] *** PLAYER LOSS (DEALER BLACKJACK) ***`);
           console.log(`[Blackjack Payout] Dealer has blackjack, player loses`);
-          totalPayout = 0; // Use assignment, not +=
+          handPayout = 0; // Loss - no payout
         } else {
           // Push (both have blackjack) - return bet only
           console.log(`[Blackjack Payout] *** PUSH (BOTH BLACKJACK) ***`);
-          totalPayout = bet; // Use assignment, not +=
+          handPayout = bet; // Push - return bet only
         }
       } else if (dealerBust) {
         // Dealer busts, player wins
         // Return bet + win = bet * 2
+        // For double-down: bet is already doubled, so payout = doubled bet * 2
+        // For split: each hand has original bet, payout = bet * 2 per hand
         const winPayout = bet + bet;
         console.log(`[Blackjack Payout] *** PLAYER WIN (DEALER BUST) ***`);
         console.log(`[Blackjack Payout] Dealer bust - Player win: bet=${bet}, payout=${winPayout} (bet return + win, should be ${bet * 2})`);
+        if (hand.isDoubleDown) {
+          console.log(`  - DOUBLE-DOWN: Bet was doubled, so payout is doubled bet * 2 = ${winPayout}`);
+        }
+        if (hand.isSplit) {
+          console.log(`  - SPLIT: This is one split hand, payout is bet * 2 = ${winPayout} (will be summed with other split hands)`);
+        }
         if (winPayout !== bet * 2) {
           console.error(`[Blackjack Payout] CRITICAL ERROR: Win payout wrong! Expected ${bet * 2}, got ${winPayout}`);
         }
-        totalPayout = winPayout; // Use assignment, not +=
+        handPayout = winPayout;
       } else {
         // Compare player value vs dealer value
         // Use the already-calculated playerHandValue from above (or recalculate if not set)
@@ -788,7 +843,7 @@ export function calculatePayouts(tableId: string): Map<string, number> {
         if (playerValue > 21) {
           console.error(`[Blackjack Payout] CRITICAL ERROR: Player hand value ${playerValue} > 21 but not marked as bust!`);
           console.error(`[Blackjack Payout] Treating as bust - no payout`);
-          totalPayout += 0;
+          handPayout = 0; // Loss - no payout
         } else {
           // CRITICAL: Ensure we're comparing numbers, not strings or other types
           const playerVal = Number(playerValue);
@@ -798,46 +853,66 @@ export function calculatePayouts(tableId: string): Map<string, number> {
           
           if (isNaN(playerVal) || isNaN(dealerVal)) {
             console.error(`[Blackjack Payout] CRITICAL ERROR: Invalid hand values! player=${playerVal}, dealer=${dealerVal}`);
-            totalPayout = 0; // Default to loss if values are invalid
+            handPayout = 0; // Default to loss if values are invalid
           } else if (dealerBust) {
             // Dealer busted - player wins (unless player also busted, which is already handled above)
             // Return bet + win = bet * 2
+            // For double-down: bet is already doubled, so payout = doubled bet * 2
+            // For split: each hand has original bet, payout = bet * 2 per hand
             const winPayout = bet + bet;
             console.log(`[Blackjack Payout] *** PLAYER WIN (DEALER BUST) ***`);
             console.log(`[Blackjack Payout] Dealer busted with ${dealerVal}, player wins with ${playerVal}`);
             console.log(`[Blackjack Payout] Payout: ${winPayout} (bet ${bet} + win ${bet})`);
-            totalPayout = winPayout; // Use assignment, not +=
+            if (hand.isDoubleDown) {
+              console.log(`  - DOUBLE-DOWN: Bet was doubled, so payout is doubled bet * 2 = ${winPayout}`);
+            }
+            if (hand.isSplit) {
+              console.log(`  - SPLIT: This is one split hand, payout is bet * 2 = ${winPayout} (will be summed with other split hands)`);
+            }
+            handPayout = winPayout;
           } else if (playerVal > dealerVal) {
             // Player wins - return bet + win = bet * 2
             // Standard blackjack: 1:1 payout (bet returned + equal win)
+            // For double-down: bet is already doubled, so payout = doubled bet * 2
+            // For split: each hand has original bet, payout = bet * 2 per hand
             const winAmount = bet; // Win amount equals bet
-            const winPayout = bet + winAmount; // Total: bet return (10k) + win (10k) = 20k for 10k bet
+            const winPayout = bet + winAmount; // Total: bet return + win = bet * 2
             console.log(`[Blackjack Payout] *** PLAYER WIN ***`);
             console.log(`[Blackjack Payout] Player win calculation:`);
             console.log(`  - bet=${bet} (from hand.bet=${hand.bet})`);
+            if (hand.isDoubleDown) {
+              console.log(`  - DOUBLE-DOWN: Bet was doubled, so payout is doubled bet * 2 = ${winPayout}`);
+            }
+            if (hand.isSplit) {
+              console.log(`  - SPLIT: This is one split hand, payout is bet * 2 = ${winPayout} (will be summed with other split hands)`);
+            }
             console.log(`  - winAmount=${winAmount}`);
             console.log(`  - winPayout=${winPayout} (should be ${bet * 2})`);
             if (winPayout !== bet * 2) {
               console.error(`[Blackjack Payout] CRITICAL ERROR: Payout calculation wrong! Expected ${bet * 2}, got ${winPayout}`);
             }
-            totalPayout = winPayout; // Use assignment, not +=
+            handPayout = winPayout;
           } else if (playerVal < dealerVal) {
             // Player loses - bet already deducted, no payout (net loss = -bet)
             console.log(`[Blackjack Payout] *** PLAYER LOSS ***`);
             console.log(`[Blackjack Payout] Player loss: playerValue=${playerVal} < dealerValue=${dealerVal}`);
             console.log(`[Blackjack Payout] Bet was ${bet}, payout=0 (bet already deducted, no return)`);
-            // CRITICAL: Explicitly set to 0, don't add anything
-            totalPayout = 0; // Use assignment, not +=
-            console.log(`[Blackjack Payout] Verified: totalPayout after loss = ${totalPayout}`);
+            // CRITICAL: Explicitly set to 0 for loss
+            handPayout = 0;
+            console.log(`[Blackjack Payout] Verified: handPayout after loss = ${handPayout}`);
           } else {
             // Push (tie) - return bet only
             console.log(`[Blackjack Payout] *** PUSH (TIE) ***`);
             console.log(`[Blackjack Payout] Push: playerValue=${playerVal} == dealerValue=${dealerVal}`);
             console.log(`[Blackjack Payout] Bet was ${bet}, returning bet only: ${bet}`);
-            totalPayout = bet; // Use assignment, not +=
+            handPayout = bet; // Push - return bet only
           }
         }
       }
+      
+      // Add this hand's payout to the total (supports multiple hands from splitting)
+      totalPayout += handPayout;
+      console.log(`[Blackjack Payout] Hand payout: ${handPayout}, totalPayout so far: ${totalPayout}`);
     }
     
     // CRITICAL: Final validation - if player lost, payout MUST be 0

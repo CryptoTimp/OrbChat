@@ -22,6 +22,7 @@ export interface Player {
 export interface ChatBubble {
   text: string;
   createdAt: number;
+  textColor?: string; // Optional color override (e.g., green for wins, red for losses)
 }
 
 export interface PlayerWithChat extends Player {
@@ -159,6 +160,11 @@ export interface ClientToServerEvents {
   blackjack_stand: (data: { tableId: string; handIndex?: number }) => void;
   blackjack_double_down: (data: { tableId: string; handIndex?: number }) => void;
   blackjack_split: (data: { tableId: string; handIndex?: number }) => void;
+  trade_request: (data: { otherPlayerId: string }) => void;
+  trade_modify: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number }) => void;
+  trade_accept: () => void;
+  trade_decline: () => void;
+  trade_cancel: () => void;
 }
 
 // Socket Events - Server to Client
@@ -216,6 +222,14 @@ export interface ServerToClientEvents {
   portal_used: (data: { playerId: string; playerName: string; portalType: 'casino' | 'lounge' | 'return' }) => void;
   blackjack_state_update: (data: { tableId: string; state: BlackjackTableState }) => void;
   blackjack_error: (data: { tableId: string; message: string }) => void;
+  trade_requested: (data: { fromPlayerId: string; fromPlayerName: string }) => void;
+  trade_opened: (data: { otherPlayerId: string; otherPlayerName: string }) => void;
+  trade_modified: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number; accepted: boolean }) => void;
+  trade_accepted: (data: { playerId: string }) => void;
+  trade_completed: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number }) => void;
+  trade_declined: () => void;
+  trade_cancelled: () => void;
+  trade_error: (data: { message: string }) => void;
   error: (data: { message: string }) => void;
 }
 
@@ -244,7 +258,7 @@ export interface BlackjackHand {
 export interface BlackjackPlayer {
   playerId: string;
   playerName: string;
-  seat: number; // 0-6 (7 seats per table)
+  seat: number; // 0-3 (4 seats per table)
   hands: BlackjackHand[]; // Can have multiple hands if split
   currentHandIndex: number; // Which hand is currently being played
   hasPlacedBet: boolean;
@@ -289,7 +303,7 @@ export const GAME_CONSTANTS = {
 export const BLACKJACK_CONSTANTS = {
   MIN_BET: 10000,
   MAX_BET: 1000000,
-  MAX_PLAYERS_PER_TABLE: 7,
+  MAX_PLAYERS_PER_TABLE: 4,
   BLACKJACK_PAYOUT: 1.5, // 3:2 payout
   DEALER_STAND_VALUE: 17,
 };

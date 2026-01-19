@@ -56,18 +56,41 @@ export function InventoryModal() {
 
   if (!inventoryOpen) return null;
 
-  const equippedItems = inventory.filter(inv => inv.equipped).map(inv => inv.itemId);
+  // Get equipped items (unique itemIds that are equipped)
+  const equippedItems = Array.from(new Set(
+    inventory.filter(inv => inv.equipped).map(inv => inv.itemId)
+  ));
 
   // Separate logs from cosmetic items
   const logs = inventory.filter(inv => inv.itemId === 'log');
   const logCount = logs.length;
   const cosmeticItems = inventory.filter(inv => inv.itemId !== 'log');
 
-  // Get owned items with their shop details (excluding logs)
-  const ownedItems = cosmeticItems.map(inv => {
-    const shopItem = shopItems.find(item => item.id === inv.itemId);
+  // Group items by itemId and count quantities
+  const itemCounts = new Map<string, { quantity: number; equipped: boolean }>();
+  cosmeticItems.forEach(inv => {
+    const existing = itemCounts.get(inv.itemId);
+    if (existing) {
+      existing.quantity += 1;
+      // If any instance is equipped, mark as equipped
+      if (inv.equipped) {
+        existing.equipped = true;
+      }
+    } else {
+      itemCounts.set(inv.itemId, {
+        quantity: 1,
+        equipped: inv.equipped
+      });
+    }
+  });
+
+  // Get owned items with their shop details (excluding logs), grouped by itemId
+  const ownedItems = Array.from(itemCounts.entries()).map(([itemId, { quantity, equipped }]) => {
+    const shopItem = shopItems.find(item => item.id === itemId);
     return {
-      ...inv,
+      itemId,
+      quantity,
+      equipped,
       details: shopItem,
     };
   }).filter(item => item.details);
@@ -161,6 +184,13 @@ export function InventoryModal() {
         `}
         style={!item.equipped && !isPreviewing ? { boxShadow: `0 0 8px ${rarityColor.glow}` } : undefined}
       >
+        {/* Quantity badge - show if quantity > 1 */}
+        {item.quantity > 1 && (
+          <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded font-bold z-10">
+            {item.quantity}
+          </div>
+        )}
+        
         {/* Rarity indicator */}
         <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-pixel ${rarityColor.bg} ${rarityColor.text}`}>
           {(item.details.rarity || 'common').charAt(0).toUpperCase()}
@@ -412,7 +442,14 @@ export function InventoryModal() {
           {/* Item count & close */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-lg">
-              <span className="text-purple-300 font-pixel text-sm">{ownedItems.length} items</span>
+              <span className="text-purple-300 font-pixel text-sm">
+                {ownedItems.length} {ownedItems.length === 1 ? 'item' : 'items'}
+                {cosmeticItems.length > ownedItems.length && (
+                  <span className="text-gray-400 text-xs ml-1">
+                    ({cosmeticItems.length} total)
+                  </span>
+                )}
+              </span>
             </div>
 
             <button

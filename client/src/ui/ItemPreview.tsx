@@ -2278,41 +2278,41 @@ function drawBoostPreview(ctx: CanvasRenderingContext2D, itemId: string, cx: num
       });
     } else {
       // Regular speed boost - draw speed lines / motion blur effect
-      ctx.strokeStyle = secondaryColor;
-      ctx.lineWidth = 2 * p;
-      ctx.globalAlpha = 0.6;
-      
-      // Motion lines
-      for (let i = 0; i < 3; i++) {
-        const y = cy - 4 * p + i * 4 * p;
-        ctx.beginPath();
-        ctx.moveTo(cx - 10 * p, y);
-        ctx.lineTo(cx - 4 * p, y);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      
-      // Draw lightning bolt (speed symbol)
-      ctx.fillStyle = primaryColor;
+    ctx.strokeStyle = secondaryColor;
+    ctx.lineWidth = 2 * p;
+    ctx.globalAlpha = 0.6;
+    
+    // Motion lines
+    for (let i = 0; i < 3; i++) {
+      const y = cy - 4 * p + i * 4 * p;
       ctx.beginPath();
-      ctx.moveTo(cx + 2 * p, cy - 8 * p);  // Top
-      ctx.lineTo(cx - 4 * p, cy + p);       // Left middle
-      ctx.lineTo(cx - p, cy + p);           // Inner left
-      ctx.lineTo(cx - 3 * p, cy + 8 * p);   // Bottom
-      ctx.lineTo(cx + 4 * p, cy - p);       // Right middle
-      ctx.lineTo(cx + p, cy - p);           // Inner right
-      ctx.closePath();
-      ctx.fill();
-      
-      // Highlight on lightning
-      ctx.fillStyle = secondaryColor;
-      ctx.beginPath();
-      ctx.moveTo(cx + p, cy - 6 * p);
-      ctx.lineTo(cx - 2 * p, cy);
-      ctx.lineTo(cx, cy);
-      ctx.lineTo(cx + 2 * p, cy - 4 * p);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(cx - 10 * p, y);
+      ctx.lineTo(cx - 4 * p, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    
+    // Draw lightning bolt (speed symbol)
+    ctx.fillStyle = primaryColor;
+    ctx.beginPath();
+    ctx.moveTo(cx + 2 * p, cy - 8 * p);  // Top
+    ctx.lineTo(cx - 4 * p, cy + p);       // Left middle
+    ctx.lineTo(cx - p, cy + p);           // Inner left
+    ctx.lineTo(cx - 3 * p, cy + 8 * p);   // Bottom
+    ctx.lineTo(cx + 4 * p, cy - p);       // Right middle
+    ctx.lineTo(cx + p, cy - p);           // Inner right
+    ctx.closePath();
+    ctx.fill();
+    
+    // Highlight on lightning
+    ctx.fillStyle = secondaryColor;
+    ctx.beginPath();
+    ctx.moveTo(cx + p, cy - 6 * p);
+    ctx.lineTo(cx - 2 * p, cy);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx + 2 * p, cy - 4 * p);
+    ctx.closePath();
+    ctx.fill();
     }
   } else {
     // Fallback: draw lightning bolt if we can't determine type

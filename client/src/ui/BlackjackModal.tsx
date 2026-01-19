@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../state/gameStore';
 import { useSocket } from '../hooks/useSocket';
-import { playClickSound, playCloseSound, playPurchaseSound } from '../utils/sounds';
+import { playClickSound, playCloseSound, playLevelUpSound, playBlackjackLossSound } from '../utils/sounds';
 import { BlackjackTableState, BlackjackPlayer, BlackjackHand, BlackjackCard, PlayerWithChat } from '../types';
-import { getOrbCountColor, drawPlayer } from '../game/renderer';
+import { getOrbCountColor, setDealerSpeechBubble } from '../game/renderer';
 import { GAME_CONSTANTS } from '../types';
 
 const MIN_BET = 10000;
@@ -138,20 +138,35 @@ export function BlackjackModal() {
     blackjackSplit 
   } = useSocket();
   
-  const [betAmount, setBetAmount] = useState(MIN_BET);
+  const [betAmount, setBetAmount] = useState(50000); // Start with minimum button value
   const [isJoining, setIsJoining] = useState(false);
   const [lastPayout, setLastPayout] = useState<number | null>(null);
   const [balanceBeforeRound, setBalanceBeforeRound] = useState<number | null>(null);
   const lastBlackjackPayoutRef = useRef<number | null>(null); // Track payout from server events
-  const playerCanvasRef = useRef<HTMLCanvasElement>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  
+  // Session stats - track since joining the table
+  const [sessionStartingBalance, setSessionStartingBalance] = useState<number | null>(null);
+  const [sessionProfitLoss, setSessionProfitLoss] = useState<number>(0);
+  const [sessionLastWin, setSessionLastWin] = useState<number | null>(null);
+  const sessionBlackjackChangesRef = useRef<number>(0); // Track cumulative blackjack balance changes (excludes idle rewards)
   const previousCardCountsRef = useRef<Map<string, { dealer: number; players: Map<string, number> }>>(new Map());
   const [cardAnimations, setCardAnimations] = useState<Map<string, { progress: number; startTime: number }>>(new Map());
+  const previousBustStatesRef = useRef<Map<string, boolean>>(new Map()); // Track previous bust state for each hand (key: playerId-handIndex)
   
   useEffect(() => {
     if (blackjackTableOpen && selectedTableId) {
       setIsJoining(true);
       console.log('[BlackjackModal] Joining table:', selectedTableId);
+      
+      // Initialize session stats when joining table
+      if (localPlayer?.orbs !== undefined) {
+        setSessionStartingBalance(localPlayer.orbs);
+        setSessionProfitLoss(0);
+        setSessionLastWin(null);
+        sessionBlackjackChangesRef.current = 0; // Reset cumulative blackjack changes
+        console.log('[BlackjackModal] Session stats initialized - starting balance:', localPlayer.orbs);
+      }
+      
       joinBlackjackTable(selectedTableId);
       const timeout = setTimeout(() => {
         setIsJoining(false);
@@ -162,6 +177,11 @@ export function BlackjackModal() {
         if (selectedTableId) {
           leaveBlackjackTable(selectedTableId);
         }
+        // Reset session stats when leaving
+        setSessionStartingBalance(null);
+        setSessionProfitLoss(0);
+        setSessionLastWin(null);
+        sessionBlackjackChangesRef.current = 0;
       };
     }
   }, [blackjackTableOpen, selectedTableId]);
@@ -276,8 +296,18 @@ export function BlackjackModal() {
         // 0 payouts (losses) are not sent by server, so we don't show anything
         if (event.detail.payout !== 0) {
           setLastPayout(event.detail.payout);
+          lastBlackjackPayoutRef.current = event.detail.payout; // Track that we received a payout
+          
+          // Update session last win if payout is positive
+          if (event.detail.payout > 0) {
+            setSessionLastWin(event.detail.payout);
+            // Play win sound
+            playLevelUpSound();
+          }
+          
           setTimeout(() => {
             setLastPayout(null);
+            lastBlackjackPayoutRef.current = null;
           }, 5000);
         }
       }
@@ -288,6 +318,26 @@ export function BlackjackModal() {
       window.removeEventListener('blackjack_payout', handlePayout as EventListener);
     };
   }, [localPlayer?.id]);
+  
+  // Listen for blackjack balance changes and update session P/L
+  useEffect(() => {
+    const handleBlackjackBalanceChange = (event: CustomEvent<{ rewardAmount: number; playerId: string }>) => {
+      if (event.detail.playerId === localPlayer?.id && sessionStartingBalance !== null) {
+        // Accumulate blackjack-related balance changes (bets and payouts)
+        sessionBlackjackChangesRef.current += event.detail.rewardAmount;
+        setSessionProfitLoss(sessionBlackjackChangesRef.current);
+        console.log('[BlackjackModal] Session P/L updated:', {
+          change: event.detail.rewardAmount,
+          cumulative: sessionBlackjackChangesRef.current
+        });
+      }
+    };
+    
+    window.addEventListener('blackjack_balance_change', handleBlackjackBalanceChange as EventListener);
+    return () => {
+      window.removeEventListener('blackjack_balance_change', handleBlackjackBalanceChange as EventListener);
+    };
+  }, [localPlayer?.id, sessionStartingBalance]);
   
   useEffect(() => {
     if (localPlayer && blackjackGameState) {
@@ -301,11 +351,163 @@ export function BlackjackModal() {
         console.log('[BlackjackModal] Stored balance after bet:', localPlayer.orbs);
       }
       
+      // Detect when a hand becomes bust (play sound immediately)
+      if (currentPlayer) {
+        currentPlayer.hands.forEach((hand, handIndex) => {
+          const handKey = `${currentPlayer.playerId}-${handIndex}`;
+          const previousBustState = previousBustStatesRef.current.get(handKey) || false;
+          const currentBustState = hand.isBust || false;
+          
+          // If hand just became bust, play loss sound
+          if (!previousBustState && currentBustState) {
+            playBlackjackLossSound();
+            console.log('[BlackjackModal] Hand busted - playing loss sound', { handIndex, handValue: calculateHandValueClient(hand.cards) });
+          }
+          
+          // Update previous bust state
+          previousBustStatesRef.current.set(handKey, currentBustState);
+        });
+      }
+      
+      // Detect when round finishes and player lost (not by busting)
+      // This happens when: gameState becomes 'finished', player didn't bust, but dealer won
+      if (currentGameState === 'finished' && previousGameState !== 'finished' && currentPlayer) {
+        const dealerValue = calculateHandValueClient(blackjackGameState.dealerHand);
+        const dealerBust = dealerValue > 21;
+        const dealerHasBlackjack = blackjackGameState.dealerHasBlackjack;
+        
+        // Check each hand to see if player lost (not by busting)
+        currentPlayer.hands.forEach((hand, handIndex) => {
+          const handValue = calculateHandValueClient(hand.cards);
+          const isBust = handValue > 21;
+          const isBlackjack = hand.isBlackjack;
+          
+          // Player lost if:
+          // 1. Dealer has blackjack and player doesn't (and player didn't bust)
+          // 2. Dealer didn't bust and player value < dealer value (and player didn't bust)
+          const lostByStanding = !isBust && (
+            (dealerHasBlackjack && !isBlackjack) ||
+            (!dealerBust && !isBlackjack && handValue < dealerValue)
+          );
+          
+          if (lostByStanding) {
+            playBlackjackLossSound();
+            console.log('[BlackjackModal] Lost by standing - playing loss sound', { 
+              handIndex, 
+              handValue, 
+              dealerValue, 
+              dealerBust, 
+              dealerHasBlackjack 
+            });
+          }
+        });
+      }
+      
+      // Reset bust state tracking when round resets
+      if (currentGameState === 'waiting' || (currentGameState === 'betting' && !currentPlayer?.hasPlacedBet)) {
+        previousBustStatesRef.current.clear();
+      }
+      
       // Reset when new round starts
       if (currentGameState === 'waiting' || (currentGameState === 'betting' && !currentPlayer?.hasPlacedBet)) {
         setBalanceBeforeRound(null);
         setLastPayout(null);
         lastBlackjackPayoutRef.current = null;
+      }
+      
+      // Detect when round finishes and set dealer speech bubbles
+      if (currentGameState === 'finished' && previousGameState !== 'finished' && selectedTableId) {
+        // Extract table number from tableId (e.g., "blackjack_table_1" -> 1)
+        const tableNumber = selectedTableId.replace('blackjack_table_', '');
+        const dealerId = `blackjack_dealer_${tableNumber}`;
+        
+        // Check if any players won or lost
+        const dealerValue = calculateHandValueClient(blackjackGameState.dealerHand);
+        const dealerBust = dealerValue > 21;
+        const dealerHasBlackjack = blackjackGameState.dealerHasBlackjack;
+        
+        let hasWinners = false;
+        let hasLosers = false;
+        
+        for (const player of blackjackGameState.players) {
+          if (!player.hasPlacedBet) continue;
+          
+          for (const hand of player.hands) {
+            const handValue = calculateHandValueClient(hand.cards);
+            const isBust = handValue > 21;
+            const isBlackjack = hand.isBlackjack;
+            
+            // Player busts = loss
+            if (isBust) {
+              hasLosers = true;
+            }
+            // Player blackjack beats dealer (unless dealer also has blackjack, which is a push)
+            else if (isBlackjack && !dealerHasBlackjack) {
+              hasWinners = true;
+            }
+            // Dealer busts = all non-bust players win
+            else if (dealerBust && !isBust) {
+              hasWinners = true;
+            }
+            // Compare values (only if neither busted and neither has blackjack)
+            else if (!dealerBust && !isBust && !isBlackjack && !dealerHasBlackjack) {
+              if (handValue > dealerValue) {
+                hasWinners = true;
+              } else if (handValue < dealerValue) {
+                hasLosers = true;
+              }
+              // If handValue === dealerValue, it's a push (neither wins nor loses)
+            }
+            // If dealer has blackjack and player doesn't, player loses (unless player also has blackjack, which is handled above)
+            else if (dealerHasBlackjack && !isBlackjack && !isBust) {
+              hasLosers = true;
+            }
+          }
+        }
+        
+        // Set dealer speech bubble based on results
+        if (hasWinners && !hasLosers) {
+          // All players won
+          const messages = [
+            'Congratulations, winners!',
+            'Well played!',
+            'Great hands!',
+            'You beat the house!',
+            'Excellent!'
+          ];
+          const message = messages[Math.floor(Math.random() * messages.length)];
+          setDealerSpeechBubble(dealerId, message);
+        } else if (hasLosers && !hasWinners) {
+          // All players lost
+          const messages = [
+            'Better luck next time!',
+            'The house always wins!',
+            'Try again!',
+            'Don\'t give up!',
+            'Next round could be yours!'
+          ];
+          const message = messages[Math.floor(Math.random() * messages.length)];
+          setDealerSpeechBubble(dealerId, message);
+        } else if (hasWinners && hasLosers) {
+          // Mixed results
+          const messages = [
+            'Some winners, some losers!',
+            'Mixed results this round!',
+            'Good luck next time!',
+            'The house takes some, gives some!'
+          ];
+          const message = messages[Math.floor(Math.random() * messages.length)];
+          setDealerSpeechBubble(dealerId, message);
+        } else {
+          // Push (ties) or no players
+          const messages = [
+            'Push! Try again!',
+            'Tie game!',
+            'No winners this round!'
+          ];
+          const message = messages[Math.floor(Math.random() * messages.length)];
+          setDealerSpeechBubble(dealerId, message);
+        }
       }
       
       // Update previous game state
@@ -319,138 +521,7 @@ export function BlackjackModal() {
     // The balance display will automatically update via the localPlayer dependency
   }, [localPlayer?.orbs]);
   
-  // Render player sprites at table seats
-  useEffect(() => {
-    if (!playerCanvasRef.current || !blackjackGameState) return;
-    
-    const canvas = playerCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    const updateCanvasSize = () => {
-      const container = canvas.parentElement;
-      if (container) {
-        const rect = container.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-      }
-    };
-    
-    updateCanvasSize();
-    window.addEventListener('resize', updateCanvasSize);
-    
-    let lastRenderTime = Date.now();
-    let isRendering = true;
-    
-    const renderPlayers = () => {
-      if (!isRendering || !ctx) {
-        animationFrameRef.current = null;
-        return;
-      }
-      
-      // Get fresh state on each render to avoid stale closures
-      const currentGameState = useGameStore.getState().blackjackGameState;
-      const currentPlayers = useGameStore.getState().players;
-      const currentLocalPlayer = useGameStore.getState().localPlayer;
-      
-      if (!currentGameState) {
-        animationFrameRef.current = requestAnimationFrame(renderPlayers);
-        return;
-      }
-      
-      const now = Date.now();
-      const deltaTime = now - lastRenderTime;
-      lastRenderTime = now;
-      
-      // Throttle rendering to prevent spam - only render every 200ms
-      if (deltaTime < 200) {
-        animationFrameRef.current = requestAnimationFrame(renderPlayers);
-        return;
-      }
-      
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.imageSmoothingEnabled = false;
-      
-      const currentTime = Date.now();
-      const { SCALE, PLAYER_WIDTH, PLAYER_HEIGHT } = GAME_CONSTANTS;
-      
-      // Render players aligned with their seat positions
-      // Seats are arranged in a horizontal row, evenly spaced
-      const totalSeats = 7;
-      const tableWidth = canvas.width;
-      const seatWidth = tableWidth / totalSeats;
-      
-      // Render each seat position
-      for (let seatIndex = 0; seatIndex < totalSeats; seatIndex++) {
-        const player = currentGameState.players.find(p => p.seat === seatIndex);
-        if (!player) continue;
-        
-        // Try to get player from store, but create a fallback if not found
-        let actualPlayer = Array.from(currentPlayers.values()).find(p => p.id === player.playerId);
-        
-        // If player not in store yet, create a minimal player object from blackjack state
-        if (!actualPlayer) {
-          // Use localPlayer if it's the current player, otherwise create a basic player object
-          if (player.playerId === currentLocalPlayer?.id && currentLocalPlayer) {
-            actualPlayer = currentLocalPlayer;
-          } else {
-            // Create a minimal player object for rendering
-            actualPlayer = {
-              id: player.playerId,
-              name: player.playerName,
-              x: 0,
-              y: 0,
-              direction: 'up' as const,
-              sprite: {
-                body: 'default',
-                outfit: [],
-              },
-              orbs: 0,
-              roomId: '',
-            };
-          }
-        }
-        
-        // Calculate seat position to match the HTML layout
-        // Position player ABOVE the nameplate (which is at top-40 = ~160px from top of container)
-        const seatX = (seatIndex + 0.5) * seatWidth;
-        const seatY = canvas.height * 0.55; // Position above nameplate, visible on table
-        
-        const playerToRender: PlayerWithChat = {
-          ...actualPlayer,
-          x: seatX / SCALE - PLAYER_WIDTH / 2,
-          y: seatY / SCALE - PLAYER_HEIGHT / 2,
-          direction: 'up' as const,
-        };
-        
-        ctx.save();
-        try {
-          // Use a fixed time to prevent animation spam
-          drawPlayer(ctx, playerToRender, player.playerId === currentLocalPlayer?.id, currentTime, true);
-        } catch (error) {
-          console.error(`[BlackjackModal] Error drawing player ${player.playerName}:`, error);
-        }
-        ctx.restore();
-      }
-      
-      if (isRendering) {
-        animationFrameRef.current = requestAnimationFrame(renderPlayers);
-      } else {
-        animationFrameRef.current = null;
-      }
-    };
-    
-    renderPlayers();
-    
-    return () => {
-      isRendering = false;
-      window.removeEventListener('resize', updateCanvasSize);
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-    };
-  }, [blackjackGameState, localPlayer?.id]); // Removed 'players' from dependencies to prevent unnecessary re-renders
+  // Player sprite rendering removed - was causing glitches
   
   if (!blackjackTableOpen) return null;
   
@@ -484,7 +555,7 @@ export function BlackjackModal() {
       maxBet: MAX_BET,
       currentBalance: localPlayer?.orbs
     });
-    playPurchaseSound();
+    playClickSound();
     placeBlackjackBet(selectedTableId, betAmount);
   };
   
@@ -514,13 +585,13 @@ export function BlackjackModal() {
       return;
     }
     console.log('[BlackjackModal] Double down - tableId:', selectedTableId, 'handIndex:', currentPlayer?.currentHandIndex || 0);
-    playPurchaseSound();
+    playClickSound();
     blackjackDoubleDown(selectedTableId, currentPlayer?.currentHandIndex || 0);
   };
   
   const handleSplit = () => {
     if (!canSplit || !currentHand) return;
-    playPurchaseSound();
+    playClickSound();
     blackjackSplit(selectedTableId, currentPlayer?.currentHandIndex || 0);
   };
   
@@ -534,7 +605,7 @@ export function BlackjackModal() {
   
   return (
     <div 
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+      className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
       onClick={handleLeave}
     >
       <style>{`
@@ -555,17 +626,41 @@ export function BlackjackModal() {
         }
       `}</style>
       
-      <div className="bg-gray-900 rounded-lg p-4 border-2 border-amber-500 max-w-[95vw] w-full mx-2 max-h-[95vh] overflow-y-auto overflow-x-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-900 rounded-lg p-4 border-2 border-amber-500 max-w-[1200px] w-full mx-2 max-h-[95vh] overflow-y-auto overflow-x-hidden pointer-events-auto" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-pixel text-amber-400">🃏 Blackjack Table {selectedTableId?.replace('blackjack_table_', '')}</h2>
           <div className="flex items-center gap-4">
             {localPlayer && balanceColorInfo && (
-              <div className="flex items-center gap-2">
-                <span className="text-gray-400 font-pixel text-sm">Balance:</span>
-                <span className="font-pixel text-lg font-bold" style={{ color: balanceColorInfo.color }}>
-                  {localPlayer.orbs.toLocaleString()} <span className="text-cyan-400 text-sm">orbs</span>
-                </span>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 font-pixel text-sm">Balance:</span>
+                  <span className="font-pixel text-lg font-bold" style={{ color: balanceColorInfo.color }}>
+                    {localPlayer.orbs.toLocaleString()} <span className="text-cyan-400 text-sm">orbs</span>
+                  </span>
+                </div>
+                {sessionStartingBalance !== null && (
+                  <div className="flex items-center gap-3 text-xs">
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-400 font-pixel">Session P/L:</span>
+                      <span className={`font-pixel font-bold ${
+                        sessionProfitLoss > 0 ? 'text-green-400' : 
+                        sessionProfitLoss < 0 ? 'text-red-400' : 
+                        'text-gray-400'
+                      }`}>
+                        {sessionProfitLoss >= 0 ? '+' : ''}{sessionProfitLoss.toLocaleString()}
+                      </span>
+                    </div>
+                    {sessionLastWin !== null && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400 font-pixel">Last Win:</span>
+                        <span className="font-pixel font-bold text-green-400">
+                          +{sessionLastWin.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             <button
@@ -597,7 +692,7 @@ export function BlackjackModal() {
         ) : (
           <div className="space-y-6">
             {/* Table Layout - Proper Perspective */}
-            <div className="relative bg-gradient-to-b from-green-900 to-green-800 rounded-lg p-4 border-4 border-amber-600" style={{ minHeight: '450px', maxHeight: '55vh' }}>
+            <div className="relative bg-gradient-to-b from-green-900 to-green-800 rounded-lg p-4 border-4 border-amber-600" style={{ minHeight: '500px', height: '55vh' }}>
               
               {/* Dealer Section - Top (Opposite Side) */}
               <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-center w-full">
@@ -631,25 +726,18 @@ export function BlackjackModal() {
                   })}
                   {blackjackGameState.dealerHand.length === 0 && (
                     <div className="w-16 h-24 rounded-lg border-2 border-gray-600 bg-gray-800/50 flex items-center justify-center">
-                      <span className="text-gray-500 text-xs">No cards</span>
+                      <span className="text-gray-500 text-xs"></span>
                     </div>
                   )}
                 </div>
               </div>
               
-              {/* Players Section - Bottom Row (Our Side) */}
-              <div className="absolute bottom-2 left-0 right-0">
-                <div className="relative" style={{ height: '220px' }}>
-                  {/* Canvas for player sprites - behind nameplates */}
-                  <canvas
-                    ref={playerCanvasRef}
-                    className="absolute inset-0 pointer-events-none z-0"
-                    style={{ imageRendering: 'pixelated' }}
-                  />
-                  
-                  {/* Player Positions - Horizontal Row */}
-                  <div className="relative flex justify-around items-end" style={{ height: '100%', paddingTop: '100px' }}>
-                    {Array.from({ length: 7 }).map((_, seatIndex) => {
+              {/* Players Section - Semi-Circle (Our Side) */}
+              <div className="absolute bottom-0 left-0 right-0 top-0">
+                <div className="relative w-full h-full">
+                  {/* Player Positions - Semi-Circle */}
+                  <div className="relative w-full h-full">
+                    {Array.from({ length: 4 }).map((_, seatIndex) => {
                       const player = blackjackGameState.players.find(p => p.seat === seatIndex);
                       const isCurrentPlayer = player?.playerId === localPlayer?.id;
                       const playerIndex = player ? blackjackGameState.players.indexOf(player) : -1;
@@ -658,11 +746,33 @@ export function BlackjackModal() {
                       const hand = player ? player.hands[player.currentHandIndex || 0] : null;
                       const handValue = hand && hand.cards.length > 0 ? calculateHandValueClient(hand.cards) : null;
                       
+                      // Calculate position in semi-circle below dealer
+                      // Dealer is at top center (50%, 12%), players arranged in bottom-half-of-circle arc (center lower, edges higher)
+                      const totalSeats = 4;
+                      const centerX = 50; // 50% from left (center)
+                      const centerY = 35; // 15% from top (center of arc is lowest point, moved up to reduce space below)
+                      const arcRadius = 38; // 38% of container (reduced to add padding on sides and prevent card overflow)
+                      // Angles for bottom-half-of-circle: from 20° (right) to 160° (left)
+                      // This creates a proper bottom-half arc where center (90°) is lowest, edges are higher
+                      const arcStartAngle = 20; // 20 degrees (right, down)
+                      const arcEndAngle = 160; // 160 degrees (left, down)
+                      const t = seatIndex / (totalSeats - 1); // 0 to 1
+                      const angleDeg = arcStartAngle + (arcEndAngle - arcStartAngle) * t;
+                      const angleRad = (angleDeg * Math.PI) / 180;
+                      const seatX = centerX + Math.cos(angleRad) * arcRadius;
+                      const seatY = centerY + Math.sin(angleRad) * arcRadius;
+                      
                       return (
                         <div
                           key={seatIndex}
-                          className="relative flex flex-col items-center"
-                          style={{ width: '140px', minHeight: '280px' }}
+                          className="absolute flex flex-col items-center"
+                          style={{ 
+                            left: `${seatX}%`,
+                            top: `${seatY}%`,
+                            transform: 'translate(-50%, -50%)',
+                            width: '140px',
+                            minHeight: '280px'
+                          }}
                         >
                           {/* Turn Indicator - Top */}
                           {isTheirTurn && (
@@ -685,7 +795,7 @@ export function BlackjackModal() {
                           )}
                           
                           {/* Player Cards - Middle section */}
-                          {player && hand && hand.cards.length > 0 && (
+                          {player && hand && hand.cards.length > 0 ? (
                             <div className="absolute top-8 left-1/2 transform -translate-x-1/2 flex gap-1 justify-center z-20">
                               {hand.cards.map((card, cardIdx) => {
                                 const cardId = `${player.playerId}-${cardIdx}`;
@@ -702,6 +812,16 @@ export function BlackjackModal() {
                                   />
                                 );
                               })}
+                            </div>
+                          ) : (
+                            // Show "No cards" placeholder for empty seats or players without cards
+                            <div className="absolute top-8 left-1/2 transform -translate-x-1/2 flex gap-1 justify-center z-20">
+                              <div className="w-16 h-24 rounded-lg border-2 border-gray-600 bg-gray-800/50 flex items-center justify-center">
+                                <span className="text-gray-500 text-xs"></span>
+                              </div>
+                              <div className="w-16 h-24 rounded-lg border-2 border-gray-600 bg-gray-800/50 flex items-center justify-center">
+                                <span className="text-gray-500 text-xs"></span>
+                              </div>
                             </div>
                           )}
                           
@@ -751,19 +871,35 @@ export function BlackjackModal() {
                 {blackjackGameState.gameState === 'waiting' || blackjackGameState.gameState === 'betting' ? (
                   <div>
                     {!currentPlayer.hasPlacedBet ? (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-gray-300 font-pixel text-sm mb-2">
-                            Bet Amount (Min: {MIN_BET.toLocaleString()}, Max: {MAX_BET.toLocaleString()})
-                          </label>
-                          <input
-                            type="number"
-                            min={MIN_BET}
-                            max={MAX_BET}
-                            value={betAmount}
-                            onChange={(e) => setBetAmount(Math.max(MIN_BET, Math.min(MAX_BET, parseInt(e.target.value) || MIN_BET)))}
-                            className="w-full px-4 py-2 bg-gray-700 text-white rounded font-pixel border-2 border-gray-600"
-                          />
+                      <div className="space-y-3">
+                        <label className="block text-gray-300 font-pixel text-sm text-center">
+                          Select Bet Amount
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[50000, 100000, 250000, 500000, 750000, 1000000].map((amount) => {
+                            const isSelected = betAmount === amount;
+                            const canAfford = (localPlayer?.orbs || 0) >= amount;
+                            return (
+                              <button
+                                key={amount}
+                                onClick={() => setBetAmount(amount)}
+                                disabled={!canAfford}
+                                className={`px-4 py-2 rounded font-pixel text-sm border-2 transition-all ${
+                                  isSelected
+                                    ? 'bg-amber-600 text-white border-amber-400 shadow-lg scale-105'
+                                    : canAfford
+                                      ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600 hover:border-gray-500'
+                                      : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed opacity-50'
+                                }`}
+                              >
+                                {amount >= 1000000 
+                                  ? `${(amount / 1000000).toFixed(0)}M`
+                                  : amount >= 1000
+                                    ? `${(amount / 1000).toFixed(0)}k`
+                                    : amount.toLocaleString()}
+                              </button>
+                            );
+                          })}
                         </div>
                         <button
                           onClick={handleBet}
@@ -803,7 +939,8 @@ export function BlackjackModal() {
                         Double Down
                       </button>
                     )}
-                    {canSplit && (
+                    {/* Split button hidden for now - will add proper logic later */}
+                    {false && canSplit && (
                       <button
                         onClick={handleSplit}
                         className="px-6 py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-pixel text-lg"

@@ -16,6 +16,8 @@ import { AuthScreen } from './ui/AuthScreen';
 import { Notifications } from './ui/Notifications';
 import { MusicManager } from './ui/MusicManager';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { PlayerContextMenu } from './ui/PlayerContextMenu';
+import { TradeModal } from './ui/TradeModal';
 import { useSocket } from './hooks/useSocket';
 import { useGameStore } from './state/gameStore';
 import { onAuthChange, getCurrentUser } from './firebase/auth';
@@ -140,6 +142,12 @@ function App() {
       
       {/* Confirm Modal */}
       <ConfirmModal />
+      
+      {/* Player Context Menu */}
+      <PlayerContextMenu />
+      
+      {/* Trade Modal */}
+      <TradeModal />
     </div>
   );
 }

@@ -550,8 +550,8 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
         targetPosition = set2Start + (itemIndex * 2 * itemWidth);
       } else {
         // Regular cases - no empty tiles between items
-        const initialOffset = normalizedItems.length * itemWidth * 2;
-        targetPosition = initialOffset + (itemIndex * itemWidth);
+      const initialOffset = normalizedItems.length * itemWidth * 2;
+      targetPosition = initialOffset + (itemIndex * itemWidth);
       }
     }
     
@@ -692,41 +692,41 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
           animationFrameId = null;
           animationRef.current = null;
           
-          // Get the item and purchase info from refs (persists even if component re-rendered)
-          const finalItem = item; // Item was captured in closure
-          const purchaseInfo = pendingPurchaseRef.current;
-          
-          if (!purchaseInfo) {
-            console.error('No pending purchase info found, animation may have been interrupted');
-            setIsOpening(false);
-            isOpeningRef.current = false;
-            return;
-          }
-          
+            // Get the item and purchase info from refs (persists even if component re-rendered)
+            const finalItem = item; // Item was captured in closure
+            const purchaseInfo = pendingPurchaseRef.current;
+            
+            if (!purchaseInfo) {
+              console.error('No pending purchase info found, animation may have been interrupted');
+              setIsOpening(false);
+              isOpeningRef.current = false;
+              return;
+            }
+            
           // CRITICAL: Set selected item FIRST and immediately to trigger React render
           // This must happen before any other state updates to prevent freeze
-          if (finalItem === null) {
-            // "Nothing" result - show empty result
-            console.log('Setting selected item: Nothing');
-            pendingSelectedItemRef.current = null;
-            setSelectedItem(null);
-          } else {
+            if (finalItem === null) {
+              // "Nothing" result - show empty result
+              console.log('Setting selected item: Nothing');
+              pendingSelectedItemRef.current = null;
+              setSelectedItem(null);
+            } else {
             // Normal item result - set immediately
-            console.log('Setting selected item:', finalItem.name, 'already owned:', itemAlreadyOwnedRef.current);
-            pendingSelectedItemRef.current = finalItem;
-            setSelectedItem(finalItem);
-            
-            // Play level-up sound for rare, epic, legendary, or godlike items
-            const rarity = finalItem.rarity || 'common';
-            if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike') {
-              playLevelUpSound();
+              console.log('Setting selected item:', finalItem.name, 'already owned:', itemAlreadyOwnedRef.current);
+              pendingSelectedItemRef.current = finalItem;
+              setSelectedItem(finalItem);
+              
+              // Play level-up sound for rare, epic, legendary, or godlike items
+              const rarity = finalItem.rarity || 'common';
+              if (rarity === 'rare' || rarity === 'epic' || rarity === 'legendary' || rarity === 'godlike') {
+                playLevelUpSound();
             }
-          }
-          
+              }
+              
           // Use requestAnimationFrame to handle cleanup AFTER React has rendered the selected item
           // This ensures the UI updates smoothly without freezing
           requestAnimationFrame(() => {
-            // Purchase the loot box after animation completes (will sync with Firebase)
+              // Purchase the loot box after animation completes (will sync with Firebase)
             if (finalItem === null) {
               purchaseLootBox(purchaseInfo.lootBoxId, '', purchaseInfo.price);
             } else {
@@ -810,23 +810,23 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
       // Only reset if we're switching to a different loot box (not just an update)
       // Don't cancel animation if we're currently opening - let it complete
       if (!isOpeningRef.current && !isOpening) {
-        setIsOpening(false);
-        isOpeningRef.current = false;
-        setSelectedItem(null);
-        // Reset orb animation state
-        setPreviousOrbs(playerOrbs);
-        setOrbAnimation(null);
+      setIsOpening(false);
+      isOpeningRef.current = false;
+      setSelectedItem(null);
+      // Reset orb animation state
+      setPreviousOrbs(playerOrbs);
+      setOrbAnimation(null);
         // Cancel any ongoing animation (only if not currently opening)
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-        // Stop all active tick sounds
-        activeTickSoundsRef.current.forEach(sound => {
-          sound.pause();
-          sound.currentTime = 0;
-        });
-        activeTickSoundsRef.current = [];
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      // Stop all active tick sounds
+      activeTickSoundsRef.current.forEach(sound => {
+        sound.pause();
+        sound.currentTime = 0;
+      });
+      activeTickSoundsRef.current = [];
       } else {
         // Just update orb state without cancelling animation
         setPreviousOrbs(playerOrbs);
@@ -1380,9 +1380,9 @@ export function LootBoxModal({ lootBox, onClose }: LootBoxModalProps) {
                   // For godlike cases, break up items with empty tiles to prevent consecutive godlike items
                   // Create 7 sets with empty tiles distributed throughout
                   const numSets = 7;
-                  for (let setIndex = 0; setIndex < numSets; setIndex++) {
-                    normalizedItems.forEach((entry, itemIndex) => {
-                      itemsToRender.push({ item: entry.item, setIndex, itemIndex });
+                for (let setIndex = 0; setIndex < numSets; setIndex++) {
+                  normalizedItems.forEach((entry, itemIndex) => {
+                    itemsToRender.push({ item: entry.item, setIndex, itemIndex });
                       // Add empty tile after every godlike item to break them up
                       // This ensures we never see 3 godlike items in a row
                       itemsToRender.push({ item: null, setIndex, itemIndex: normalizedItems.length + itemIndex });

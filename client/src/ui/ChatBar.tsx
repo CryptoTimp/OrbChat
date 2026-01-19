@@ -181,12 +181,15 @@ export function ChatBar() {
                 );
               };
               
+              // Use textColor override if provided (e.g., green for wins, red for losses), otherwise use nameColor
+              const messageColor = msg.textColor || nameColor;
+              
               return (
                 <div key={index} className="mb-1.5 last:mb-0 relative" style={{ overflow: 'visible' }}>
                   <span className="text-xs font-pixel" style={{ color: nameColor }}>
                     {playerInfo.name}:
                   </span>
-                  <span className="text-xs ml-2 relative inline-block" style={{ color: nameColor, overflow: 'visible' }}>
+                  <span className="text-xs ml-2 relative inline-block" style={{ color: messageColor, overflow: 'visible' }}>
                     {renderMessage(msg.text)}
                   </span>
                 </div>

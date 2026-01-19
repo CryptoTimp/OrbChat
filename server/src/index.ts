@@ -9,11 +9,13 @@ import * as rooms from './rooms';
 import * as players from './players';
 import * as shop from './shop';
 import * as blackjack from './blackjack';
+import * as trades from './trades';
 import { startOrbSpawner, stopOrbSpawner, startFountainOrbSpawner, stopFountainOrbSpawner } from './orbs';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
   Direction,
+  GAME_CONSTANTS,
 } from './types';
 
 const PORT = process.env.PORT || 3001;
@@ -1459,9 +1461,83 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     const result = blackjack.joinTable(tableId, playerId, player.name);
     console.log('[Blackjack] Join result:', result);
     
-    if (result.success) {
+    if (result.success && result.seat !== undefined) {
       const table = blackjack.getTable(tableId);
       if (table) {
+        // Calculate seat position for the player in world coordinates
+        // Match the client's table positioning logic
+        // Client uses scaled pixels, server uses unscaled pixels
+        // Client: WORLD_WIDTH = TILE_SIZE * MAP_WIDTH * SCALE (scaled)
+        // Server: WORLD_WIDTH = TILE_SIZE * MAP_WIDTH (unscaled)
+        const SCALE = GAME_CONSTANTS.SCALE;
+        const WORLD_WIDTH_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH * SCALE;
+        const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
+        const centerXScaled = WORLD_WIDTH_SCALED / 2;
+        const centerYScaled = WORLD_HEIGHT_SCALED / 2;
+        const plazaRadiusScaled = 300 * SCALE; // Same as client
+        const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+        const tableRadiusScaled = plazaRadiusScaled * 0.6;
+        const tableIndex = parseInt(tableId.replace('blackjack_table_', '')) - 1;
+        const tableAngle = tableAngles[tableIndex];
+        const tableXScaled = centerXScaled + Math.cos(tableAngle) * tableRadiusScaled;
+        const tableYScaled = centerYScaled + Math.sin(tableAngle) * tableRadiusScaled;
+        const tableRadiusSizeScaled = 60 * SCALE;
+        const seatRadiusScaled = tableRadiusSizeScaled * 0.8;
+        // Updated for 4 seats: evenly spaced in semi-circle (matching client renderer.ts)
+        const seatAngle = Math.PI + (result.seat - 1.5) * (Math.PI / 3); // Seats on player side - 4 seats evenly spaced
+        const seatXScaled = tableXScaled + Math.cos(seatAngle) * seatRadiusScaled;
+        const seatYScaled = tableYScaled + Math.sin(seatAngle) * seatRadiusScaled;
+        
+        // Convert from scaled pixels to unscaled pixels (server coordinates)
+        const seatX = seatXScaled / SCALE;
+        const seatY = seatYScaled / SCALE;
+        
+        // Update player position to seat (center player sprite on seat)
+        const seatWorldX = seatX - GAME_CONSTANTS.PLAYER_WIDTH / 2;
+        const seatWorldY = seatY - GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+        player.x = seatWorldX;
+        player.y = seatWorldY;
+        
+        console.log(`[Blackjack] Seat position calculation for seat ${result.seat}:`, {
+          tableId,
+          tableIndex,
+          tableX: tableXScaled / SCALE,
+          tableY: tableYScaled / SCALE,
+          seatAngle: seatAngle * 180 / Math.PI,
+          seatX,
+          seatY,
+          seatWorldX,
+          seatWorldY,
+          playerWidth: GAME_CONSTANTS.PLAYER_WIDTH,
+          playerHeight: GAME_CONSTANTS.PLAYER_HEIGHT
+        });
+        
+        // Set direction based on seat: seat 0 faces up, seats 1-2 face right, seat 3 faces down
+        let seatDirection: 'up' | 'down' | 'left' | 'right' = 'up';
+        if (result.seat === 1 || result.seat === 2) {
+          seatDirection = 'right';
+        } else if (result.seat === 3) {
+          seatDirection = 'down';
+        }
+        
+        player.direction = seatDirection;
+        const positionUpdated = rooms.updatePlayerPosition(mapping.roomId, playerId, seatWorldX, seatWorldY, seatDirection);
+        
+        // Always broadcast position update when joining table (even if position didn't change)
+        // This ensures the player is positioned correctly on their screen when rejoining
+        io.to(mapping.roomId).emit('player_moved', { 
+          playerId, 
+          x: seatWorldX, 
+          y: seatWorldY, 
+          direction: seatDirection 
+        });
+        
+        if (positionUpdated) {
+          console.log(`[Blackjack] Positioned and broadcasted player ${playerId} at seat ${result.seat} (${seatWorldX}, ${seatWorldY})`);
+        } else {
+          console.log(`[Blackjack] Position update returned false, but still broadcasting position for player ${playerId} at seat ${result.seat} (${seatWorldX}, ${seatWorldY})`);
+        }
+        
         console.log('[Blackjack] Join successful, broadcasting state to', table.state.players.length, 'players');
         // First, send state directly to the joining player
         socket.emit('blackjack_state_update', { tableId, state: table.state });
@@ -1539,7 +1615,10 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         socket.emit('blackjack_state_update', { tableId, state: table.state });
       }
     } else {
-      socket.emit('blackjack_error', { tableId, message: result.message || 'Failed to leave table' });
+      // Only emit error if it's a real error (e.g., table not found), not if player is already not at table
+      if (result.message && result.message !== 'Player not at table') {
+        socket.emit('blackjack_error', { tableId, message: result.message });
+      }
     }
   });
   
@@ -1600,10 +1679,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const newBalance = currentOrbs - numericAmount;
       console.log(`[Blackjack] Bet placed: deducting ${numericAmount}, balance ${currentOrbs} -> ${newBalance}`);
       
-      // Update Firebase database (SERVER is source of truth)
-      const { updateUserOrbs } = await import('./firebase');
-      await updateUserOrbs(playerId, newBalance);
-      console.log(`[Blackjack] Updated Firebase: ${playerId} -> ${newBalance} orbs`);
+      // Note: Client will update Firebase (server Firebase Admin SDK may not be initialized)
+      // Server calculates balance and updates room state, client handles Firebase update
+      console.log(`[Blackjack] Balance calculated: ${playerId} -> ${newBalance} orbs (client will update Firebase)`);
       
       // Update room state (keep in sync with Firebase)
       player.orbs = newBalance;
@@ -1676,8 +1754,55 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                     }
                   }
                   
+                  // Helper function to broadcast win/loss to chat
+                  const tableForPayouts = blackjack.getTable(tableId);
+                  const broadcastBlackjackResult = (playerId: string, payout: number, roomId: string) => {
+                    const roomPlayer = rooms.getPlayerInRoom(roomId, playerId);
+                    if (!roomPlayer) return;
+                    
+                    // Calculate total bet for this player (sum of all hands)
+                    let totalBet = 0;
+                    if (tableForPayouts) {
+                      const blackjackPlayer = tableForPayouts.state.players.find(p => p.playerId === playerId);
+                      if (blackjackPlayer) {
+                        for (const hand of blackjackPlayer.hands) {
+                          totalBet += Number(hand.bet) || 0;
+                        }
+                      }
+                    }
+                    
+                    // Calculate win/loss amount
+                    let winAmount = 0;
+                    let lossAmount = 0;
+                    if (payout === 0) {
+                      // Loss: payout is 0, bet was already deducted
+                      lossAmount = totalBet;
+                    } else {
+                      // Win: payout includes bet return + winnings, show total payout amount
+                      winAmount = payout; // Show total payout (bet return + winnings)
+                    }
+                    
+                    // Broadcast win/loss to chat and show chat bubble
+                    if (winAmount > 0) {
+                      const winMessage = `won ${winAmount.toLocaleString()} orbs at blackjack!`;
+                      const textColor = '#22c55e'; // Green for wins
+                      const createdAt = rooms.updatePlayerChat(roomId, playerId, winMessage, textColor);
+                      io.to(roomId).emit('chat_message', { playerId, text: winMessage, createdAt, textColor });
+                      console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${winMessage}`);
+                    } else if (lossAmount > 0) {
+                      const lossMessage = `lost ${lossAmount.toLocaleString()} orbs at blackjack`;
+                      const textColor = '#ef4444'; // Red for losses
+                      const createdAt = rooms.updatePlayerChat(roomId, playerId, lossMessage, textColor);
+                      io.to(roomId).emit('chat_message', { playerId, text: lossMessage, createdAt, textColor });
+                      console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${lossMessage}`);
+                    }
+                  };
+                  
                   // Apply payouts for all players
                   for (const [payoutPlayerId, payout] of payouts.entries()) {
+                    // Broadcast win/loss to chat for all players (wins and losses)
+                    broadcastBlackjackResult(payoutPlayerId, payout, roomIdForPayouts);
+                    
                     // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
                     // Don't send any event for losses to avoid confusing the client
                     if (payout === 0) {
@@ -1687,22 +1812,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                     
                     const roomPlayer = rooms.getPlayerInRoom(roomIdForPayouts, payoutPlayerId);
                     if (roomPlayer) {
-                      // CRITICAL: Server manages ALL balance updates for blackjack
-                      // 1. Update Firebase (SERVER is source of truth)
+                      // CRITICAL: Server calculates balance updates for blackjack
+                      // 1. Calculate new balance from room state (source of truth)
                       // 2. Update room state
-                      // 3. Broadcast to clients (clients only receive and display, never update Firebase)
-                      const { getUserData, updateUserOrbs } = await import('./firebase');
-                      const userData = await getUserData(payoutPlayerId);
-                      const currentOrbs = userData?.orbs || roomPlayer.orbs || 0;
+                      // 3. Broadcast to clients (clients will update Firebase)
+                      const currentOrbs = roomPlayer.orbs || 0;
                       const newBalance = currentOrbs + payout;
                       
-                      await updateUserOrbs(payoutPlayerId, newBalance);
                       roomPlayer.orbs = newBalance;
                       players.updatePlayerOrbs(payoutPlayerId, newBalance);
                       
                       io.to(roomIdForPayouts).emit('player_orbs_updated', { 
                         playerId: payoutPlayerId, 
-                        orbs: newBalance, // Server already updated Firebase
+                        orbs: newBalance, // Client will update Firebase
                         rewardAmount: payout,
                         rewardType: 'blackjack'
                       });
@@ -1740,6 +1862,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                   for (const playerSocket of playerSockets) {
                     playerSocket.emit('blackjack_state_update', { tableId, state: updatedTable.state });
                   }
+                }
+                // Also broadcast to all players in casino room so they can see dealer announcements
+                const mappingForRoom = socketToPlayer.get(socket.id);
+                if (mappingForRoom && mappingForRoom.roomId && mappingForRoom.roomId.startsWith('casino-')) {
+                  io.to(mappingForRoom.roomId).emit('blackjack_state_update', { tableId, state: updatedTable.state });
                 }
               }
             } else {
@@ -1791,28 +1918,72 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Check if round is finished and calculate payouts
         if (table.state.gameState === 'finished') {
           const payouts = blackjack.calculatePayouts(tableId);
+          const table = blackjack.getTable(tableId);
+          
+          // Helper function to broadcast win/loss to chat
+          const broadcastBlackjackResult = (playerId: string, payout: number, roomId: string) => {
+            const roomPlayer = rooms.getPlayerInRoom(roomId, playerId);
+            if (!roomPlayer) return;
+            
+            // Calculate total bet for this player (sum of all hands)
+            let totalBet = 0;
+            if (table) {
+              const blackjackPlayer = table.state.players.find(p => p.playerId === playerId);
+              if (blackjackPlayer) {
+                for (const hand of blackjackPlayer.hands) {
+                  totalBet += Number(hand.bet) || 0;
+                }
+              }
+            }
+            
+            // Calculate win/loss amount
+            let winAmount = 0;
+            let lossAmount = 0;
+            if (payout === 0) {
+              // Loss: payout is 0, bet was already deducted
+              lossAmount = totalBet;
+            } else {
+              // Win: payout includes bet return + winnings, show total payout amount
+              winAmount = payout; // Show total payout (bet return + winnings)
+            }
+            
+            // Broadcast win/loss to chat and show chat bubble
+            if (winAmount > 0) {
+              const winMessage = `won ${winAmount.toLocaleString()} orbs at blackjack!`;
+              const textColor = '#22c55e'; // Green for wins
+              const createdAt = rooms.updatePlayerChat(roomId, playerId, winMessage, textColor);
+              io.to(roomId).emit('chat_message', { playerId, text: winMessage, createdAt, textColor });
+              console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${winMessage}`);
+            } else if (lossAmount > 0) {
+              const lossMessage = `lost ${lossAmount.toLocaleString()} orbs at blackjack`;
+              const textColor = '#ef4444'; // Red for losses
+              const createdAt = rooms.updatePlayerChat(roomId, playerId, lossMessage, textColor);
+              io.to(roomId).emit('chat_message', { playerId, text: lossMessage, createdAt, textColor });
+              console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${lossMessage}`);
+            }
+          };
           
           // Apply payouts and update player orbs
           // Note: payout includes bet return + winnings (or 0 for loss)
           payouts.forEach(async (payout, payoutPlayerId) => {
+            // Broadcast win/loss to chat for all players (wins and losses)
+            broadcastBlackjackResult(payoutPlayerId, payout, mapping.roomId);
+            
             // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
-            // Don't send any event for losses to avoid confusing the client
+            // Don't send orb update event for losses to avoid confusing the client
             if (payout === 0) {
-              console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted (no event sent)`);
-              return; // Don't process losses - bet was already deducted when placed
+              console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted (no orb event sent)`);
+              return; // Don't process further - bet was already deducted when placed
             }
             
             const roomPlayer = rooms.getPlayerInRoom(mapping.roomId, payoutPlayerId);
             if (roomPlayer) {
-              const { getUserData, updateUserOrbs } = await import('./firebase');
-              const userData = await getUserData(payoutPlayerId);
-              const currentOrbs = userData?.orbs || roomPlayer.orbs || 0;
+              const currentOrbs = roomPlayer.orbs || 0;
               
               console.log(`[Blackjack] ===== PROCESSING PAYOUT =====`);
               console.log(`[Blackjack] Player: ${payoutPlayerId}`);
               console.log(`[Blackjack] Calculated payout from calculatePayouts(): ${payout} orbs`);
-              console.log(`[Blackjack] Current balance (from Firebase): ${currentOrbs} orbs`);
-              console.log(`[Blackjack] Room player balance: ${roomPlayer.orbs} orbs`);
+              console.log(`[Blackjack] Current balance (from room state): ${currentOrbs} orbs`);
               
               // CRITICAL: Validate payout amount
               if (payout < 0) {
@@ -1838,14 +2009,13 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
               console.log(`[Blackjack] Net change: ${newBalance - currentOrbs} orbs`);
               console.log(`[Blackjack] ===== END PAYOUT PROCESSING =====`);
               
-              // CRITICAL: Server manages ALL balance updates for blackjack
-              // 1. Update Firebase (SERVER is source of truth)
+              // CRITICAL: Server calculates balance updates for blackjack
+              // 1. Calculate new balance from room state (source of truth)
               // 2. Update room state
-              // 3. Broadcast to clients (clients only receive and display, never update Firebase)
-              await updateUserOrbs(payoutPlayerId, newBalance);
-              console.log(`[Blackjack] Updated Firebase: ${payoutPlayerId} -> ${newBalance} orbs`);
+              // 3. Broadcast to clients (clients will update Firebase)
+              console.log(`[Blackjack] Balance calculated: ${payoutPlayerId} -> ${newBalance} orbs (client will update Firebase)`);
               
-              // Update room state (keep in sync with Firebase)
+              // Update room state
               roomPlayer.orbs = newBalance;
               players.updatePlayerOrbs(payoutPlayerId, newBalance);
               console.log(`[Blackjack] Updated room state: ${payoutPlayerId} -> ${newBalance} orbs`);
@@ -1896,6 +2066,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
             playerSocket.emit('blackjack_state_update', { tableId, state: table.state });
           }
         }
+        // Also broadcast to all players in casino room so they can see dealer announcements
+        const mappingForRoom = socketToPlayer.get(socket.id);
+        if (mappingForRoom && mappingForRoom.roomId && mappingForRoom.roomId.startsWith('casino-')) {
+          io.to(mappingForRoom.roomId).emit('blackjack_state_update', { tableId, state: table.state });
+        }
       }
     } else {
       console.log('[Blackjack] Hit failed:', result.message);
@@ -1929,8 +2104,55 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Check if round is finished
         if (table.state.gameState === 'finished') {
           const payouts = blackjack.calculatePayouts(tableId);
+          const tableForPayouts = blackjack.getTable(tableId);
+          
+          // Helper function to broadcast win/loss to chat
+          const broadcastBlackjackResult = (playerId: string, payout: number, roomId: string) => {
+            const roomPlayer = rooms.getPlayerInRoom(roomId, playerId);
+            if (!roomPlayer) return;
+            
+            // Calculate total bet for this player (sum of all hands)
+            let totalBet = 0;
+            if (tableForPayouts) {
+              const blackjackPlayer = tableForPayouts.state.players.find(p => p.playerId === playerId);
+              if (blackjackPlayer) {
+                for (const hand of blackjackPlayer.hands) {
+                  totalBet += Number(hand.bet) || 0;
+                }
+              }
+            }
+            
+            // Calculate win/loss amount
+            let winAmount = 0;
+            let lossAmount = 0;
+            if (payout === 0) {
+              // Loss: payout is 0, bet was already deducted
+              lossAmount = totalBet;
+            } else {
+              // Win: payout includes bet return + winnings, show total payout amount
+              winAmount = payout; // Show total payout (bet return + winnings)
+            }
+            
+            // Broadcast win/loss to chat and show chat bubble
+            if (winAmount > 0) {
+              const winMessage = `won ${winAmount.toLocaleString()} orbs at blackjack!`;
+              const textColor = '#22c55e'; // Green for wins
+              const createdAt = rooms.updatePlayerChat(roomId, playerId, winMessage, textColor);
+              io.to(roomId).emit('chat_message', { playerId, text: winMessage, createdAt, textColor });
+              console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${winMessage}`);
+            } else if (lossAmount > 0) {
+              const lossMessage = `lost ${lossAmount.toLocaleString()} orbs at blackjack`;
+              const textColor = '#ef4444'; // Red for losses
+              const createdAt = rooms.updatePlayerChat(roomId, playerId, lossMessage, textColor);
+              io.to(roomId).emit('chat_message', { playerId, text: lossMessage, createdAt, textColor });
+              console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${lossMessage}`);
+            }
+          };
           
           payouts.forEach(async (payout, payoutPlayerId) => {
+            // Broadcast win/loss to chat for all players (wins and losses)
+            broadcastBlackjackResult(payoutPlayerId, payout, mapping.roomId);
+            
             // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
             // Don't send any event for losses to avoid confusing the client
             if (payout === 0) {
@@ -1940,22 +2162,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
             
             const roomPlayer = rooms.getPlayerInRoom(mapping.roomId, payoutPlayerId);
             if (roomPlayer) {
-              // CRITICAL: Server manages ALL balance updates for blackjack
-              // 1. Update Firebase (SERVER is source of truth)
+              // CRITICAL: Server calculates balance updates for blackjack
+              // 1. Calculate new balance from room state (source of truth)
               // 2. Update room state
-              // 3. Broadcast to clients (clients only receive and display, never update Firebase)
-              const { getUserData, updateUserOrbs } = await import('./firebase');
-              const userData = await getUserData(payoutPlayerId);
-              const currentOrbs = userData?.orbs || roomPlayer.orbs || 0;
+              // 3. Broadcast to clients (clients will update Firebase)
+              const currentOrbs = roomPlayer.orbs || 0;
               const newBalance = currentOrbs + payout;
               
-              await updateUserOrbs(payoutPlayerId, newBalance);
               roomPlayer.orbs = newBalance;
               players.updatePlayerOrbs(payoutPlayerId, newBalance);
               
               io.to(mapping.roomId).emit('player_orbs_updated', { 
                 playerId: payoutPlayerId, 
-                orbs: newBalance, // Server already updated Firebase
+                orbs: newBalance, // Client will update Firebase
                 rewardAmount: payout, // Total payout amount (bet return + winnings)
                 rewardType: 'blackjack'
               });
@@ -1992,6 +2211,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           for (const playerSocket of playerSockets) {
             playerSocket.emit('blackjack_state_update', { tableId, state: table.state });
           }
+        }
+        // Also broadcast to all players in casino room so they can see dealer announcements
+        const mappingForRoom = socketToPlayer.get(socket.id);
+        if (mappingForRoom && mappingForRoom.roomId && mappingForRoom.roomId.startsWith('casino-')) {
+          io.to(mappingForRoom.roomId).emit('blackjack_state_update', { tableId, state: table.state });
         }
       }
     } else {
@@ -2045,6 +2269,10 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       return;
     }
     
+    // Store original bet BEFORE doubling (we need to deduct this amount)
+    const originalBet = hand.bet;
+    console.log('[Blackjack] Original bet before double down:', originalBet);
+    
     // Get current orbs
     const { getUserData } = await import('./firebase');
     const userData = await getUserData(playerId);
@@ -2055,22 +2283,76 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     console.log('[Blackjack] Double down result:', result);
     
     if (result.success) {
-      // Deduct additional bet
-      const additionalBet = hand.bet / 2; // Bet was doubled, so we need to deduct the additional half
+      // Deduct the additional bet (original bet amount, since bet was doubled)
+      // The bet was doubled in blackjack.doubleDown, so we need to deduct the original bet amount
+      const additionalBet = originalBet;
       const newBalance = currentOrbs - additionalBet;
-      const { updateUserOrbs } = await import('./firebase');
-      await updateUserOrbs(playerId, newBalance);
+      console.log(`[Blackjack] Deducting additional bet: ${additionalBet}, balance ${currentOrbs} -> ${newBalance} (client will update Firebase)`);
       player.orbs = newBalance;
       players.updatePlayerOrbs(playerId, newBalance);
       
-      io.to(mapping.roomId).emit('player_orbs_updated', { playerId, orbs: newBalance });
+      // Broadcast orb update with rewardType so client handles it correctly
+      console.log(`[Blackjack] Emitting player_orbs_updated for double down: playerId=${playerId}, orbs=${newBalance}, rewardAmount=${-additionalBet}, rewardType=blackjack`);
+      io.to(mapping.roomId).emit('player_orbs_updated', { 
+        playerId, 
+        orbs: newBalance,
+        rewardAmount: -additionalBet, // Negative to show deduction
+        rewardType: 'blackjack'
+      });
       
       // Check if round finished
       const updatedTable = blackjack.getTable(tableId);
       if (updatedTable && updatedTable.state.gameState === 'finished') {
         const payouts = blackjack.calculatePayouts(tableId);
+        const tableForPayouts = blackjack.getTable(tableId);
+        
+        // Helper function to broadcast win/loss to chat
+        const broadcastBlackjackResult = (playerId: string, payout: number, roomId: string) => {
+          const roomPlayer = rooms.getPlayerInRoom(roomId, playerId);
+          if (!roomPlayer) return;
+          
+          // Calculate total bet for this player (sum of all hands)
+          let totalBet = 0;
+          if (tableForPayouts) {
+            const blackjackPlayer = tableForPayouts.state.players.find(p => p.playerId === playerId);
+            if (blackjackPlayer) {
+              for (const hand of blackjackPlayer.hands) {
+                totalBet += Number(hand.bet) || 0;
+              }
+            }
+          }
+          
+          // Calculate win/loss amount
+          let winAmount = 0;
+          let lossAmount = 0;
+          if (payout === 0) {
+            // Loss: payout is 0, bet was already deducted
+            lossAmount = totalBet;
+          } else {
+            // Win: payout includes bet return + winnings, show total payout amount
+            winAmount = payout; // Show total payout (bet return + winnings)
+          }
+          
+          // Broadcast win/loss to chat and show chat bubble
+          if (winAmount > 0) {
+            const winMessage = `won ${winAmount.toLocaleString()} orbs at blackjack!`;
+            const textColor = '#22c55e'; // Green for wins
+            const createdAt = rooms.updatePlayerChat(roomId, playerId, winMessage, textColor);
+            io.to(roomId).emit('chat_message', { playerId, text: winMessage, createdAt, textColor });
+            console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${winMessage}`);
+          } else if (lossAmount > 0) {
+            const lossMessage = `lost ${lossAmount.toLocaleString()} orbs at blackjack`;
+            const textColor = '#ef4444'; // Red for losses
+            const createdAt = rooms.updatePlayerChat(roomId, playerId, lossMessage, textColor);
+            io.to(roomId).emit('chat_message', { playerId, text: lossMessage, createdAt, textColor });
+            console.log(`[Blackjack] Player ${playerId} (${roomPlayer.name}) ${lossMessage}`);
+          }
+        };
         
         payouts.forEach(async (payout, payoutPlayerId) => {
+          // Broadcast win/loss to chat for all players (wins and losses)
+          broadcastBlackjackResult(payoutPlayerId, payout, mapping.roomId);
+          
           // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
           // Don't send any event for losses - bet deduction event was already sent when bet was placed
           if (payout === 0) {
@@ -2080,22 +2362,19 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           
           const roomPlayer = rooms.getPlayerInRoom(mapping.roomId, payoutPlayerId);
           if (roomPlayer) {
-            // CRITICAL: Server manages ALL balance updates for blackjack
-            // 1. Update Firebase (SERVER is source of truth)
+            // CRITICAL: Server calculates balance updates for blackjack
+            // 1. Calculate new balance from room state (source of truth)
             // 2. Update room state
-            // 3. Broadcast to clients (clients only receive and display, never update Firebase)
-            const { getUserData, updateUserOrbs } = await import('./firebase');
-            const userData = await getUserData(payoutPlayerId);
-            const currentOrbs = userData?.orbs || roomPlayer.orbs || 0;
+            // 3. Broadcast to clients (clients will update Firebase)
+            const currentOrbs = roomPlayer.orbs || 0;
             const newBalance = currentOrbs + payout;
             
-            await updateUserOrbs(payoutPlayerId, newBalance);
             roomPlayer.orbs = newBalance;
             players.updatePlayerOrbs(payoutPlayerId, newBalance);
             
             io.to(mapping.roomId).emit('player_orbs_updated', { 
               playerId: payoutPlayerId, 
-              orbs: newBalance, // Server already updated Firebase
+              orbs: newBalance, // Client will update Firebase
               rewardAmount: payout, // Total payout amount (bet return + winnings)
               rewardType: 'blackjack'
             });
@@ -2133,6 +2412,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           playerSocket.emit('blackjack_state_update', { tableId, state: updatedTable.state });
         }
       }
+      // Also broadcast to all players in casino room so they can see dealer announcements
+      const mappingForRoom = socketToPlayer.get(socket.id);
+      if (mappingForRoom && mappingForRoom.roomId && mappingForRoom.roomId.startsWith('casino-')) {
+        io.to(mappingForRoom.roomId).emit('blackjack_state_update', { tableId, state: updatedTable.state });
+      }
     } else {
       console.log('[Blackjack] Double down failed:', result.message);
       socket.emit('blackjack_error', { tableId, message: result.message || 'Failed to double down' });
@@ -2141,55 +2425,110 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   
   // Split
   socket.on('blackjack_split', async ({ tableId, handIndex = 0 }) => {
-    const mapping = socketToPlayer.get(socket.id);
-    if (!mapping) return;
+    console.log('[Blackjack] ===== blackjack_split event received =====');
+    console.log('[Blackjack] Table ID:', tableId);
+    console.log('[Blackjack] Hand Index:', handIndex);
+    console.log('[Blackjack] Socket ID:', socket.id);
     
-    const { playerId } = mapping;
-    const player = rooms.getPlayerInRoom(mapping.roomId, playerId);
-    if (!player) return;
-    
-    const table = blackjack.getTable(tableId);
-    if (!table) return;
-    
-    const blackjackPlayer = table.state.players.find(p => p.playerId === playerId);
-    if (!blackjackPlayer) return;
-    
-    const hand = blackjackPlayer.hands[handIndex];
-    if (!hand) return;
-    
-    // Get current orbs
-    const { getUserData } = await import('./firebase');
-    const userData = await getUserData(playerId);
-    const currentOrbs = userData?.orbs || player.orbs || 0;
-    
-    const result = blackjack.split(tableId, playerId, handIndex, currentOrbs);
-    if (result.success) {
-      // Deduct additional bet for split
-      const additionalBet = hand.bet;
-      const newBalance = currentOrbs - additionalBet;
-      const { updateUserOrbs } = await import('./firebase');
-      await updateUserOrbs(playerId, newBalance);
-      player.orbs = newBalance;
-      players.updatePlayerOrbs(playerId, newBalance);
+    try {
+      const mapping = socketToPlayer.get(socket.id);
+      if (!mapping) {
+        console.log('[Blackjack] No mapping found for socket', socket.id);
+        socket.emit('blackjack_error', { tableId, message: 'Not connected to a room' });
+        return;
+      }
       
-      io.to(mapping.roomId).emit('player_orbs_updated', { playerId, orbs: newBalance });
+      const { playerId } = mapping;
+      console.log('[Blackjack] Player ID:', playerId);
       
-      // Broadcast state update
-      const updatedTable = blackjack.getTable(tableId);
-      if (updatedTable) {
-        const tablePlayers = updatedTable.state.players.map(p => p.playerId);
-        for (const tablePlayerId of tablePlayers) {
-          const playerSockets = Array.from(io.sockets.sockets.values()).filter(s => {
-            const m = socketToPlayer.get(s.id);
-            return m && m.playerId === tablePlayerId;
-          });
-          for (const playerSocket of playerSockets) {
-            playerSocket.emit('blackjack_state_update', { tableId, state: updatedTable.state });
-          }
+      const player = rooms.getPlayerInRoom(mapping.roomId, playerId);
+      if (!player) {
+        console.log('[Blackjack] Player not found in room', playerId, mapping.roomId);
+        socket.emit('blackjack_error', { tableId, message: 'Player not found in room' });
+        return;
+      }
+      
+      const table = blackjack.getTable(tableId);
+      if (!table) {
+        console.log('[Blackjack] Table not found', tableId);
+        socket.emit('blackjack_error', { tableId, message: 'Table not found' });
+        return;
+      }
+      
+      const blackjackPlayer = table.state.players.find(p => p.playerId === playerId);
+      if (!blackjackPlayer) {
+        console.log('[Blackjack] Player not at table', playerId);
+        socket.emit('blackjack_error', { tableId, message: 'Player not at table' });
+        return;
+      }
+      
+      const hand = blackjackPlayer.hands[handIndex];
+      if (!hand) {
+        console.log('[Blackjack] Invalid hand index', handIndex);
+        socket.emit('blackjack_error', { tableId, message: 'Invalid hand' });
+        return;
+      }
+      
+      // Get current orbs - prefer room state (in-memory) over Firebase to avoid stale data
+      // Room state is updated immediately after blackjack actions, while Firebase may lag
+      // Only fall back to Firebase if room state is missing
+      let currentOrbs = player.orbs || 0;
+      
+      // If room state is 0 or missing, try Firebase as fallback (but don't require it)
+      if (currentOrbs === 0) {
+        const { getUserData } = await import('./firebase');
+        const userData = await getUserData(playerId);
+        if (userData?.orbs) {
+          currentOrbs = userData.orbs;
+          // Update room state with Firebase value if we got it
+          player.orbs = currentOrbs;
+          players.updatePlayerOrbs(playerId, currentOrbs);
         }
       }
+      
+      console.log(`[Blackjack] Split: player=${playerId}, currentOrbs=${currentOrbs} (from ${player.orbs > 0 ? 'room state' : 'Firebase/fallback'})`);
+      
+      const result = blackjack.split(tableId, playerId, handIndex, currentOrbs);
+      console.log('[Blackjack] Split result:', result);
+      
+      if (result.success) {
+        // Deduct additional bet for split
+        const additionalBet = hand.bet;
+        const newBalance = currentOrbs - additionalBet;
+        console.log(`[Blackjack] Split: deducting ${additionalBet}, balance ${currentOrbs} -> ${newBalance} (client will update Firebase)`);
+        player.orbs = newBalance;
+        players.updatePlayerOrbs(playerId, newBalance);
+        
+        // Broadcast orb update with rewardType so client handles it correctly
+        console.log(`[Blackjack] Emitting player_orbs_updated for split: playerId=${playerId}, orbs=${newBalance}, rewardAmount=${-additionalBet}, rewardType=blackjack`);
+        io.to(mapping.roomId).emit('player_orbs_updated', { 
+          playerId, 
+          orbs: newBalance, 
+          rewardAmount: -additionalBet, 
+          rewardType: 'blackjack'
+        });
+        
+        // Broadcast state update
+        const updatedTable = blackjack.getTable(tableId);
+        if (updatedTable) {
+          const tablePlayers = updatedTable.state.players.map(p => p.playerId);
+          for (const tablePlayerId of tablePlayers) {
+            const playerSockets = Array.from(io.sockets.sockets.values()).filter(s => {
+              const m = socketToPlayer.get(s.id);
+              return m && m.playerId === tablePlayerId;
+            });
+            for (const playerSocket of playerSockets) {
+              playerSocket.emit('blackjack_state_update', { tableId, state: updatedTable.state });
+            }
+          }
+        }
     } else {
+      console.log('[Blackjack] Split failed:', result.message);
       socket.emit('blackjack_error', { tableId, message: result.message || 'Failed to split' });
+    }
+    } catch (error: any) {
+      console.error('[Blackjack] Error in split handler:', error);
+      socket.emit('blackjack_error', { tableId, message: error.message || 'An error occurred while splitting' });
     }
   });
 
@@ -2258,6 +2597,352 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     console.log(`Player ${player.name} sold ${coinCount} gold coins for ${orbsReceived} orbs, new balance: ${newBalance}`);
   });
 
+  // ============ TRADING SYSTEM ============
+  
+  // Trade request
+  socket.on('trade_request', ({ otherPlayerId }) => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+    
+    const { playerId, roomId } = mapping;
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    if (!player) return;
+    
+    const otherPlayer = rooms.getPlayerInRoom(roomId, otherPlayerId);
+    if (!otherPlayer) {
+      socket.emit('trade_error', { message: 'Player not found in room' });
+      return;
+    }
+    
+    // Check if players are in the same room
+    if (otherPlayer.roomId !== roomId) {
+      socket.emit('trade_error', { message: 'Player is not in the same room' });
+      return;
+    }
+    
+    // Check if trade already exists
+    const existingTrade = trades.getTrade(playerId, otherPlayerId);
+    if (existingTrade) {
+      // Trade already exists, just notify the other player
+      const otherPlayerSockets = Array.from(io.sockets.sockets.values()).filter(s => {
+        const m = socketToPlayer.get(s.id);
+        return m && m.playerId === otherPlayerId;
+      });
+      for (const otherSocket of otherPlayerSockets) {
+        otherSocket.emit('trade_opened', { otherPlayerId: playerId, otherPlayerName: player.name });
+      }
+      socket.emit('trade_opened', { otherPlayerId, otherPlayerName: otherPlayer.name });
+      return;
+    }
+    
+    // Create new trade
+    const trade = trades.createTrade(playerId, otherPlayerId);
+    if (!trade) {
+      socket.emit('trade_error', { message: 'Failed to create trade' });
+      return;
+    }
+    
+    // Notify the other player - send both events so they get the notification and open the trade
+    const otherPlayerSockets = Array.from(io.sockets.sockets.values()).filter(s => {
+      const m = socketToPlayer.get(s.id);
+      return m && m.playerId === otherPlayerId;
+    });
+    for (const otherSocket of otherPlayerSockets) {
+      otherSocket.emit('trade_requested', { fromPlayerId: playerId, fromPlayerName: player.name });
+      otherSocket.emit('trade_opened', { otherPlayerId: playerId, otherPlayerName: player.name });
+    }
+    
+    // Notify requesting player
+    socket.emit('trade_opened', { otherPlayerId, otherPlayerName: otherPlayer.name });
+  });
+  
+  // Modify trade offer
+  socket.on('trade_modify', ({ items, orbs }) => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+    
+    const { playerId, roomId } = mapping;
+    const trade = trades.getTradeForPlayer(playerId);
+    if (!trade) {
+      socket.emit('trade_error', { message: 'No active trade found' });
+      return;
+    }
+    
+    const otherPlayerId = trades.getOtherPlayerId(trade, playerId);
+    const otherPlayer = rooms.getPlayerInRoom(roomId, otherPlayerId);
+    if (!otherPlayer) {
+      socket.emit('trade_error', { message: 'Other player not found' });
+      return;
+    }
+    
+    // Validate orbs (check player has enough) - use room state, not Firebase
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    if (!player) return;
+    
+    // Use player's current orbs from room state
+    const currentOrbs = player.orbs || 0;
+    
+    if (orbs > currentOrbs) {
+      socket.emit('trade_error', { message: 'You do not have enough orbs' });
+      return;
+    }
+    
+    // Note: Item validation is handled client-side and on trade completion
+    // The client manages its own inventory and will validate before sending
+    
+    // Update trade offer
+    const success = trades.updateTradeOffer(playerId, otherPlayerId, items, orbs);
+    if (!success) {
+      socket.emit('trade_error', { message: 'Failed to update trade offer' });
+      return;
+    }
+    
+    // Notify other player
+    const otherPlayerSockets = Array.from(io.sockets.sockets.values()).filter(s => {
+      const m = socketToPlayer.get(s.id);
+      return m && m.playerId === otherPlayerId;
+    });
+    const updatedTrade = trades.getTrade(playerId, otherPlayerId);
+    if (updatedTrade) {
+      const otherOffer = trades.getOtherPlayerOffer(updatedTrade, otherPlayerId);
+      const otherAccepted = trades.isPlayerAccepted(updatedTrade, otherPlayerId);
+      // Ensure items is always an array
+      const itemsArray = Array.isArray(otherOffer.items) ? otherOffer.items : [];
+      for (const otherSocket of otherPlayerSockets) {
+        otherSocket.emit('trade_modified', { 
+          items: itemsArray, 
+          orbs: otherOffer.orbs || 0,
+          accepted: otherAccepted || false
+        });
+      }
+    }
+  });
+  
+  // Accept trade
+  socket.on('trade_accept', () => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+    
+    const { playerId, roomId } = mapping;
+    const trade = trades.getTradeForPlayer(playerId);
+    if (!trade) {
+      socket.emit('trade_error', { message: 'No active trade found' });
+      return;
+    }
+    
+    const otherPlayerId = trades.getOtherPlayerId(trade, playerId);
+    const wasAccepted = trades.isPlayerAccepted(trade, playerId);
+    
+    // Toggle accept (RuneScape style - can un-accept)
+    const success = trades.acceptTrade(playerId, otherPlayerId);
+    if (!success) {
+      socket.emit('trade_error', { message: 'Failed to accept trade' });
+      return;
+    }
+    
+    const updatedTrade = trades.getTrade(playerId, otherPlayerId);
+    if (!updatedTrade) return;
+    
+    // Notify both players
+    const allSockets = Array.from(io.sockets.sockets.values());
+    for (const s of allSockets) {
+      const m = socketToPlayer.get(s.id);
+      if (m && (m.playerId === playerId || m.playerId === otherPlayerId)) {
+        s.emit('trade_accepted', { playerId });
+      }
+    }
+    
+    // Check if both players accepted - complete trade
+    if (trades.isTradeReady(playerId, otherPlayerId)) {
+      // Complete the trade
+      const completedTrade = trades.completeTrade(playerId, otherPlayerId);
+      if (!completedTrade) return;
+      
+      // Get players from room state (not Firebase)
+      const player1 = rooms.getPlayerInRoom(roomId, completedTrade.player1Id);
+      const player2 = rooms.getPlayerInRoom(roomId, completedTrade.player2Id);
+      
+      if (!player1 || !player2) {
+        for (const s of allSockets) {
+          const m = socketToPlayer.get(s.id);
+          if (m && (m.playerId === completedTrade.player1Id || m.playerId === completedTrade.player2Id)) {
+            s.emit('trade_error', { message: 'Trade failed: One or both players not found in room' });
+          }
+        }
+        return;
+      }
+      
+      const player1Name = player1.name || completedTrade.player1Id;
+      const player2Name = player2.name || completedTrade.player2Id;
+      const player1Orbs = player1.orbs || 0;
+      const player2Orbs = player2.orbs || 0;
+      
+      console.log('[server] Validating trade completion:', {
+        player1Id: completedTrade.player1Id,
+        player1Name,
+        player1Orbs,
+        player1OfferOrbs: completedTrade.player1Offer.orbs,
+        player2Id: completedTrade.player2Id,
+        player2Name,
+        player2Orbs,
+        player2OfferOrbs: completedTrade.player2Offer.orbs
+      });
+      
+      // Validate both players still have enough orbs (using room state)
+      // Check player1
+      if (player1Orbs < completedTrade.player1Offer.orbs) {
+        console.error('[server] Trade validation failed: player1 does not have enough orbs', {
+          player1Id: completedTrade.player1Id,
+          player1Name,
+          has: player1Orbs,
+          needs: completedTrade.player1Offer.orbs
+        });
+        for (const s of allSockets) {
+          const m = socketToPlayer.get(s.id);
+          if (m && (m.playerId === completedTrade.player1Id || m.playerId === completedTrade.player2Id)) {
+            s.emit('trade_error', { message: `Trade failed: ${player1Name} does not have enough orbs (has ${player1Orbs.toLocaleString()}, needs ${completedTrade.player1Offer.orbs.toLocaleString()})` });
+          }
+        }
+        return;
+      }
+      
+      // Check player2
+      if (player2Orbs < completedTrade.player2Offer.orbs) {
+        console.error('[server] Trade validation failed: player2 does not have enough orbs', {
+          player2Id: completedTrade.player2Id,
+          player2Name,
+          has: player2Orbs,
+          needs: completedTrade.player2Offer.orbs
+        });
+        for (const s of allSockets) {
+          const m = socketToPlayer.get(s.id);
+          if (m && (m.playerId === completedTrade.player1Id || m.playerId === completedTrade.player2Id)) {
+            s.emit('trade_error', { message: `Trade failed: ${player2Name} does not have enough orbs (has ${player2Orbs.toLocaleString()}, needs ${completedTrade.player2Offer.orbs.toLocaleString()})` });
+          }
+        }
+        return;
+      }
+      
+      // Note: Item validation is handled client-side
+      // The client manages its own inventory and validates before accepting
+      
+      // Calculate new orb balances (server is source of truth)
+      const newPlayer1Orbs = player1Orbs - completedTrade.player1Offer.orbs + completedTrade.player2Offer.orbs;
+      const newPlayer2Orbs = player2Orbs - completedTrade.player2Offer.orbs + completedTrade.player1Offer.orbs;
+      
+      console.log(`[Trade] Completed trade between ${player1Name} and ${player2Name}`);
+      console.log(`[Trade] Items exchanged:`, {
+        [`${player1Name} gave`]: {
+          items: completedTrade.player1Offer.items.map(item => `${item.quantity}x ${item.itemId}`),
+          orbs: completedTrade.player1Offer.orbs
+        },
+        [`${player1Name} received`]: {
+          items: completedTrade.player2Offer.items.map(item => `${item.quantity}x ${item.itemId}`),
+          orbs: completedTrade.player2Offer.orbs
+        },
+        [`${player2Name} gave`]: {
+          items: completedTrade.player2Offer.items.map(item => `${item.quantity}x ${item.itemId}`),
+          orbs: completedTrade.player2Offer.orbs
+        },
+        [`${player2Name} received`]: {
+          items: completedTrade.player1Offer.items.map(item => `${item.quantity}x ${item.itemId}`),
+          orbs: completedTrade.player1Offer.orbs
+        }
+      });
+      console.log(`[Trade] Balance changes:`, {
+        player1Name,
+        player1OldOrbs: player1Orbs,
+        player1NewOrbs: newPlayer1Orbs,
+        player1Change: newPlayer1Orbs - player1Orbs,
+        player2Name,
+        player2OldOrbs: player2Orbs,
+        player2NewOrbs: newPlayer2Orbs,
+        player2Change: newPlayer2Orbs - player2Orbs
+      });
+      
+      // Update room state
+      player1.orbs = newPlayer1Orbs;
+      player2.orbs = newPlayer2Orbs;
+      players.updatePlayerOrbs(completedTrade.player1Id, newPlayer1Orbs);
+      players.updatePlayerOrbs(completedTrade.player2Id, newPlayer2Orbs);
+      
+      // Broadcast orb updates to entire room - server is source of truth
+      // Clients will update Firebase and display these values
+      io.to(roomId).emit('player_orbs_updated', { 
+        playerId: completedTrade.player1Id, 
+        orbs: newPlayer1Orbs,
+        rewardType: 'trade'
+      });
+      io.to(roomId).emit('player_orbs_updated', { 
+        playerId: completedTrade.player2Id, 
+        orbs: newPlayer2Orbs,
+        rewardType: 'trade'
+      });
+      
+      // Notify trading players about trade completion - includes items to update inventory
+      for (const s of allSockets) {
+        const m = socketToPlayer.get(s.id);
+        if (m && m.playerId === completedTrade.player1Id) {
+          s.emit('trade_completed', { 
+            items: completedTrade.player2Offer.items, 
+            orbs: completedTrade.player2Offer.orbs,
+            newBalance: newPlayer1Orbs // Server's calculated balance
+          });
+        } else if (m && m.playerId === completedTrade.player2Id) {
+          s.emit('trade_completed', { 
+            items: completedTrade.player1Offer.items, 
+            orbs: completedTrade.player1Offer.orbs,
+            newBalance: newPlayer2Orbs // Server's calculated balance
+          });
+        }
+      }
+    }
+  });
+  
+  // Decline trade
+  socket.on('trade_decline', () => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+    
+    const { playerId } = mapping;
+    const trade = trades.getTradeForPlayer(playerId);
+    if (!trade) return;
+    
+    const otherPlayerId = trades.getOtherPlayerId(trade, playerId);
+    trades.cancelTrade(playerId, otherPlayerId);
+    
+    // Notify both players
+    const allSockets = Array.from(io.sockets.sockets.values());
+    for (const s of allSockets) {
+      const m = socketToPlayer.get(s.id);
+      if (m && (m.playerId === playerId || m.playerId === otherPlayerId)) {
+        s.emit('trade_declined');
+      }
+    }
+  });
+  
+  // Cancel trade
+  socket.on('trade_cancel', () => {
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+    
+    const { playerId } = mapping;
+    const trade = trades.getTradeForPlayer(playerId);
+    if (!trade) return;
+    
+    const otherPlayerId = trades.getOtherPlayerId(trade, playerId);
+    trades.cancelTrade(playerId, otherPlayerId);
+    
+    // Notify both players
+    const allSockets = Array.from(io.sockets.sockets.values());
+    for (const s of allSockets) {
+      const m = socketToPlayer.get(s.id);
+      if (m && (m.playerId === playerId || m.playerId === otherPlayerId)) {
+        s.emit('trade_cancelled');
+      }
+    }
+  });
+  
   // Handle disconnection
   socket.on('disconnect', () => {
     const mapping = socketToPlayer.get(socket.id);

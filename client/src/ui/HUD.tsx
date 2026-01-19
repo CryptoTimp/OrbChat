@@ -457,9 +457,9 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                   const isVoid = boost.id.includes('void');
                   const isChaos = boost.id.includes('chaos');
                   const isAbyss = boost.id.includes('abyss');
-                  if (isVoid) glowColor = '#4b0082'; // Purple
-                  else if (isChaos) glowColor = '#00ffff'; // Cyan
-                  else if (isAbyss) glowColor = '#6a0dad'; // Dark purple
+                if (isVoid) glowColor = '#4b0082'; // Purple
+                else if (isChaos) glowColor = '#00ffff'; // Cyan
+                else if (isAbyss) glowColor = '#6a0dad'; // Dark purple
                 }
                 
                 return (
@@ -475,34 +475,34 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                     {/* Animated glow effect for godlike boosts */}
                     {isGodlike && (
                       <>
-                        <div 
-                          className="absolute inset-0 rounded-lg pointer-events-none animate-pulse"
-                          style={{
-                            boxShadow: `0 0 12px ${glowColor}60, 0 0 20px ${glowColor}40`,
-                            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                          }}
-                        />
-                        {/* Additional pulsing ring effect */}
-                        <div 
-                          className="absolute inset-0 rounded-lg pointer-events-none"
-                          style={{
-                            boxShadow: `0 0 8px ${glowColor}80`,
-                            animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                            animationDelay: '0.5s',
-                          }}
-                        />
+                    <div 
+                      className="absolute inset-0 rounded-lg pointer-events-none animate-pulse"
+                      style={{
+                        boxShadow: `0 0 12px ${glowColor}60, 0 0 20px ${glowColor}40`,
+                        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                      }}
+                    />
+                    {/* Additional pulsing ring effect */}
+                    <div 
+                      className="absolute inset-0 rounded-lg pointer-events-none"
+                      style={{
+                        boxShadow: `0 0 8px ${glowColor}80`,
+                        animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        animationDelay: '0.5s',
+                      }}
+                    />
                       </>
                     )}
                     {/* Glow effect for legendary boosts */}
                     {boost.rarity === 'legendary' && !isGodlike && (
-                      <div 
-                        className="absolute inset-0 rounded-lg pointer-events-none"
-                        style={{
-                          boxShadow: `0 0 8px ${boost.trailColor || '#ffd700'}40`,
-                        }}
-                      />
-                    )}
-                  </div>
+                    <div 
+                      className="absolute inset-0 rounded-lg pointer-events-none"
+                      style={{
+                        boxShadow: `0 0 8px ${boost.trailColor || '#ffd700'}40`,
+                      }}
+                    />
+                  )}
+                </div>
                 );
               })}
             </div>

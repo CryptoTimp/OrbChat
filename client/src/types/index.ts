@@ -22,6 +22,7 @@ export interface Player {
 export interface ChatBubble {
   text: string;
   createdAt: number;
+  textColor?: string; // Optional color override (e.g., green for wins, red for losses)
 }
 
 export interface PlayerWithChat extends Player {

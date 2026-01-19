@@ -27,7 +27,7 @@ interface GameState {
   inventory: InventoryItem[];
   
   // Chat
-  chatMessages: Array<{ playerId: string; text: string; createdAt: number }>;
+  chatMessages: Array<{ playerId: string; text: string; createdAt: number; textColor?: string }>;
   
   // Session stats (client-side only, resets on room leave)
   sessionStats: {
@@ -62,6 +62,28 @@ interface GameState {
     confirmColor?: 'red' | 'green' | 'amber';
   };
   
+  // Player context menu
+  playerContextMenu: {
+    isOpen: boolean;
+    playerId: string | null;
+    playerName: string | null;
+    x: number;
+    y: number;
+  };
+  
+  // Trade state
+  trade: {
+    isOpen: boolean;
+    otherPlayerId: string | null;
+    otherPlayerName: string | null;
+    myItems: Array<{ itemId: string; quantity: number }>;
+    myOrbs: number;
+    theirItems: Array<{ itemId: string; quantity: number }>;
+    theirOrbs: number;
+    myAccepted: boolean;
+    theirAccepted: boolean;
+  };
+  
   // Audio state
   musicEnabled: boolean;
   musicVolume: number;
@@ -88,7 +110,7 @@ interface GameState {
   addPlayer: (player: PlayerWithChat) => void;
   removePlayer: (playerId: string) => void;
   updatePlayerPosition: (playerId: string, x: number, y: number, direction: Direction) => void;
-  updatePlayerChat: (playerId: string, text: string, createdAt: number) => void;
+  updatePlayerChat: (playerId: string, text: string, createdAt: number, textColor?: string) => void;
   
   // Orb actions
   addOrb: (orb: Orb) => void;
@@ -118,6 +140,16 @@ interface GameState {
   updateBlackjackState: (state: BlackjackTableState | null) => void;
   setConfirmModal: (modal: GameState['confirmModal']) => void;
   
+  // Player context menu actions
+  showPlayerContextMenu: (playerId: string, playerName: string, x: number, y: number) => void;
+  hidePlayerContextMenu: () => void;
+  
+  // Trade actions
+  openTrade: (otherPlayerId: string, otherPlayerName: string) => void;
+  closeTrade: () => void;
+  updateTrade: (updates: Partial<GameState['trade']>) => void;
+  resetTrade: () => void;
+  
   // Audio actions
   setMusicEnabled: (enabled: boolean) => void;
   setMusicVolume: (volume: number) => void;
@@ -125,7 +157,7 @@ interface GameState {
   setSfxVolume: (volume: number) => void;
   
   // Chat actions
-  addChatMessage: (playerId: string, text: string, createdAt: number) => void;
+  addChatMessage: (playerId: string, text: string, createdAt: number, textColor?: string) => void;
   
   // Local player actions
   setLocalPlayerPosition: (x: number, y: number, direction: Direction) => void;
@@ -212,6 +244,24 @@ export const useGameStore = create<GameState>((set, get) => ({
     title: '',
     message: '',
     onConfirm: () => {},
+  },
+  playerContextMenu: {
+    isOpen: false,
+    playerId: null,
+    playerName: null,
+    x: 0,
+    y: 0,
+  },
+  trade: {
+    isOpen: false,
+    otherPlayerId: null,
+    otherPlayerName: null,
+    myItems: [],
+    myOrbs: 0,
+    theirItems: [],
+    theirOrbs: 0,
+    myAccepted: false,
+    theirAccepted: false,
   },
   
   // Audio state (loaded from localStorage)
@@ -465,7 +515,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
   
-  updatePlayerChat: (playerId, text, createdAt) => {
+  updatePlayerChat: (playerId, text, createdAt, textColor) => {
     const players = new Map(get().players);
     const player = players.get(playerId);
     const state = get();
@@ -473,7 +523,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (player) {
       const updatedPlayer = { 
         ...player, 
-        chatBubble: { text, createdAt } 
+        chatBubble: { text, createdAt, textColor } 
       };
       players.set(playerId, updatedPlayer);
       
@@ -528,13 +578,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       const oldLocalOrbs = currentState.localPlayer?.orbs;
       
       // CRITICAL: If this is a significant decrease for local player, check if it's legitimate
-      if (playerId === currentState.playerId && oldLocalOrbs && orbs < oldLocalOrbs - 1000) {
+      // BUT: Skip this check if lastOrbValue is undefined (means it's a trade or other server update)
+      // Only apply blackjack protection for bet deductions (lastOrbValue < 0)
+      if (playerId === currentState.playerId && oldLocalOrbs && orbs < oldLocalOrbs - 1000 && lastOrbValue !== undefined) {
         const decrease = oldLocalOrbs - orbs;
         const isInBlackjack = currentState.blackjackTableOpen && currentState.blackjackGameState;
         
         // Check if this is a legitimate bet deduction
         // If lastOrbValue is negative (a bet), calculate expected balance and use that instead of server's stale balance
-        const isBetDeduction = lastOrbValue !== undefined && lastOrbValue < 0;
+        const isBetDeduction = lastOrbValue < 0;
         
         if (isBetDeduction && isInBlackjack) {
           // This is a bet deduction - use client's current balance minus the bet amount
@@ -561,6 +613,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           // Not in blackjack, allow the decrease (might be a purchase or other transaction)
           console.log(`[gameStore] Allowing balance decrease (not in blackjack): ${oldLocalOrbs} -> ${orbs}`);
         }
+      } else if (playerId === currentState.playerId && oldLocalOrbs && orbs < oldLocalOrbs - 1000 && lastOrbValue === undefined) {
+        // Trade or other server update - always trust the server
+        console.log(`[gameStore] Allowing balance decrease from server update (trade/transaction): ${oldLocalOrbs} -> ${orbs}`);
       }
       
       players.set(playerId, { ...player, orbs });
@@ -676,6 +731,59 @@ export const useGameStore = create<GameState>((set, get) => ({
   updateBlackjackState: (state) => set({ blackjackGameState: state }),
   setConfirmModal: (modal) => set({ confirmModal: modal }),
   
+  // Player context menu actions
+  showPlayerContextMenu: (playerId, playerName, x, y) => set({ 
+    playerContextMenu: { isOpen: true, playerId, playerName, x, y } 
+  }),
+  hidePlayerContextMenu: () => set({ 
+    playerContextMenu: { isOpen: false, playerId: null, playerName: null, x: 0, y: 0 } 
+  }),
+  
+  // Trade actions
+  openTrade: (otherPlayerId, otherPlayerName) => set({ 
+    trade: { 
+      isOpen: true, 
+      otherPlayerId, 
+      otherPlayerName, 
+      myItems: [], 
+      myOrbs: 0, 
+      theirItems: [], 
+      theirOrbs: 0, 
+      myAccepted: false, 
+      theirAccepted: false 
+    },
+    playerContextMenu: { isOpen: false, playerId: null, playerName: null, x: 0, y: 0 }
+  }),
+  closeTrade: () => set({ 
+    trade: { 
+      isOpen: false, 
+      otherPlayerId: null, 
+      otherPlayerName: null, 
+      myItems: [], 
+      myOrbs: 0, 
+      theirItems: [], 
+      theirOrbs: 0, 
+      myAccepted: false, 
+      theirAccepted: false 
+    } 
+  }),
+  updateTrade: (updates) => set((state) => ({ 
+    trade: { ...state.trade, ...updates } 
+  })),
+  resetTrade: () => set((state) => ({ 
+    trade: { 
+      isOpen: true, 
+      otherPlayerId: state.trade.otherPlayerId, 
+      otherPlayerName: state.trade.otherPlayerName, 
+      myItems: [], 
+      myOrbs: 0, 
+      theirItems: [], 
+      theirOrbs: 0, 
+      myAccepted: false, 
+      theirAccepted: false 
+    } 
+  })),
+  
   // Audio actions
   setMusicEnabled: (enabled) => {
     localStorage.setItem('musicEnabled', String(enabled));
@@ -695,9 +803,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   
   // Chat actions
-  addChatMessage: (playerId, text, createdAt) => {
+  addChatMessage: (playerId, text, createdAt, textColor) => {
     const currentMessages = get().chatMessages;
-    console.log('addChatMessage called:', { playerId, text, createdAt, currentCount: currentMessages.length });
+    console.log('addChatMessage called:', { playerId, text, createdAt, textColor, currentCount: currentMessages.length });
     
     // Deduplicate: check if this exact message already exists (same player, text, and within 1 second)
     const isDuplicate = currentMessages.some(msg => 
@@ -711,7 +819,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return;
     }
     
-    const messages = [...currentMessages, { playerId, text, createdAt }];
+    const messages = [...currentMessages, { playerId, text, createdAt, textColor }];
     // Keep only last 50 messages
     if (messages.length > 50) {
       messages.shift();

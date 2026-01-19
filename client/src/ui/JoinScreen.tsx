@@ -289,7 +289,7 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
       setSelectedRoom(room.id); // Also select it for visual feedback
     } else {
       // For public rooms, join directly
-      handleJoinRoom(room.id, room.mapType);
+        handleJoinRoom(room.id, room.mapType);
     }
   };
   
@@ -475,37 +475,37 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
                           
                           return (
                             <div key={room.id} className="space-y-1">
-                              <button
-                                onClick={() => {
-                                  playClickSound();
+                          <button
+                            onClick={() => {
+                              playClickSound();
                                   // If clicking the same room, deselect. Otherwise select it.
-                                  setSelectedRoom(selectedRoom === room.id ? null : room.id);
-                                }}
+                              setSelectedRoom(selectedRoom === room.id ? null : room.id);
+                            }}
                                 className={`w-full p-3 rounded-lg border-2 transition-all duration-200 text-left
                                   ${isSelected 
                                     ? 'bg-emerald-900/30 border-emerald-500 shadow-lg shadow-emerald-500/20' 
-                                    : 'bg-slate-800/50 border-slate-700 hover:border-slate-600 hover:bg-slate-800'}`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-2xl">{MAP_EMOJI[room.mapType]}</span>
-                                    <div>
-                                      <p className="text-slate-200 font-pixel text-sm">
-                                        {room.id === 'eu-1' ? 'EU 1' : room.id === 'eu-2' ? 'EU 2' : room.id === 'eu-3' ? 'EU 3' : room.id.toUpperCase()}
-                                      </p>
+                                : 'bg-slate-800/50 border-slate-700 hover:border-slate-600 hover:bg-slate-800'}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl">{MAP_EMOJI[room.mapType]}</span>
+                                <div>
+                                  <p className="text-slate-200 font-pixel text-sm">
+                                    {room.id === 'eu-1' ? 'EU 1' : room.id === 'eu-2' ? 'EU 2' : room.id === 'eu-3' ? 'EU 3' : room.id.toUpperCase()}
+                                  </p>
                                       <p className="text-slate-500 font-pixel text-xs capitalize">{room.mapType === 'forest' ? 'Plaza' : room.mapType}</p>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="text-emerald-400 font-pixel text-sm">{room.playerCount} 👤</p>
-                                    <p className="text-slate-500 font-pixel text-xs truncate max-w-[100px]">
-                                      {room.players.length > 0 
-                                        ? room.players.slice(0, 2).join(', ') + (room.players.length > 2 ? '...' : '')
-                                        : 'Empty'}
-                                    </p>
-                                  </div>
                                 </div>
-                              </button>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-emerald-400 font-pixel text-sm">{room.playerCount} 👤</p>
+                                <p className="text-slate-500 font-pixel text-xs truncate max-w-[100px]">
+                                  {room.players.length > 0 
+                                    ? room.players.slice(0, 2).join(', ') + (room.players.length > 2 ? '...' : '')
+                                    : 'Empty'}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
                               
                               {/* Casino room dropdown below selected room - keep open if casino is selected */}
                               {showCasinoDropdown && casinoRoom && (
@@ -664,39 +664,39 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
               
               {/* Join selected room button */}
               {selectedRoom && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                     if (!playerName.trim() || isJoining || showPasswordModal) return;
-                    playClickSound();
-                    const room = rooms.find(r => r.id === selectedRoom);
-                    if (room) {
-                      handleRoomClick(room);
-                    }
-                  }}
+                  playClickSound();
+                  const room = rooms.find(r => r.id === selectedRoom);
+                  if (room) {
+                    handleRoomClick(room);
+                  }
+                }}
                   disabled={!playerName.trim() || isJoining || showPasswordModal}
-                  className="w-full mt-4 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 
-                             hover:from-cyan-500 hover:to-blue-500
-                             disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed
-                             text-white font-pixel text-sm rounded-lg
-                             shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50
-                             transition-all duration-200
-                             flex items-center justify-center gap-2"
-                >
-                  {isJoining ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Joining...
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                      </svg>
+                className="w-full mt-4 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 
+                           hover:from-cyan-500 hover:to-blue-500
+                           disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed
+                           text-white font-pixel text-sm rounded-lg
+                           shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50
+                           transition-all duration-200
+                           flex items-center justify-center gap-2"
+              >
+                {isJoining ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Joining...
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
                       {(() => {
                         const room = rooms.find(r => r.id === selectedRoom);
                         if (!room) return 'Select a Room';
@@ -714,9 +714,9 @@ export function JoinScreen({ onJoin, user }: JoinScreenProps) {
                           return `Join ${roomTypeName} ${displayName}`;
                         }
                       })()}
-                    </>
-                  )}
-                </button>
+                  </>
+                )}
+              </button>
               )}
             </div>
           ) : null}

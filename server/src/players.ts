@@ -16,13 +16,13 @@ export function createPlayerFromFirebase(
   let spawnX: number;
   let spawnY: number;
   
-  // World dimensions in unscaled pixels (player coordinates are unscaled)
-  const WORLD_WIDTH_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH;
-  const WORLD_HEIGHT_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT;
-  const centerX = WORLD_WIDTH_UNSCALED / 2;
-  const centerY = WORLD_HEIGHT_UNSCALED / 2;
-  const SCALE = GAME_CONSTANTS.SCALE;
-  
+    // World dimensions in unscaled pixels (player coordinates are unscaled)
+    const WORLD_WIDTH_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH;
+    const WORLD_HEIGHT_UNSCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT;
+    const centerX = WORLD_WIDTH_UNSCALED / 2;
+    const centerY = WORLD_HEIGHT_UNSCALED / 2;
+    const SCALE = GAME_CONSTANTS.SCALE;
+    
   // For forest map, spawn on central podium (avoiding fountain tower)
   // OR at casino portal if returning from casino
   if (mapType === 'forest') {
@@ -53,24 +53,24 @@ export function createPlayerFromFirebase(
       spawnX = Math.max(0, Math.min(spawnX, maxX));
       spawnY = Math.max(0, Math.min(spawnY, maxY));
     } else {
-      // Podium radius on client: 160 * SCALE (scaled pixels) = 160 * SCALE unscaled pixels
-      // Tower radius on client: 60 * SCALE (scaled pixels) = 60 * SCALE unscaled pixels
-      // Since player coordinates are in unscaled pixels, we use the unscaled values
-      const towerRadius = 60 * SCALE; // 180 unscaled pixels
-      const podiumRadius = 160 * SCALE; // 480 unscaled pixels
-      
-      // Spawn between tower and podium edge (with some margin)
-      const minRadius = towerRadius + 40; // Avoid tower by at least 40 unscaled pixels
-      const maxRadius = podiumRadius - 40; // Stay away from podium edge by 40 unscaled pixels
-      
-      // Random angle and distance
-      const angle = Math.random() * Math.PI * 2;
-      const radius = minRadius + Math.random() * (maxRadius - minRadius);
-      
-      // Calculate spawn position (player coordinates are top-left corner of sprite)
-      // Center the player sprite on the spawn point
-      spawnX = centerX + Math.cos(angle) * radius - (GAME_CONSTANTS.PLAYER_WIDTH / 2);
-      spawnY = centerY + Math.sin(angle) * radius - (GAME_CONSTANTS.PLAYER_HEIGHT / 2);
+    // Podium radius on client: 160 * SCALE (scaled pixels) = 160 * SCALE unscaled pixels
+    // Tower radius on client: 60 * SCALE (scaled pixels) = 60 * SCALE unscaled pixels
+    // Since player coordinates are in unscaled pixels, we use the unscaled values
+    const towerRadius = 60 * SCALE; // 180 unscaled pixels
+    const podiumRadius = 160 * SCALE; // 480 unscaled pixels
+    
+    // Spawn between tower and podium edge (with some margin)
+    const minRadius = towerRadius + 40; // Avoid tower by at least 40 unscaled pixels
+    const maxRadius = podiumRadius - 40; // Stay away from podium edge by 40 unscaled pixels
+    
+    // Random angle and distance
+    const angle = Math.random() * Math.PI * 2;
+    const radius = minRadius + Math.random() * (maxRadius - minRadius);
+    
+    // Calculate spawn position (player coordinates are top-left corner of sprite)
+    // Center the player sprite on the spawn point
+    spawnX = centerX + Math.cos(angle) * radius - (GAME_CONSTANTS.PLAYER_WIDTH / 2);
+    spawnY = centerY + Math.sin(angle) * radius - (GAME_CONSTANTS.PLAYER_HEIGHT / 2);
       
       // Clamp to map bounds (in unscaled pixels)
       const maxX = WORLD_WIDTH_UNSCALED - GAME_CONSTANTS.PLAYER_WIDTH;

@@ -146,7 +146,7 @@ export function updatePlayerPosition(
   return true;
 }
 
-export function updatePlayerChat(roomId: string, playerId: string, text: string): number {
+export function updatePlayerChat(roomId: string, playerId: string, text: string, textColor?: string): number {
   const room = rooms.get(roomId);
   if (!room) return 0;
 
@@ -154,7 +154,7 @@ export function updatePlayerChat(roomId: string, playerId: string, text: string)
   if (!player) return 0;
 
   const createdAt = Date.now();
-  player.chatBubble = { text, createdAt };
+  player.chatBubble = { text, createdAt, textColor };
 
   // Auto-clear chat bubble after duration
   setTimeout(() => {

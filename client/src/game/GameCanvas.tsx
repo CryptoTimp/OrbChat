@@ -41,6 +41,7 @@ import {
   getHoveredBlackjackTable,
   setCasinoRoomPlayerCount,
   setMillionairesLoungeRoomPlayerCount,
+  setRoomPlayerCount,
   checkMillionairesLoungePortalClick,
   checkMillionairesLoungePortalCollision,
   getMillionairesLoungePortalPosition,
@@ -88,7 +89,9 @@ import {
   getClickedNPC,
   handleNPCClick,
   drawNameTag,
-  drawPlayerDirectionArrows
+  drawPlayerDirectionArrows,
+  getClickedPlayer,
+  getHoveredPlayer
 } from './renderer';
 import { 
   calculateMovement, 
@@ -152,6 +155,10 @@ export function GameCanvas() {
   const hoveredShrineRef = useRef<string | null>(null);
   const [hoveredShrine, setHoveredShrine] = useState<string | null>(null);
   
+  // Hovered player state (for visual highlight)
+  const hoveredPlayerRef = useRef<string | null>(null);
+  const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
+  
   // Tree cutting state
   const cuttingTreeRef = useRef<{ treeId: string; startTime: number; duration: number; startX: number; startY: number } | null>(null);
   const [cuttingTree, setCuttingTree] = useState<{ treeId: string; progress: number } | null>(null);
@@ -164,6 +171,11 @@ export function GameCanvas() {
   useEffect(() => {
     hoveredShrineRef.current = hoveredShrine;
   }, [hoveredShrine]);
+  
+  // Update hovered player ref when state changes
+  useEffect(() => {
+    hoveredPlayerRef.current = hoveredPlayer;
+  }, [hoveredPlayer]);
   
   // Pending shrine interaction (shrine to activate when player gets in range)
   const pendingShrineInteractionRef = useRef<string | null>(null);
@@ -408,6 +420,22 @@ export function GameCanvas() {
       if (pendingNPCStallInteractionRef.current) {
         pendingNPCStallInteractionRef.current = null;
       }
+      
+      // Check if clicking on a player (for trading)
+      const players = useGameStore.getState().players;
+      const localPlayerId = useGameStore.getState().playerId;
+      const clickedPlayer = getClickedPlayer(worldXScaled, worldYScaled, players, localPlayerId);
+      
+      if (clickedPlayer) {
+        // Show context menu for player interaction
+        const { showPlayerContextMenu } = useGameStore.getState();
+        showPlayerContextMenu(clickedPlayer.id, clickedPlayer.name, e.clientX, e.clientY);
+        return; // Don't move when clicking on player
+      }
+      
+      // Clear context menu if clicking elsewhere
+      const { hidePlayerContextMenu } = useGameStore.getState();
+      hidePlayerContextMenu();
       
       // Clear pending blackjack table interaction if clicking elsewhere
       if (pendingBlackjackTableInteractionRef.current) {
@@ -902,8 +930,13 @@ export function GameCanvas() {
         hoveredBlackjackTableRef.current = null;
       }
       
-      // Change cursor style when hovering over shrine, NPC stall, dealer, tree, portal, or blackjack table
-      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData || hoveredPortal || hoveredLoungePortal || hoveredReturnPortal || hoveredLoungeReturnPortal || hoveredBlackjackTable) {
+      // Check for hover on players
+      const players = useGameStore.getState().players;
+      const localPlayerId = useGameStore.getState().playerId;
+      const hoveredPlayer = getHoveredPlayer(worldXScaled, worldYScaled, players, localPlayerId);
+      
+      // Change cursor style when hovering over shrine, NPC stall, dealer, tree, portal, blackjack table, or player
+      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData || hoveredPortal || hoveredLoungePortal || hoveredReturnPortal || hoveredLoungeReturnPortal || hoveredBlackjackTable || hoveredPlayer) {
         canvas.style.cursor = 'pointer';
       } else {
         canvas.style.cursor = 'default';
@@ -994,6 +1027,46 @@ export function GameCanvas() {
       setMillionairesLoungeRoomPlayerCount(null);
     };
   }, [currentMapType, roomId, listRooms]);
+  
+  // Update all room player counts periodically (for return portal display)
+  useEffect(() => {
+    const updateAllRoomPlayerCounts = () => {
+      listRooms((rooms) => {
+        // Store player counts for all rooms
+        rooms.forEach(room => {
+          // For plaza rooms (eu-1, eu-2, eu-3), the server returns combined counts
+          // We need to calculate the actual plaza-only count by subtracting casino and lounge counts
+          if (room.id === 'eu-1' || room.id === 'eu-2' || room.id === 'eu-3') {
+            const casinoRoom = rooms.find(r => r.id === `casino-${room.id}`);
+            const loungeRoom = rooms.find(r => r.id === `millionaires_lounge-${room.id}`);
+            
+            // Calculate plaza-only count by subtracting casino and lounge counts
+            let plazaOnlyCount = room.playerCount;
+            if (casinoRoom) {
+              plazaOnlyCount -= casinoRoom.playerCount;
+            }
+            if (loungeRoom) {
+              plazaOnlyCount -= loungeRoom.playerCount;
+            }
+            
+            // Store the plaza-only count (ensure it's not negative)
+            setRoomPlayerCount(room.id, Math.max(0, plazaOnlyCount));
+          } else {
+            // For other rooms (casino, lounge, etc.), use the count as-is
+            setRoomPlayerCount(room.id, room.playerCount);
+          }
+        });
+      });
+    };
+    
+    // Update immediately and then every 5 seconds
+    updateAllRoomPlayerCounts();
+    const interval = setInterval(updateAllRoomPlayerCounts, 5000);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [listRooms]);
   
   // Game loop
   const gameLoop = useCallback((deltaTime: number) => {
@@ -2211,6 +2284,15 @@ export function GameCanvas() {
       }
     }
     
+    // Draw blackjack tables BEFORE players (so players appear on top of tables)
+    if (currentMapType === 'casino') {
+      // Draw return portal in casino map
+      drawReturnPortal(ctx, currentTime, camera, previousRoomId, roomId);
+      // Draw blackjack tables (before players so players appear on top)
+      const hoveredTableId = hoveredBlackjackTableRef.current;
+      drawBlackjackTables(ctx, currentTime, hoveredTableId);
+    }
+    
     // Draw NPC pets first
     for (const { player } of npcs) {
       const petItemId = player.sprite.outfit.find(itemId => itemId.startsWith('pet_'));
@@ -2227,7 +2309,8 @@ export function GameCanvas() {
                           (idParts[2] === 'legendary' || idParts[2] === 'epic' || idParts[2] === 'rare');
       // Skip trader NPCs - they're drawn in drawNPCStalls
       if (!isTraderNPC) {
-        drawPlayer(ctx, player, isLocal, currentTime);
+        const isHovered = hoveredPlayerRef.current === player.id;
+        drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
       }
     }
     
@@ -2240,8 +2323,63 @@ export function GameCanvas() {
     }
     
       // Draw real players (nameplates are drawn inside drawPlayer, so pets will be below them)
+      // Check if players are at blackjack tables by checking their position against table seat positions
+      const playersAtBlackjack = new Set<string>();
+      if (currentMapType === 'casino') {
+        // Calculate blackjack table seat positions (same logic as server and renderer)
+        const SCALE = GAME_CONSTANTS.SCALE;
+        const WORLD_WIDTH_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH * SCALE;
+        const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
+        const centerXScaled = WORLD_WIDTH_SCALED / 2;
+        const centerYScaled = WORLD_HEIGHT_SCALED / 2;
+        const plazaRadiusScaled = 300 * SCALE;
+        const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+        const tableRadiusScaled = plazaRadiusScaled * 0.6;
+        const tableRadiusSizeScaled = 60 * SCALE;
+        const seatRadiusScaled = tableRadiusSizeScaled * 0.8;
+        const seatTolerance = 100; // pixels tolerance in unscaled coordinates (increased for robustness)
+        
+        // Check all 4 tables
+        for (let tableIndex = 0; tableIndex < 4; tableIndex++) {
+          const tableAngle = tableAngles[tableIndex];
+          const tableXScaled = centerXScaled + Math.cos(tableAngle) * tableRadiusScaled;
+          const tableYScaled = centerYScaled + Math.sin(tableAngle) * tableRadiusScaled;
+          
+          // Convert to unscaled coordinates (player coordinates are unscaled)
+          const tableX = tableXScaled / SCALE;
+          const tableY = tableYScaled / SCALE;
+          const seatRadius = seatRadiusScaled / SCALE;
+          
+          // Check all 4 seats for each table (matching server and renderer)
+          for (let seat = 0; seat < 4; seat++) {
+            const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // Seats on player side - 4 seats evenly spaced
+            const seatX = tableX + Math.cos(seatAngle) * seatRadius;
+            const seatY = tableY + Math.sin(seatAngle) * seatRadius;
+            
+            // Check if any player is near this seat position
+            for (const { player } of realPlayers) {
+              // Player position is already in unscaled coordinates
+              const playerCenterX = player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+              const playerCenterY = player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+              const distance = Math.sqrt(
+                Math.pow(playerCenterX - seatX, 2) + 
+                Math.pow(playerCenterY - seatY, 2)
+              );
+              
+              if (distance < seatTolerance) {
+                playersAtBlackjack.add(player.id);
+                break; // Player found at this table, no need to check other seats
+              }
+            }
+          }
+        }
+      }
+      
       for (const { player, isLocal } of realPlayers) {
-        drawPlayer(ctx, player, isLocal, currentTime);
+        const isHovered = hoveredPlayerRef.current === player.id;
+        // Mark if player is at blackjack table
+        const playerWithBlackjackFlag = { ...player, isAtBlackjackTable: playersAtBlackjack.has(player.id) };
+        drawPlayer(ctx, playerWithBlackjackFlag, isLocal, currentTime, false, isHovered);
       }
     
     // Draw flag bunting BEFORE trader NPCs (so it appears behind them, their nameplates, and speech bubbles)
@@ -2258,12 +2396,6 @@ export function GameCanvas() {
     if (currentMapType === 'forest') {
       const playerOrbs = currentLocalPlayer?.orbs || 0;
       drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId, camera, playerOrbs);
-    } else if (currentMapType === 'casino') {
-      // Draw return portal in casino map
-      drawReturnPortal(ctx, currentTime, camera);
-      // Draw blackjack tables
-      const hoveredTableId = hoveredBlackjackTableRef.current;
-      drawBlackjackTables(ctx, currentTime, hoveredTableId);
     } else if (currentMapType === 'millionaires_lounge') {
       // Draw return portal in lounge map (background is drawn in drawBackground)
       drawMillionairesLoungeReturnPortal(ctx, currentTime, camera);
@@ -2331,7 +2463,8 @@ export function GameCanvas() {
     
     // Draw centurions on top of towers (so they're not hidden by the towers)
     for (const { player, isLocal } of centurions) {
-      drawPlayer(ctx, player, isLocal);
+      const isHovered = hoveredPlayerRef.current === player.id;
+      drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
     }
     
     // Draw NPC nameplates (background NPCs, etc.) - only if visible

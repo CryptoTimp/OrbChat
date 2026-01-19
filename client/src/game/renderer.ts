@@ -361,6 +361,76 @@ export function getClickedNPC(worldX: number, worldY: number): { id: string; pro
   return null;
 }
 
+// Get clicked player (for trading and interactions)
+export function getClickedPlayer(
+  worldX: number, 
+  worldY: number, 
+  players: Map<string, PlayerWithChat>,
+  localPlayerId: string | null
+): PlayerWithChat | null {
+  const p = SCALE;
+  const clickRadius = 30 * p; // Click detection radius (slightly larger than NPCs for easier clicking)
+  
+  // worldX and worldY are already in scaled coordinates from GameCanvas
+  // Check all players (excluding local player)
+  for (const player of players.values()) {
+    // Skip local player
+    if (player.id === localPlayerId) {
+      continue;
+    }
+    
+    // Get player center position (in scaled coordinates)
+    const playerCenterX = player.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+    const playerCenterY = player.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+    
+    // Calculate distance from click to player center
+    const dx = worldX - playerCenterX;
+    const dy = worldY - playerCenterY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist < clickRadius) {
+      return player;
+    }
+  }
+  
+  return null;
+}
+
+// Get hovered player (for cursor and highlight)
+export function getHoveredPlayer(
+  worldX: number, 
+  worldY: number, 
+  players: Map<string, PlayerWithChat>,
+  localPlayerId: string | null
+): PlayerWithChat | null {
+  const p = SCALE;
+  const hoverRadius = 35 * p; // Hover detection radius (slightly larger than click for better UX)
+  
+  // worldX and worldY are already in scaled coordinates from GameCanvas
+  // Check all players (excluding local player)
+  for (const player of players.values()) {
+    // Skip local player
+    if (player.id === localPlayerId) {
+      continue;
+    }
+    
+    // Get player center position (in scaled coordinates)
+    const playerCenterX = player.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+    const playerCenterY = player.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+    
+    // Calculate distance from hover to player center
+    const dx = worldX - playerCenterX;
+    const dy = worldY - playerCenterY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist < hoverRadius) {
+      return player;
+    }
+  }
+  
+  return null;
+}
+
 // Update and draw centurions (returns array of player objects to be drawn with other players)
 export function getCenturionPlayers(): PlayerWithChat[] {
   initializeCenturions();
@@ -4087,12 +4157,65 @@ export function isPlayerInNPCStallRange(playerX: number, playerY: number, stall:
 interface NPCSpeechBubble {
   text: string;
   createdAt: number;
+  color?: string; // Optional color for the text (white, green, red)
 }
 
-const npcSpeechBubbles: Map<string, NPCSpeechBubble> = new Map();
+// For blackjack dealers, we support multiple stacked bubbles
+const npcSpeechBubbles: Map<string, NPCSpeechBubble> = new Map(); // For regular NPCs (single bubble)
+const blackjackDealerBubbles: Map<string, NPCSpeechBubble[]> = new Map(); // For blackjack dealers (stacked bubbles)
 const npcSpeechOffsets: Map<string, number> = new Map(); // Random timing offsets for each NPC to stagger speech
 const NPC_SPEECH_INTERVAL = 10000; // Base interval between speech attempts
 const NPC_SPEECH_CHANCE = 0.4; // 40% chance to speak each interval
+const BLACKJACK_BUBBLE_DURATION = 8000; // Duration for blackjack dealer bubbles (8 seconds)
+const MAX_BLACKJACK_BUBBLES = 5; // Maximum number of stacked bubbles
+
+// Track last bubble time per dealer to ensure unique timestamps
+const lastBubbleTime: Map<string, number> = new Map();
+
+// Set a speech bubble for a specific dealer (bypasses random timing)
+// For blackjack dealers, bubbles stack; for others, they replace
+export function setDealerSpeechBubble(dealerId: string, message: string, color?: string): void {
+  let time = Date.now();
+  
+  // Check if this is a blackjack dealer
+  if (dealerId.startsWith('blackjack_dealer_')) {
+    // For blackjack dealers, add to stack
+    if (!blackjackDealerBubbles.has(dealerId)) {
+      blackjackDealerBubbles.set(dealerId, []);
+    }
+    const bubbles = blackjackDealerBubbles.get(dealerId)!;
+    
+    // Ensure unique timestamp (add 1ms if same as last bubble)
+    const lastTime = lastBubbleTime.get(dealerId) || 0;
+    if (time <= lastTime) {
+      time = lastTime + 1;
+    }
+    lastBubbleTime.set(dealerId, time);
+    
+    console.log('[setDealerSpeechBubble] Adding bubble for', dealerId, 'message:', message.substring(0, 50), 'time:', time, 'current bubbles:', bubbles.length);
+    
+    bubbles.push({
+      text: message,
+      createdAt: time,
+      color: color || 'white' // Default to white if no color specified
+    });
+    
+    // Keep only the most recent bubbles (remove old ones)
+    while (bubbles.length > MAX_BLACKJACK_BUBBLES) {
+      const removed = bubbles.shift();
+      console.log('[setDealerSpeechBubble] Removed old bubble:', removed?.text.substring(0, 50));
+    }
+    
+    console.log('[setDealerSpeechBubble] After adding, bubbles count:', bubbles.length, 'bubble texts:', bubbles.map(b => b.text.substring(0, 30)).join(', '));
+  } else {
+    // For regular NPCs, replace the bubble
+    npcSpeechBubbles.set(dealerId, {
+      text: message,
+      createdAt: time,
+      color: color
+    });
+  }
+}
 
 // Get speech messages for NPCs based on what they sell
 function getNPCSpeechMessages(tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets', rarity: ItemRarity): string[] {
@@ -5653,6 +5776,24 @@ export function getCasinoRoomPlayerCount(): number | null {
 // Return portal position (in casino map)
 let returnPortalPosition: { x: number; y: number; radius: number } | null = null;
 
+// Room player counts (for display above return portal)
+const roomPlayerCounts: Map<string, number> = new Map();
+
+// Setter function for room player count
+export function setRoomPlayerCount(roomId: string, count: number | null): void {
+  if (count === null) {
+    roomPlayerCounts.delete(roomId);
+  } else {
+    roomPlayerCounts.set(roomId, count);
+  }
+}
+
+// Getter function for room player count
+export function getRoomPlayerCount(roomId: string | null): number | null {
+  if (!roomId) return null;
+  return roomPlayerCounts.get(roomId) ?? null;
+}
+
 // Setter function for return portal position
 export function setReturnPortalPosition(position: { x: number; y: number; radius: number } | null): void {
   returnPortalPosition = position;
@@ -5741,26 +5882,62 @@ const DEALER_TYPES: DealerType[] = [
   {
     id: 'blackjack_dealer_1',
     name: 'Blackjack Dealer',
-    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
-    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+    outfit: ['hat_tophat', 'shirt_tuxedo', 'legs_suit'],
+    messages: [
+      'Place your bets!',
+      'Blackjack pays 3:2!',
+      'The odds are forever in your favor!',
+      'Win big orbs here!',
+      'Double your orbs!',
+      'Beat the dealer and win!',
+      'Good luck at the table!',
+      'Welcome to the table!'
+    ],
   },
   {
     id: 'blackjack_dealer_2',
     name: 'Blackjack Dealer',
-    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
-    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+    outfit: ['hat_tophat', 'shirt_tuxedo', 'legs_suit'],
+    messages: [
+      'Place your bets!',
+      'Blackjack pays 3:2!',
+      'The odds are forever in your favor!',
+      'Win big orbs here!',
+      'Double your orbs!',
+      'Beat the dealer and win!',
+      'Good luck at the table!',
+      'Welcome to the table!'
+    ],
   },
   {
     id: 'blackjack_dealer_3',
     name: 'Blackjack Dealer',
-    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
-    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+    outfit: ['hat_tophat', 'shirt_tuxedo', 'legs_suit'],
+    messages: [
+      'Place your bets!',
+      'Blackjack pays 3:2!',
+      'The odds are forever in your favor!',
+      'Win big orbs here!',
+      'Double your orbs!',
+      'Beat the dealer and win!',
+      'Good luck at the table!',
+      'Welcome to the table!'
+    ],
   },
   {
     id: 'blackjack_dealer_4',
     name: 'Blackjack Dealer',
-    outfit: ['hat_tophat', 'shirt_formal', 'legs_slacks'],
-    messages: ['Place your bets!', 'Blackjack pays 3:2!', 'Good luck!', 'Welcome to the table!'],
+    outfit: ['hat_tophat', 'shirt_tuxedo', 'legs_suit'],
+    messages: [
+      'Place your bets!',
+      'Blackjack pays 3:2!',
+      'The odds are forever in your favor!',
+      'Win big orbs here!',
+      'Double your orbs!',
+      'Beat the dealer and win!',
+      'Good luck at the table!',
+      'Welcome to the table!'
+    ],
   },
 ];
 
@@ -5839,6 +6016,43 @@ function updateDealerSpeechBubbles(time: number): void {
           text: randomMessage,
           createdAt: time
         });
+      }
+    }
+  }
+  
+  // Update blackjack dealers (all 4 tables)
+  for (let i = 1; i <= 4; i++) {
+    const blackjackDealerId = `blackjack_dealer_${i}`;
+    
+    // Initialize random offset for this dealer (once, persists across calls)
+    if (!npcSpeechOffsets.has(blackjackDealerId)) {
+      // Dealer gets a random offset between 0 and 10 seconds to stagger speech
+      npcSpeechOffsets.set(blackjackDealerId, Math.random() * NPC_SPEECH_INTERVAL);
+    }
+    
+    const dealerOffset = npcSpeechOffsets.get(blackjackDealerId)!;
+    const existingDealerBubble = npcSpeechBubbles.get(blackjackDealerId);
+    
+    // Check if bubble has expired
+    if (existingDealerBubble && time - existingDealerBubble.createdAt > GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
+      npcSpeechBubbles.delete(blackjackDealerId);
+    }
+    
+    // Use staggered time check - dealer checks at different times
+    const dealerStaggeredTime = (time + dealerOffset) % (NPC_SPEECH_INTERVAL * 2);
+    
+    // Only check for new speech in a small window (prevents all NPCs from speaking at once)
+    if (dealerStaggeredTime < 500 && !existingDealerBubble) {
+      // Random chance to speak
+      if (Math.random() < NPC_SPEECH_CHANCE) {
+        const dealerType = DEALER_TYPES.find(d => d.id === blackjackDealerId);
+        if (dealerType) {
+          const randomMessage = dealerType.messages[Math.floor(Math.random() * dealerType.messages.length)];
+          npcSpeechBubbles.set(blackjackDealerId, {
+            text: randomMessage,
+            createdAt: time
+          });
+        }
       }
     }
   }
@@ -6737,7 +6951,7 @@ export function checkMillionairesLoungeReturnPortalCollision(x: number, y: numbe
 }
 
 // Draw return portal in casino map (green/blue portal to return to previous room)
-export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, camera?: Camera): void {
+export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, camera?: Camera, previousRoomId?: string | null, currentRoomId?: string | null): void {
   const p = SCALE;
   
   // Position return portal in center of casino map (world coordinates)
@@ -6846,6 +7060,121 @@ export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, ca
     ctx.arc(symbolX, symbolY, 3 * p, 0, Math.PI * 2);
     ctx.fill();
   }
+  
+  // Determine return room ID (use previousRoomId if available, otherwise infer from current casino room)
+  let returnRoomId = previousRoomId;
+  if (!returnRoomId && currentRoomId && currentRoomId.startsWith('casino-')) {
+    // Infer from current casino room ID (e.g., casino-eu-1 -> eu-1)
+    returnRoomId = currentRoomId.replace('casino-', '');
+  }
+  
+  // Draw server name and player count above portal (similar to enter casino portal)
+  if (returnRoomId) {
+    const zoom = ctx.getTransform().a || 1;
+    const playerCount = getRoomPlayerCount(returnRoomId);
+    
+    // Format server name with "- Plaza" suffix for main rooms
+    const serverName = returnRoomId === 'eu-1' ? 'EU 1 - Plaza' : returnRoomId === 'eu-2' ? 'EU 2 - Plaza' : returnRoomId === 'eu-3' ? 'EU 3 - Plaza' : returnRoomId.toUpperCase();
+    const playerText = playerCount !== null 
+      ? `${playerCount} ${playerCount === 1 ? 'Player' : 'Players'}`
+      : 'Loading...';
+    
+    // Font sizes
+    const titleFontSize = 8 / zoom;
+    const detailFontSize = 7 / zoom;
+    const padding = 8 / zoom;
+    const lineSpacing = 6 / zoom;
+    
+    ctx.font = `${titleFontSize}px "Press Start 2P", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Measure text
+    const serverMetrics = ctx.measureText(serverName);
+    ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+    const playerMetrics = ctx.measureText(playerText);
+    
+    // Box dimensions
+    const boxWidth = Math.max(serverMetrics.width, playerMetrics.width) + padding * 2 + 20 / zoom;
+    const boxHeight = titleFontSize + lineSpacing + detailFontSize + padding * 2;
+    
+    // Position - directly above portal
+    const boxY = centerY - portalRadius - 20 * p;
+    const boxX = centerX - boxWidth / 2;
+    
+    // Colors and styling (green/blue theme to match portal)
+    const accentColor = '#00ff7f'; // Spring green
+    const accentGlow = 'rgba(0, 255, 127, 0.4)';
+    const goldColor = '#00bfff'; // Deep sky blue
+    const darkBg = 'rgba(10, 10, 15, 0.98)';
+    
+    // Draw outer glow
+    ctx.shadowBlur = 12 / zoom;
+    ctx.shadowColor = accentGlow;
+    ctx.fillStyle = darkBg;
+    ctx.fillRect(boxX - 2 / zoom, boxY - 2 / zoom, boxWidth + 4 / zoom, boxHeight + 4 / zoom);
+    ctx.shadowBlur = 0;
+    
+    // Draw main box with rounded corners
+    const borderRadius = 6 / zoom;
+    ctx.fillStyle = darkBg;
+    ctx.beginPath();
+    ctx.moveTo(boxX + borderRadius, boxY);
+    ctx.lineTo(boxX + boxWidth - borderRadius, boxY);
+    ctx.quadraticCurveTo(boxX + boxWidth, boxY, boxX + boxWidth, boxY + borderRadius);
+    ctx.lineTo(boxX + boxWidth, boxY + boxHeight - borderRadius);
+    ctx.quadraticCurveTo(boxX + boxWidth, boxY + boxHeight, boxX + boxWidth - borderRadius, boxY + boxHeight);
+    ctx.lineTo(boxX + borderRadius, boxY + boxHeight);
+    ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - borderRadius);
+    ctx.lineTo(boxX, boxY + borderRadius);
+    ctx.quadraticCurveTo(boxX, boxY, boxX + borderRadius, boxY);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Draw accent border
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 2 / zoom;
+    ctx.stroke();
+    
+    // Draw inner highlight
+    ctx.strokeStyle = `rgba(255, 255, 255, 0.1)`;
+    ctx.lineWidth = 1 / zoom;
+    ctx.strokeRect(boxX + 1 / zoom, boxY + 1 / zoom, boxWidth - 2 / zoom, boxHeight - 2 / zoom);
+    
+    // Calculate positions
+    let currentY = boxY + padding;
+    
+    // Draw server name (top)
+    ctx.font = `${titleFontSize}px "Press Start 2P", monospace`;
+    currentY += titleFontSize / 2;
+    
+    // Server name with glow
+    ctx.save();
+    ctx.shadowBlur = 8 / zoom;
+    ctx.shadowColor = accentColor;
+    ctx.fillStyle = accentColor;
+    ctx.fillText(serverName, centerX, currentY);
+    ctx.restore();
+    
+    // Draw separator line
+    currentY += titleFontSize / 2 + lineSpacing / 2;
+    ctx.strokeStyle = `rgba(255, 255, 255, 0.15)`;
+    ctx.lineWidth = 1 / zoom;
+    ctx.beginPath();
+    ctx.moveTo(boxX + padding, currentY);
+    ctx.lineTo(boxX + boxWidth - padding, currentY);
+    ctx.stroke();
+    currentY += lineSpacing / 2;
+    
+    // Draw player count
+    ctx.font = `${detailFontSize}px "Press Start 2P", monospace`;
+    currentY += detailFontSize / 2;
+    ctx.fillStyle = goldColor;
+    ctx.fillText(playerText, centerX, currentY);
+    
+    // Reset
+    ctx.textAlign = 'center';
+  }
 }
 
 // Draw a single dealer NPC
@@ -6906,8 +7235,16 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
     roomId: '',
   };
   
+  // Check if this is a blackjack dealer (they should show "$ $ $" instead of "z z z")
+  const isBlackjackDealer = dealerType.id.startsWith('blackjack_dealer_');
+  
+  // Create player object with blackjack table flag for blackjack dealers
+  const npcPlayerWithBlackjackFlag = isBlackjackDealer 
+    ? { ...npcPlayer, isAtBlackjackTable: true }
+    : npcPlayer;
+  
   // Skip nameplate in drawPlayer since we draw it explicitly with proper zoom
-  drawPlayer(ctx, npcPlayer, false, time, true);
+  drawPlayer(ctx, npcPlayerWithBlackjackFlag, false, time, true);
   
   // Draw nameplate with proper zoom (get from context transform like other NPCs)
   // Use Infinity to show purple infinity icon, and force white text color
@@ -6915,20 +7252,62 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
   const scaledX = npcPlayer.x * SCALE;
   const scaledY = npcPlayer.y * SCALE;
   const scaledWidth = PLAYER_WIDTH * SCALE;
-      drawNameTag(ctx, npcPlayer.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, npcPlayer.id, time);
+  const nameplateY = scaledY - 20 * p;
+  drawNameTag(ctx, npcPlayer.name, scaledX + scaledWidth / 2, nameplateY, Infinity, zoom, npcPlayer.id, time);
   
-  // Get speech bubble from npcSpeechBubbles map (updated by updateDealerSpeechBubbles)
-  const speechBubble = npcSpeechBubbles.get(dealerType.id);
-  if (speechBubble && time - speechBubble.createdAt < GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
-    npcPlayer.chatBubble = {
-      text: speechBubble.text,
-      createdAt: speechBubble.createdAt
-    };
-  }
-  
-  // Draw speech bubble if they have one (zoom is already applied to context)
-  if (npcPlayer.chatBubble) {
-    drawChatBubble(ctx, npcPlayer, time, zoom);
+  // Check if this is a blackjack dealer (stacked bubbles)
+  if (dealerType.id.startsWith('blackjack_dealer_')) {
+    const bubbles = blackjackDealerBubbles.get(dealerType.id) || [];
+    const currentTime = Date.now();
+    
+    // Remove expired bubbles
+    const activeBubbles = bubbles.filter(b => currentTime - b.createdAt < BLACKJACK_BUBBLE_DURATION);
+    if (activeBubbles.length !== bubbles.length) {
+      blackjackDealerBubbles.set(dealerType.id, activeBubbles);
+    }
+    
+    // Draw stacked bubbles (newest on top)
+    if (activeBubbles.length > 0) {
+      // Sort by creation time (oldest first) to ensure consistent drawing order
+      const sortedBubbles = [...activeBubbles].sort((a, b) => a.createdAt - b.createdAt);
+      
+      const bubbleSpacing = 30 / zoom; // Space between bubbles
+      const baseY = nameplateY - 2 / zoom; // Start just above nameplate
+      
+      // Draw from oldest to newest (bottom to top)
+      for (let i = 0; i < sortedBubbles.length; i++) {
+        const bubble = sortedBubbles[i];
+        const bubbleY = baseY - (sortedBubbles.length - 1 - i) * bubbleSpacing;
+        
+        // Create a temporary player object for this bubble
+        const bubblePlayer: PlayerWithChat = {
+          ...npcPlayer,
+          y: bubbleY / SCALE, // Adjust Y position for stacking
+          chatBubble: {
+            text: bubble.text,
+            createdAt: bubble.createdAt,
+            textColor: bubble.color || 'white'
+          }
+        };
+        
+        drawChatBubble(ctx, bubblePlayer, time, zoom);
+      }
+    }
+  } else {
+    // Regular NPCs (single bubble)
+    const speechBubble = npcSpeechBubbles.get(dealerType.id);
+    if (speechBubble && time - speechBubble.createdAt < GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
+      npcPlayer.chatBubble = {
+        text: speechBubble.text,
+        createdAt: speechBubble.createdAt,
+        textColor: speechBubble.color
+      };
+    }
+    
+    // Draw speech bubble if they have one (zoom is already applied to context)
+    if (npcPlayer.chatBubble) {
+      drawChatBubble(ctx, npcPlayer, time, zoom);
+    }
   }
   
   // Clear shadow after drawing NPC (so it doesn't affect other elements)
@@ -7073,6 +7452,9 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
   const centerY = WORLD_HEIGHT / 2;
   const plazaRadius = 300 * p;
   
+  // Update dealer speech bubbles (including blackjack dealers)
+  updateDealerSpeechBubbles(time);
+  
   // Position 4 tables around the casino plaza
   // Tables are positioned at angles: π/4, 3π/4, 5π/4, 7π/4 (45° intervals)
   const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
@@ -7151,10 +7533,10 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     ctx.ellipse(tableX, tableY, tableRadiusSize, tableRadiusSize * 0.6, 0, 0, Math.PI * 2);
     ctx.stroke();
     
-    // Draw 7 seat positions around table (semi-circle facing dealer)
+    // Draw 4 seat positions around table (semi-circle facing dealer)
     const seatRadius = tableRadiusSize * 0.8;
-    for (let seat = 0; seat < 7; seat++) {
-      const seatAngle = Math.PI + (seat - 3) * (Math.PI / 6); // Seats on player side (facing dealer)
+    for (let seat = 0; seat < 4; seat++) {
+      const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // Seats on player side (facing dealer) - 4 seats evenly spaced
       const seatX = tableX + Math.cos(seatAngle) * seatRadius;
       const seatY = tableY + Math.sin(seatAngle) * seatRadius;
       
@@ -8951,63 +9333,67 @@ function getIdleBobOffset(anim: PlayerAnimation): number {
   return isFinite(offset) ? offset : 0;
 }
 
-// Draw sleepy "zzz" when player is idle for a while
-function drawSleepyZs(ctx: CanvasRenderingContext2D, headX: number, headY: number, headW: number, p: number, time: number, idleStartTime: number): void {
+// Draw sleepy "zzz" when player is idle for a while, or "$ $ $" when at blackjack table
+function drawSleepyZs(ctx: CanvasRenderingContext2D, headX: number, headY: number, headW: number, p: number, time: number, idleStartTime: number, isAtBlackjackTable: boolean = false): void {
   const timeSinceIdle = time - idleStartTime;
   
   // Only show after player has been idle for IDLE_BOB_INTERVAL
   if (timeSinceIdle < IDLE_BOB_INTERVAL) return;
   
-  // Animation cycle for floating Zs (2 second loop)
+  // Animation cycle for floating symbols (2 second loop)
   const cycleTime = (timeSinceIdle - IDLE_BOB_INTERVAL) % 2000;
   const cycleProgress = cycleTime / 2000; // 0 to 1
   
   ctx.font = `bold ${Math.floor(8 * p / 2)}px "Press Start 2P", monospace`;
   ctx.textAlign = 'center';
   
-  // Draw 3 Z's at different phases, floating up and swaying
-  const zPositions = [
-    { delay: 0, size: 1.0 },      // First Z
-    { delay: 0.33, size: 0.8 },   // Second Z (smaller, delayed)
-    { delay: 0.66, size: 0.6 },   // Third Z (smallest, most delayed)
+  // Draw 3 symbols at different phases, floating up and swaying
+  const symbolPositions = [
+    { delay: 0, size: 1.0 },      // First symbol
+    { delay: 0.33, size: 0.8 },   // Second symbol (smaller, delayed)
+    { delay: 0.66, size: 0.6 },   // Third symbol (smallest, most delayed)
   ];
   
-  for (const zPos of zPositions) {
-    // Calculate this Z's progress (wraps around)
-    const zProgress = (cycleProgress + zPos.delay) % 1;
+  const symbol = isAtBlackjackTable ? '$' : 'z';
+  const symbolColor = isAtBlackjackTable ? '#ffd700' : '#a0d0ff'; // Gold for $, light blue for z
+  const shadowColor = isAtBlackjackTable ? '#b8860b' : '#4080b0'; // Dark gold for $, dark blue for z
+  
+  for (const symPos of symbolPositions) {
+    // Calculate this symbol's progress (wraps around)
+    const symProgress = (cycleProgress + symPos.delay) % 1;
     
     // Fade in at start, fade out at end
     let alpha = 1;
-    if (zProgress < 0.1) {
-      alpha = zProgress / 0.1; // Fade in
-    } else if (zProgress > 0.8) {
-      alpha = (1 - zProgress) / 0.2; // Fade out
+    if (symProgress < 0.1) {
+      alpha = symProgress / 0.1; // Fade in
+    } else if (symProgress > 0.8) {
+      alpha = (1 - symProgress) / 0.2; // Fade out
     }
     
     // Float upward
-    const floatY = -zProgress * 25 * p;
+    const floatY = -symProgress * 25 * p;
     
     // Sway left and right
-    const swayX = Math.sin(zProgress * Math.PI * 3) * 4 * p;
+    const swayX = Math.sin(symProgress * Math.PI * 3) * 4 * p;
     
     // Position above head, offset to the right
-    const x = headX + headW + 2 * p + swayX + (1 - zPos.size) * 6 * p;
+    const x = headX + headW + 2 * p + swayX + (1 - symPos.size) * 6 * p;
     const y = headY - 2 * p + floatY;
     
     // Size decreases as they float up
-    const currentSize = zPos.size * (1 - zProgress * 0.3);
+    const currentSize = symPos.size * (1 - symProgress * 0.3);
     ctx.font = `bold ${Math.floor(8 * p / 2 * currentSize)}px "Press Start 2P", monospace`;
     
     // Draw with transparency
     ctx.globalAlpha = alpha * 0.8;
-    ctx.fillStyle = '#a0d0ff'; // Light blue color
-    ctx.fillText('z', x, y);
+    ctx.fillStyle = symbolColor;
+    ctx.fillText(symbol, x, y);
     
     // Add a slight shadow/outline
-    ctx.fillStyle = '#4080b0';
-    ctx.fillText('z', x + p * 0.5, y + p * 0.5);
-    ctx.fillStyle = '#a0d0ff';
-    ctx.fillText('z', x, y);
+    ctx.fillStyle = shadowColor;
+    ctx.fillText(symbol, x + p * 0.5, y + p * 0.5);
+    ctx.fillStyle = symbolColor;
+    ctx.fillText(symbol, x, y);
   }
   
   // Reset alpha
@@ -9019,7 +9405,8 @@ export function drawPlayer(
   player: PlayerWithChat,
   isLocal: boolean = false,
   time: number = Date.now(),
-  skipNameplate: boolean = false
+  skipNameplate: boolean = false,
+  isHovered: boolean = false
 ): void {
   const scaledX = player.x * SCALE;
   const scaledY = player.y * SCALE;
@@ -9206,11 +9593,18 @@ export function drawPlayer(
   
   // Sleepy Zs when idle (for all players, not NPCs)
   // Exclude game NPCs (merchants) and centurions, but show for real players and background NPCs
+  // Show "$ $ $" for players at blackjack tables or blackjack dealers, "z z z" for others
   const idParts = player.id.split('_');
   const isGameNPC = player.id.startsWith('npc_') && idParts.length >= 3;
   const isCenturion = player.id.startsWith('centurion_');
-  if (!anim.isMoving && !isGameNPC && !isCenturion) {
-    drawSleepyZs(ctx, headX, headY, headW, p, time, anim.idleTime);
+  const isBlackjackDealer = player.id.startsWith('blackjack_dealer_');
+  
+  // Show symbols for players, background NPCs, and blackjack dealers (but not other game NPCs or centurions)
+  if (!anim.isMoving && (!isGameNPC || isBlackjackDealer) && !isCenturion) {
+    // Check if player is at a blackjack table (passed as optional parameter)
+    // Blackjack dealers are always considered at a blackjack table
+    const isAtBlackjackTable = isBlackjackDealer || ((player as any).isAtBlackjackTable || false);
+    drawSleepyZs(ctx, headX, headY, headW, p, time, anim.idleTime, isAtBlackjackTable);
   }
   
   // Draw nameplate above the player (above arrow position)
@@ -9243,6 +9637,19 @@ export function drawPlayer(
     ctx.lineTo(scaledX + scaledWidth / 2 + 4 * p, scaledY - 14 * p);
     ctx.closePath();
     ctx.fill();
+  }
+  
+  // Draw hover highlight (glowing outline) - draw last so it appears on top
+  if (isHovered) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+    ctx.lineWidth = 3 * p;
+    ctx.shadowBlur = 10 * p;
+    ctx.shadowColor = 'rgba(255, 255, 0, 0.6)';
+    ctx.beginPath();
+    ctx.rect(scaledX - 2 * p, scaledY - 2 * p, scaledWidth + 4 * p, scaledHeight + 4 * p);
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -12533,8 +12940,18 @@ export function drawChatBubble(ctx: CanvasRenderingContext2D, player: PlayerWith
   const bubbleY = nameplateTop - spacing; // Bottom of bubble (where pointer attaches)
   
   // Get color based on player's orb count (for default text)
+  // Use textColor override if provided (e.g., green for wins, red for losses)
   const orbColorInfo = getOrbCountColor(player.orbs || 0);
-  const defaultTextColor = orbColorInfo.color;
+  let defaultTextColor = player.chatBubble.textColor || orbColorInfo.color;
+  
+  // Map color strings to actual color values
+  if (defaultTextColor === 'white') {
+    defaultTextColor = '#ffffff';
+  } else if (defaultTextColor === 'green') {
+    defaultTextColor = '#4ade80'; // green-400
+  } else if (defaultTextColor === 'red') {
+    defaultTextColor = '#f87171'; // red-400
+  }
   
   // Determine bubble background and border based on rarity
   let bubbleBg = 'rgba(30, 30, 40, 0.95)';
