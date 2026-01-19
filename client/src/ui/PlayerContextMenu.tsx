@@ -1,12 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../state/gameStore';
 import { useSocket } from '../hooks/useSocket';
 import { playClickSound } from '../utils/sounds';
+import { getCurrentUser } from '../firebase/auth';
+
+const ALLOWED_KICK_UID = 'mCY7QgXzKwRJA8YRzP90qJppE1y2';
 
 export function PlayerContextMenu() {
   const { playerContextMenu, hidePlayerContextMenu, openTrade } = useGameStore();
-  const { requestTrade } = useSocket();
+  const { requestTrade, kickPlayer } = useSocket();
   const menuRef = useRef<HTMLDivElement>(null);
+  const [canKick, setCanKick] = useState(false);
+  
+  // Check if current user has permission to kick by getting Firebase UID directly
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    const currentUid = currentUser?.uid || null;
+    setCanKick(currentUid === ALLOWED_KICK_UID);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -33,6 +44,16 @@ export function PlayerContextMenu() {
     }
   };
 
+  const handleKick = () => {
+    playClickSound();
+    if (playerContextMenu.playerId) {
+      if (window.confirm(`Are you sure you want to kick ${playerContextMenu.playerName || 'this player'}?`)) {
+        kickPlayer(playerContextMenu.playerId);
+        hidePlayerContextMenu();
+      }
+    }
+  };
+
   return (
     <div
       ref={menuRef}
@@ -52,6 +73,14 @@ export function PlayerContextMenu() {
         >
           Trade
         </button>
+        {canKick && (
+          <button
+            onClick={handleKick}
+            className="w-full text-left px-3 py-2 text-red-400 hover:bg-gray-800 rounded transition-colors"
+          >
+            Kick Player
+          </button>
+        )}
       </div>
     </div>
   );

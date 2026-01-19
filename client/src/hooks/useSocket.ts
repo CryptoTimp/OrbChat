@@ -704,6 +704,13 @@ function attachListeners(sock: Socket) {
     }
   });
   
+  sock.on('player_kicked', ({ message }) => {
+    console.log('You have been kicked:', message);
+    addNotification(message, 'error');
+    // The server will disconnect the socket, so we don't need to manually leave
+    // The disconnect handler will clean up the state
+  });
+  
   sock.on('error', ({ message }) => {
     console.error('Server error:', message);
     
@@ -2668,6 +2675,16 @@ export function useSocket() {
     sock.emit('trade_cancel');
   }, []);
   
+  // Kick player function
+  const kickPlayer = useCallback((targetPlayerId: string) => {
+    const sock = getOrCreateSocket();
+    if (!sock.connected) {
+      console.error('[useSocket] Socket not connected!');
+      return;
+    }
+    sock.emit('kick_player', { targetPlayerId });
+  }, []);
+  
   const sellLogs = useCallback(async () => {
     const sock = getOrCreateSocket();
     if (sock.connected) {
@@ -2854,6 +2871,7 @@ export function useSocket() {
     acceptTrade,
     declineTrade,
     cancelTrade,
+    kickPlayer,
   };
 }
 

@@ -3219,6 +3219,135 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     }
   });
   
+  // Handle kicking a player from the game
+  socket.on('kick_player', ({ targetPlayerId }) => {
+    // Only allow specific UID to kick players
+    const kickerUid = socket.handshake.auth?.playerId as string | undefined;
+    const ALLOWED_KICK_UID = 'mCY7QgXzKwRJA8YRzP90qJppE1y2';
+    
+    if (kickerUid !== ALLOWED_KICK_UID) {
+      socket.emit('error', { message: 'You do not have permission to kick players' });
+      return;
+    }
+    
+    const kickerMapping = socketToPlayer.get(socket.id);
+    if (!kickerMapping) {
+      socket.emit('error', { message: 'You must be in a room to kick players' });
+      return;
+    }
+    
+    const { playerId: kickerId, roomId } = kickerMapping;
+    
+    // Check if target player is in the same room
+    const targetPlayer = rooms.getPlayerInRoom(roomId, targetPlayerId);
+    if (!targetPlayer) {
+      socket.emit('error', { message: 'Player not found in this room' });
+      return;
+    }
+    
+    // Prevent self-kick
+    if (targetPlayerId === kickerId) {
+      socket.emit('error', { message: 'You cannot kick yourself' });
+      return;
+    }
+    
+    console.log(`[Kick] Player ${kickerId} is kicking player ${targetPlayerId} from room ${roomId}`);
+    
+    // Find all sockets for the target player in this room
+    const targetSockets = Array.from(io.sockets.sockets.values()).filter(s => {
+      const mapping = socketToPlayer.get(s.id);
+      return mapping && mapping.playerId === targetPlayerId && mapping.roomId === roomId;
+    });
+    
+    if (targetSockets.length === 0) {
+      socket.emit('error', { message: 'Target player has no active connections' });
+      return;
+    }
+    
+    // Notify the kicked player before disconnecting
+    for (const targetSocket of targetSockets) {
+      targetSocket.emit('player_kicked', { 
+        message: `You have been kicked from the room by ${rooms.getPlayerInRoom(roomId, kickerId)?.name || 'another player'}` 
+      });
+    }
+    
+    // Disconnect all sockets for the target player
+    for (const targetSocket of targetSockets) {
+      // Leave Socket.IO room
+      targetSocket.leave(roomId);
+      
+      // Clean up mapping
+      socketToPlayer.delete(targetSocket.id);
+      
+      // Disconnect the socket
+      targetSocket.disconnect(true);
+    }
+    
+    // Remove player from room
+    rooms.removePlayerFromRoom(roomId, targetPlayerId);
+    
+    // Clean up idle tracking
+    playerLastMovement.delete(targetPlayerId);
+    playerLastIdleReward.delete(targetPlayerId);
+    
+    // Clean up purchase lock
+    playerPurchasingLootBox.delete(targetPlayerId);
+    
+    // Leave any blackjack tables
+    const allTables = blackjack.getAllTables();
+    for (const table of allTables) {
+      const playerAtTable = table.state.players.find(p => p.playerId === targetPlayerId);
+      if (playerAtTable) {
+        blackjack.leaveTable(table.id, targetPlayerId);
+        // Broadcast update to remaining players
+        const tablePlayers = table.state.players.map(p => p.playerId);
+        for (const tablePlayerId of tablePlayers) {
+          const playerSockets = Array.from(io.sockets.sockets.values()).filter(s => {
+            const m = socketToPlayer.get(s.id);
+            return m && m.playerId === tablePlayerId;
+          });
+          for (const playerSocket of playerSockets) {
+            playerSocket.emit('blackjack_state_update', { tableId: table.id, state: table.state });
+          }
+        }
+      }
+    }
+    
+    // Leave any slot machines
+    const slotMachineIds = ['slot_machine_north', 'slot_machine_east', 'slot_machine_south', 'slot_machine_west'];
+    for (const slotMachineId of slotMachineIds) {
+      const machine = slots.getSlotMachine(slotMachineId);
+      if (machine) {
+        const playerAtMachine = machine.players.find(p => p.playerId === targetPlayerId);
+        if (playerAtMachine) {
+          slots.leaveSlotMachine(slotMachineId, targetPlayerId);
+        }
+      }
+    }
+    
+    // Check if room is empty and stop spawner
+    const playersLeft = rooms.getPlayersInRoom(roomId);
+    if (playersLeft.length === 0) {
+      stopOrbSpawner(roomId);
+      stopFountainOrbSpawner(roomId);
+    }
+    
+    // Notify others in the room
+    const kickerName = rooms.getPlayerInRoom(roomId, kickerId)?.name || 'Someone';
+    io.to(roomId).emit('player_left', { playerId: targetPlayerId });
+    
+    // Send chat message about the kick
+    const createdAt = Date.now();
+    io.to(roomId).emit('chat_message', {
+      playerId: targetPlayerId,
+      text: `${targetPlayer.name} was kicked by ${kickerName}`,
+      createdAt,
+      textColor: '#ff6b6b'
+    });
+    
+    console.log(`[Kick] Player ${targetPlayerId} has been kicked from room ${roomId} by ${kickerId}`);
+  });
+  
   socket.on('disconnect', () => {
     const mapping = socketToPlayer.get(socket.id);
     if (mapping) {

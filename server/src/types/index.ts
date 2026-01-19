@@ -168,6 +168,7 @@ export interface ClientToServerEvents {
   trade_accept: () => void;
   trade_decline: () => void;
   trade_cancel: () => void;
+  kick_player: (data: { targetPlayerId: string }) => void;
 }
 
 // Socket Events - Server to Client
@@ -237,6 +238,7 @@ export interface ServerToClientEvents {
   trade_declined: () => void;
   trade_cancelled: () => void;
   trade_error: (data: { message: string }) => void;
+  player_kicked: (data: { message: string }) => void;
   error: (data: { message: string }) => void;
 }
 
