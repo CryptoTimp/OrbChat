@@ -416,11 +416,11 @@ export function generateTreasureChestsForRoom(roomId: string, mapType: MapType):
     const x = Math.max(minMargin, Math.min(maxX - minMargin, pos.x));
     const y = Math.max(minMargin, Math.min(maxY - minMargin, pos.y));
     
-    chests.push({
+        chests.push({
       id: `treasure_chest_${roomId}_${index}`,
-      x: Math.floor(x),
-      y: Math.floor(y),
-    });
+          x: Math.floor(x),
+          y: Math.floor(y),
+        });
   });
 
   return chests;
@@ -1008,10 +1008,10 @@ export function initializeGlobalRooms(): void {
     if (!rooms.has(roomId)) {
       const room = createRoom(roomId, mapType);
       if (mapType === 'forest') {
-        console.log(`Initialized global room: ${roomId} with ${room.shrines.length} shrines`);
+      console.log(`Initialized global room: ${roomId} with ${room.shrines.length} shrines`);
       } else if (mapType === 'casino') {
         console.log(`Initialized global casino room: ${roomId}`);
-      } else {
+    } else {
         console.log(`Initialized global millionaire's lounge room: ${roomId}`);
       }
     } else {

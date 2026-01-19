@@ -10,6 +10,7 @@ import * as players from './players';
 import * as shop from './shop';
 import * as blackjack from './blackjack';
 import * as trades from './trades';
+import * as slots from './slots';
 import { startOrbSpawner, stopOrbSpawner, startFountainOrbSpawner, stopFountainOrbSpawner } from './orbs';
 import {
   ClientToServerEvents,
@@ -58,6 +59,9 @@ rooms.initializeGlobalRooms();
 
 // Initialize blackjack tables
 blackjack.initializeBlackjackTables();
+
+// Initialize slot machines
+let slotMachinesInitialized = false;
 
 // Track socket -> player mapping
 // Note: This is cleared on server restart (new Map instance)
@@ -2944,6 +2948,277 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
   
   // Handle disconnection
+  // Slot machine names
+  const SLOT_MACHINE_NAMES: Record<string, string> = {
+    'slot_machine_north': 'Orb Fortune',
+    'slot_machine_east': 'Orb Destiny',
+    'slot_machine_south': 'Orb Glory',
+    'slot_machine_west': 'Orb Victory'
+  };
+  
+  // Initialize slot machines on server start
+  if (!slotMachinesInitialized) {
+    slots.initializeSlotMachines();
+    slotMachinesInitialized = true;
+  }
+  
+  // Join slot machine
+  socket.on('join_slot_machine', ({ slotMachineId }) => {
+    console.log('[Slots] ===== join_slot_machine event received =====');
+    console.log('[Slots] Slot Machine ID:', slotMachineId);
+    console.log('[Slots] Socket ID:', socket.id);
+    
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) {
+      console.error('[Slots] No mapping found for socket', socket.id);
+      socket.emit('slot_machine_error', { slotMachineId, message: 'Not connected to a room' });
+      return;
+    }
+    
+    const { playerId, roomId } = mapping;
+    console.log('[Slots] Player ID:', playerId, 'Room ID:', roomId);
+    
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    if (!player) {
+      console.error('[Slots] Player not found in room');
+      socket.emit('slot_machine_error', { slotMachineId, message: 'Player not found' });
+      return;
+    }
+    
+    const result = slots.joinSlotMachine(slotMachineId, playerId, player.name);
+    console.log('[Slots] Join result:', result);
+    
+    if (result.success && result.seat !== undefined) {
+      // Calculate seat position for the player in world coordinates
+      const SCALE = GAME_CONSTANTS.SCALE;
+      const WORLD_WIDTH_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH * SCALE;
+      const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
+      const centerXScaled = WORLD_WIDTH_SCALED / 2;
+      const centerYScaled = WORLD_HEIGHT_SCALED / 2;
+      const plazaRadiusScaled = 300 * SCALE;
+      const slotMachineDistance = plazaRadiusScaled * 0.85;
+      
+      // Slot machine positions (N/S/E/W)
+      const directions = [
+        { angle: 0, id: 'slot_machine_north' },
+        { angle: Math.PI / 2, id: 'slot_machine_east' },
+        { angle: Math.PI, id: 'slot_machine_south' },
+        { angle: 3 * Math.PI / 2, id: 'slot_machine_west' }
+      ];
+      
+      const dir = directions.find(d => d.id === slotMachineId);
+      if (!dir) {
+        console.error('[Slots] Invalid slot machine ID:', slotMachineId);
+        socket.emit('slot_machine_error', { slotMachineId, message: 'Invalid slot machine' });
+        return;
+      }
+      
+      const slotXScaled = centerXScaled + Math.cos(dir.angle) * slotMachineDistance;
+      const slotYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance;
+      
+      // 8 seats around slot machine (evenly spaced in a circle)
+      const seatRadiusScaled = 80 * SCALE; // Distance from machine center
+      const seatAngle = (result.seat / 8) * Math.PI * 2; // Evenly spaced around circle
+      const seatXScaled = slotXScaled + Math.cos(seatAngle) * seatRadiusScaled;
+      const seatYScaled = slotYScaled + Math.sin(seatAngle) * seatRadiusScaled;
+      
+      // Convert from scaled pixels to unscaled pixels (server coordinates)
+      const seatX = seatXScaled / SCALE;
+      const seatY = seatYScaled / SCALE;
+      
+      // Update player position to seat (center player sprite on seat)
+      const seatWorldX = seatX - GAME_CONSTANTS.PLAYER_WIDTH / 2;
+      const seatWorldY = seatY - GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+      
+      // Determine direction based on seat angle (face towards machine)
+      let seatDirection: Direction = 'down';
+      const normalizedAngle = ((seatAngle + Math.PI) % (Math.PI * 2) + (Math.PI * 2)) % (Math.PI * 2);
+      if (normalizedAngle >= 0 && normalizedAngle < Math.PI / 4) {
+        seatDirection = 'right';
+      } else if (normalizedAngle >= Math.PI / 4 && normalizedAngle < 3 * Math.PI / 4) {
+        seatDirection = 'down';
+      } else if (normalizedAngle >= 3 * Math.PI / 4 && normalizedAngle < 5 * Math.PI / 4) {
+        seatDirection = 'left';
+      } else if (normalizedAngle >= 5 * Math.PI / 4 && normalizedAngle < 7 * Math.PI / 4) {
+        seatDirection = 'up';
+      } else {
+        seatDirection = 'right';
+      }
+      
+      // Update player position
+      const positionUpdated = rooms.updatePlayerPosition(roomId, playerId, seatWorldX, seatWorldY, seatDirection);
+      
+      if (positionUpdated) {
+        console.log(`[Slots] Positioned and broadcasted player ${playerId} at seat ${result.seat} (${seatWorldX}, ${seatWorldY})`);
+        // Broadcast position update
+        io.to(roomId).emit('player_moved', {
+          playerId,
+          x: seatWorldX,
+          y: seatWorldY,
+          direction: seatDirection
+        });
+      } else {
+        console.log(`[Slots] Position update returned false, but still broadcasting position for player ${playerId} at seat ${result.seat} (${seatWorldX}, ${seatWorldY})`);
+        // Still broadcast position even if updatePlayerPosition returned false
+        io.to(roomId).emit('player_moved', {
+          playerId,
+          x: seatWorldX,
+          y: seatWorldY,
+          direction: seatDirection
+        });
+      }
+      
+      // Notify player of successful join
+      socket.emit('slot_machine_joined', { slotMachineId, seat: result.seat });
+    } else {
+      socket.emit('slot_machine_error', { slotMachineId, message: result.message || 'Failed to join slot machine' });
+    }
+  });
+  
+  // Leave slot machine
+  socket.on('leave_slot_machine', ({ slotMachineId }) => {
+    console.log('[Slots] ===== leave_slot_machine event received =====');
+    console.log('[Slots] Slot Machine ID:', slotMachineId);
+    
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) return;
+    
+    const { playerId } = mapping;
+    const result = slots.leaveSlotMachine(slotMachineId, playerId);
+    
+    if (result.success) {
+      socket.emit('slot_machine_left', { slotMachineId });
+    }
+  });
+  
+  // Slot machine handler
+  socket.on('spin_slot_machine', async ({ slotMachineId, betAmount }) => {
+    console.log('[Slots] ===== spin_slot_machine event received =====');
+    console.log('[Slots] Slot Machine ID:', slotMachineId);
+    console.log('[Slots] Bet Amount:', betAmount);
+    console.log('[Slots] Socket ID:', socket.id);
+    
+    const mapping = socketToPlayer.get(socket.id);
+    if (!mapping) {
+      console.error('[Slots] No mapping found for socket', socket.id);
+      socket.emit('slot_machine_error', { slotMachineId, message: 'Not connected to a room' });
+      return;
+    }
+    
+    const { playerId, roomId } = mapping;
+    console.log('[Slots] Player ID:', playerId, 'Room ID:', roomId);
+    
+    const player = rooms.getPlayerInRoom(roomId, playerId);
+    
+    if (!player) {
+      console.error('[Slots] Player not found in room');
+      socket.emit('slot_machine_error', { slotMachineId, message: 'Player not found' });
+      return;
+    }
+    
+    // Validate bet amount
+    const numericBet = Number(betAmount);
+    console.log('[Slots] Validating bet amount:', { betAmount, numericBet, type: typeof betAmount });
+    if (isNaN(numericBet) || numericBet < 5000 || numericBet > 25000) {
+      console.error('[Slots] Invalid bet amount:', { betAmount, numericBet, isNaN: isNaN(numericBet), lessThanMin: numericBet < 5000, greaterThanMax: numericBet > 25000 });
+      socket.emit('slot_machine_error', { slotMachineId, message: `Invalid bet amount: ${numericBet}. Must be between 5,000 and 25,000 orbs.` });
+      return;
+    }
+    
+    // Check if player has enough orbs
+    const currentOrbs = player.orbs || 0;
+    console.log('[Slots] Current balance:', currentOrbs, 'Bet amount:', numericBet);
+    
+    if (currentOrbs < numericBet) {
+      console.error('[Slots] Insufficient orbs. Current:', currentOrbs, 'Required:', numericBet);
+      socket.emit('slot_machine_error', { slotMachineId, message: 'Insufficient orbs' });
+      return;
+    }
+    
+    try {
+      // Import slot machine logic
+      const { spinSlots, calculatePayout } = await import('./slots');
+      
+      // Deduct bet FIRST (immediately)
+      const balanceAfterBet = currentOrbs - numericBet;
+      console.log('[Slots] Deducting bet. Balance:', currentOrbs, '->', balanceAfterBet);
+      player.orbs = balanceAfterBet;
+      players.updatePlayerOrbs(playerId, balanceAfterBet);
+      
+      // Broadcast bet deduction immediately
+      io.to(roomId).emit('player_orbs_updated', {
+        playerId,
+        orbs: balanceAfterBet,
+        rewardAmount: -numericBet,
+        rewardType: 'slots'
+      });
+      console.log('[Slots] Broadcasted bet deduction. New balance:', balanceAfterBet);
+      
+      // Spin the reels
+      const symbols = spinSlots();
+      console.log('[Slots] Generated symbols:', symbols.join(', '));
+      
+      // Calculate payout
+      const payout = calculatePayout(symbols, numericBet);
+      const netPayout = payout - numericBet; // Net win (can be negative)
+      const finalBalance = balanceAfterBet + payout;
+      
+      console.log('[Slots] Payout calculation:', {
+        symbols: symbols.join(', '),
+        payout,
+        netPayout,
+        balanceAfterBet,
+        finalBalance,
+        balanceChange: finalBalance - currentOrbs
+      });
+      
+      // Update player balance with final result
+      player.orbs = finalBalance;
+      players.updatePlayerOrbs(playerId, finalBalance);
+      console.log('[Slots] Updated player balance to:', finalBalance);
+      
+      // Get slot machine name
+      const slotMachineName = SLOT_MACHINE_NAMES[slotMachineId] || 'Slot Machine';
+      
+      // Broadcast chat message and speech bubble ONLY for wins
+      if (payout > 0) {
+        const playerName = player.name;
+        const chatMessage = `${playerName} spun ${slotMachineName} and won ${payout.toLocaleString()} orbs!`;
+        const textColor = '#22c55e'; // Green for wins
+        
+        // Update player chat bubble and broadcast to room
+        const createdAt = rooms.updatePlayerChat(roomId, playerId, chatMessage, textColor);
+        io.to(roomId).emit('chat_message', { playerId, text: chatMessage, createdAt, textColor });
+        console.log(`[Slots] Chat message sent: ${chatMessage}`);
+      } else {
+        console.log(`[Slots] Loss - no chat message broadcast`);
+      }
+      
+      // Emit result to player
+      socket.emit('slot_machine_result', {
+        slotMachineId,
+        slotMachineName,
+        symbols,
+        payout: netPayout, // Net payout (win - bet, or -bet if loss)
+        newBalance: finalBalance
+      });
+      console.log('[Slots] Emitted slot_machine_result to player. Final balance:', finalBalance);
+      
+      // Broadcast final balance update (with net payout)
+      io.to(roomId).emit('player_orbs_updated', {
+        playerId,
+        orbs: finalBalance,
+        rewardAmount: netPayout,
+        rewardType: 'slots'
+      });
+      console.log('[Slots] Broadcasted final balance update. Balance:', finalBalance, 'Net payout:', netPayout);
+      
+    } catch (error) {
+      console.error('[Slots] Error processing spin:', error);
+      socket.emit('slot_machine_error', { slotMachineId, message: 'Server error processing spin' });
+    }
+  });
+  
   socket.on('disconnect', () => {
     const mapping = socketToPlayer.get(socket.id);
     if (mapping) {

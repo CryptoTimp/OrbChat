@@ -160,6 +160,9 @@ export interface ClientToServerEvents {
   blackjack_stand: (data: { tableId: string; handIndex?: number }) => void;
   blackjack_double_down: (data: { tableId: string; handIndex?: number }) => void;
   blackjack_split: (data: { tableId: string; handIndex?: number }) => void;
+  join_slot_machine: (data: { slotMachineId: string }) => void;
+  leave_slot_machine: (data: { slotMachineId: string }) => void;
+  spin_slot_machine: (data: { slotMachineId: string; betAmount: number }) => void;
   trade_request: (data: { otherPlayerId: string }) => void;
   trade_modify: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number }) => void;
   trade_accept: () => void;
@@ -222,6 +225,10 @@ export interface ServerToClientEvents {
   portal_used: (data: { playerId: string; playerName: string; portalType: 'casino' | 'lounge' | 'return' }) => void;
   blackjack_state_update: (data: { tableId: string; state: BlackjackTableState }) => void;
   blackjack_error: (data: { tableId: string; message: string }) => void;
+  slot_machine_joined: (data: { slotMachineId: string; seat: number }) => void;
+  slot_machine_left: (data: { slotMachineId: string }) => void;
+  slot_machine_result: (data: { slotMachineId: string; slotMachineName: string; symbols: string[]; payout: number; newBalance: number }) => void;
+  slot_machine_error: (data: { slotMachineId: string; message: string }) => void;
   trade_requested: (data: { fromPlayerId: string; fromPlayerName: string }) => void;
   trade_opened: (data: { otherPlayerId: string; otherPlayerName: string }) => void;
   trade_modified: (data: { items: Array<{ itemId: string; quantity: number }>; orbs: number; accepted: boolean }) => void;

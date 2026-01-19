@@ -2218,6 +2218,10 @@ let plazaStaticCacheInitialized = false;
 let plazaWallTopCache: HTMLCanvasElement | null = null;
 let plazaWallTopCacheInitialized = false;
 
+// Cache for slot machines (static parts only - animated parts drawn on top)
+let slotMachineCache: HTMLCanvasElement | null = null;
+let slotMachineCacheInitialized = false;
+
 // Pre-calculated gate angles and wall segments for drawPlazaWallTop
 interface GateSegment {
   gateAngle: number;
@@ -5939,6 +5943,55 @@ const DEALER_TYPES: DealerType[] = [
       'Welcome to the table!'
     ],
   },
+  // Slot machine heralds
+  {
+    id: 'slot_herald_fortune',
+    name: 'Fortune Herald',
+    outfit: ['hat_golden', 'armor_golden', 'legs_gold', 'acc_aura_golden'],
+    messages: [
+      'Orb Fortune brings golden riches!',
+      'Spin here for legendary wins!',
+      'Fortune favors the bold!',
+      'Gold awaits at Orb Fortune!',
+      'Why spin elsewhere? Fortune is here!'
+    ],
+  },
+  {
+    id: 'slot_herald_destiny',
+    name: 'Destiny Herald',
+    outfit: ['hat_rainbow', 'robe_rainbow', 'legs_rainbow', 'acc_aura_rainbow'],
+    messages: [
+      'Orb Destiny shapes your fate!',
+      'Purple power brings epic wins!',
+      'Destiny calls - spin here!',
+      'Epic rewards await at Orb Destiny!',
+      'Don\'t miss your destiny - spin now!'
+    ],
+  },
+  {
+    id: 'slot_herald_glory',
+    name: 'Glory Herald',
+    outfit: ['hat_halo', 'armor_blue', 'legs_blue', 'acc_wings_blue', 'acc_aura_blue'],
+    messages: [
+      'Orb Glory for legendary wins!',
+      'Blue brilliance brings fortune!',
+      'Glory awaits the brave!',
+      'Spin Orb Glory for epic rewards!',
+      'Why choose others? Glory is supreme!'
+    ],
+  },
+  {
+    id: 'slot_herald_victory',
+    name: 'Victory Herald',
+    outfit: ['hat_crown', 'armor_green', 'legs_green', 'acc_wings_green', 'acc_aura_green'],
+    messages: [
+      'Orb Victory guarantees wins!',
+      'Green fortune brings success!',
+      'Victory is yours - spin here!',
+      'The path to victory starts here!',
+      'Choose Victory - the winning slot!'
+    ],
+  },
 ];
 
 // Update dealer speech bubbles (similar to NPC stalls)
@@ -6051,6 +6104,43 @@ function updateDealerSpeechBubbles(time: number): void {
           npcSpeechBubbles.set(blackjackDealerId, {
             text: randomMessage,
             createdAt: time
+          });
+        }
+      }
+    }
+  }
+  
+  // Update slot heralds (all 4 heralds)
+  const slotHeraldIds = ['slot_herald_fortune', 'slot_herald_destiny', 'slot_herald_glory', 'slot_herald_victory'];
+  for (const heraldId of slotHeraldIds) {
+    // Initialize random offset for this herald (once, persists across calls)
+    if (!npcSpeechOffsets.has(heraldId)) {
+      // Herald gets a random offset between 0 and 10 seconds to stagger speech
+      npcSpeechOffsets.set(heraldId, Math.random() * NPC_SPEECH_INTERVAL);
+    }
+    
+    const heraldOffset = npcSpeechOffsets.get(heraldId)!;
+    const existingHeraldBubble = npcSpeechBubbles.get(heraldId);
+    
+    // Check if bubble has expired
+    if (existingHeraldBubble && time - existingHeraldBubble.createdAt > GAME_CONSTANTS.CHAT_BUBBLE_DURATION) {
+      npcSpeechBubbles.delete(heraldId);
+    }
+    
+    // Use staggered time check - herald checks at different times
+    const heraldStaggeredTime = (time + heraldOffset) % (NPC_SPEECH_INTERVAL * 2);
+    
+    // Only check for new speech in a small window (prevents all NPCs from speaking at once)
+    if (heraldStaggeredTime < 500 && !existingHeraldBubble) {
+      // Random chance to speak
+      if (Math.random() < NPC_SPEECH_CHANCE) {
+        const dealerType = DEALER_TYPES.find(d => d.id === heraldId);
+        if (dealerType) {
+          const randomMessage = dealerType.messages[Math.floor(Math.random() * dealerType.messages.length)];
+          npcSpeechBubbles.set(heraldId, {
+            text: randomMessage,
+            createdAt: time,
+            color: 'white' // White text for promotional messages
           });
         }
       }
@@ -6952,6 +7042,12 @@ export function checkMillionairesLoungeReturnPortalCollision(x: number, y: numbe
 
 // Draw return portal in casino map (green/blue portal to return to previous room)
 export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, camera?: Camera, previousRoomId?: string | null, currentRoomId?: string | null): void {
+  // Only draw return portal if we're in a casino or lounge room
+  if (!currentRoomId || (!currentRoomId.startsWith('casino-') && !currentRoomId.startsWith('millionaires_lounge-'))) {
+    // Not in casino or lounge - no return portal to show
+    return;
+  }
+  
   const p = SCALE;
   
   // Position return portal in center of casino map (world coordinates)
@@ -7073,10 +7169,9 @@ export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, ca
     }
   }
   
-  // Debug: Log if returnRoomId is still null
-  if (!returnRoomId) {
-    console.warn('[drawReturnPortal] Could not determine returnRoomId', { previousRoomId, currentRoomId });
-  }
+  // If we still can't determine returnRoomId, don't draw the info (but still draw the portal)
+  // This can happen if we're in a casino/lounge but don't have previousRoomId and can't infer it
+  // In that case, just draw the portal without the info text
   
   // Draw server name and player count above portal (similar to enter casino portal)
   if (returnRoomId) {
@@ -7188,7 +7283,7 @@ export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, ca
 }
 
 // Draw a single dealer NPC
-function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType, dealerX: number, dealerY: number, time: number, isHovered: boolean = false): void {
+function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType, dealerX: number, dealerY: number, time: number, isHovered: boolean = false, direction: Direction = 'down'): void {
   const p = SCALE;
   
   // Draw yellow glow effect when hovered (before NPC, same as NPC stalls)
@@ -7236,7 +7331,7 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
     name: dealerType.name,
     x: npcPlayerX,
     y: npcPlayerY,
-    direction: 'down',
+    direction: direction,
     sprite: {
       body: 'default',
       outfit: dealerType.outfit,
@@ -7618,6 +7713,748 @@ export function getHoveredBlackjackTable(worldX: number, worldY: number): string
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < hoverRadius) {
       return tableId;
+    }
+  }
+  
+  return null;
+}
+
+// ============ SLOT MACHINES ============
+
+// Store slot machine positions for click detection
+export const slotMachinePositions: Map<string, { x: number; y: number; width: number; height: number }> = new Map();
+
+// Slot machine themes matching the modal themes
+interface SlotMachineTheme {
+  primary: string;
+  secondary: string;
+  glow: string;
+  name: string;
+}
+
+const SLOT_MACHINE_THEMES: Record<string, SlotMachineTheme> = {
+  'slot_machine_north': {
+    primary: '#fbbf24',      // Gold
+    secondary: '#f59e0b',    // Amber
+    glow: '#fbbf24',
+    name: 'Orb Fortune'
+  },
+  'slot_machine_east': {
+    primary: '#8b5cf6',      // Purple
+    secondary: '#7c3aed',    // Deep purple
+    glow: '#8b5cf6',
+    name: 'Orb Destiny'
+  },
+  'slot_machine_south': {
+    primary: '#3b82f6',      // Blue
+    secondary: '#2563eb',    // Deep blue
+    glow: '#3b82f6',
+    name: 'Orb Glory'
+  },
+  'slot_machine_west': {
+    primary: '#10b981',      // Green
+    secondary: '#059669',    // Deep green
+    glow: '#10b981',
+    name: 'Orb Victory'
+  }
+};
+
+// Slot heralds (NPCs that promote each slot machine)
+const SLOT_HERALDS: Array<{
+  id: string;
+  slotMachineId: string;
+  name: string;
+  outfit: string[];
+  messages: string[];
+}> = [
+  {
+    id: 'slot_herald_fortune',
+    slotMachineId: 'slot_machine_north',
+    name: 'Orb Fortune Herald',
+    outfit: ['hat_golden', 'armor_golden', 'legs_gold', 'acc_aura_golden'],
+    messages: [
+      'Orb Fortune brings golden riches!',
+      'Spin here for legendary wins!',
+      'Fortune favors the bold!',
+      'Gold awaits at Orb Fortune!',
+      'Why spin elsewhere? Fortune is here!'
+    ]
+  },
+  {
+    id: 'slot_herald_destiny',
+    slotMachineId: 'slot_machine_east',
+    name: 'Orb Destiny Herald',
+    outfit: ['hat_rainbow', 'robe_rainbow', 'legs_rainbow', 'acc_aura_rainbow'],
+    messages: [
+      'Orb Destiny shapes your fate!',
+      'Purple power brings epic wins!',
+      'Destiny calls - spin here!',
+      'Epic rewards await at Orb Destiny!',
+      'Don\'t miss your destiny - spin now!'
+    ]
+  },
+  {
+    id: 'slot_herald_glory',
+    slotMachineId: 'slot_machine_south',
+    name: 'Orb Glory Herald',
+    outfit: ['hat_halo', 'armor_blue', 'legs_blue', 'acc_wings_blue', 'acc_aura_blue'],
+    messages: [
+      'Orb Glory for legendary wins!',
+      'Blue brilliance brings fortune!',
+      'Glory awaits the brave!',
+      'Spin Orb Glory for epic rewards!',
+      'Why choose others? Glory is supreme!'
+    ]
+  },
+  {
+    id: 'slot_herald_victory',
+    slotMachineId: 'slot_machine_west',
+    name: 'Orb Victory Herald',
+    outfit: ['hat_crown', 'armor_green', 'legs_green', 'acc_wings_green', 'acc_aura_green'],
+    messages: [
+      'Orb Victory guarantees wins!',
+      'Green fortune brings success!',
+      'Victory is yours - spin here!',
+      'The path to victory starts here!',
+      'Choose Victory - the winning slot!'
+    ]
+  }
+];
+
+// Store slot herald positions
+const slotHeraldPositions: Map<string, { x: number; y: number }> = new Map();
+
+// Track herald NPCs for wandering
+interface HeraldNPC {
+  id: string;
+  name: string;
+  x: number; // Unscaled coordinates
+  y: number;
+  targetX: number;
+  targetY: number;
+  direction: Direction;
+  speed: number;
+  changeDirectionTime: number;
+  movementCycle: number;
+  slotMachineId: string;
+}
+
+const heraldNPCs: HeraldNPC[] = [];
+let heraldsInitialized = false;
+
+// Initialize herald NPCs on the plaza ring
+function initializeHeralds(): void {
+  if (heraldsInitialized) return;
+  
+  const centerXScaled = WORLD_WIDTH / 2;
+  const centerYScaled = WORLD_HEIGHT / 2;
+  const plazaRadiusScaled = 540 * SCALE; // Plaza ring radius
+  
+  // Initialize each herald at their slot machine position, then they'll wander
+  for (const herald of SLOT_HERALDS) {
+    // Find the slot machine position for this herald
+    const directions = [
+      { angle: 0, id: 'slot_machine_north' },
+      { angle: Math.PI / 2, id: 'slot_machine_east' },
+      { angle: Math.PI, id: 'slot_machine_south' },
+      { angle: 3 * Math.PI / 2, id: 'slot_machine_west' }
+    ];
+    
+    const dir = directions.find(d => d.id === herald.slotMachineId);
+    if (!dir) continue;
+    
+    const slotMachineDistance = plazaRadiusScaled * 0.85;
+    const heraldOffset = 50 * SCALE; // Offset from machine
+    const heraldAngle = dir.angle + Math.PI / 2; // Perpendicular
+    
+    // Start position near slot machine
+    const startXScaled = centerXScaled + Math.cos(dir.angle) * slotMachineDistance + Math.cos(heraldAngle) * heraldOffset;
+    const startYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance + Math.sin(heraldAngle) * heraldOffset;
+    
+    const x = startXScaled / SCALE;
+    const y = startYScaled / SCALE;
+    
+    heraldNPCs.push({
+      id: herald.id,
+      name: herald.name,
+      x,
+      y,
+      targetX: x,
+      targetY: y,
+      direction: 'down',
+      speed: 0.3, // Wandering speed
+      changeDirectionTime: Date.now() + 2000 + (heraldNPCs.length * 500),
+      movementCycle: 0,
+      slotMachineId: herald.slotMachineId
+    });
+  }
+  
+  heraldsInitialized = true;
+}
+
+// Update herald wandering (keep them near their slot machine)
+function updateHeralds(time: number): void {
+  initializeHeralds();
+  
+  const centerXScaled = WORLD_WIDTH / 2;
+  const centerYScaled = WORLD_HEIGHT / 2;
+  const plazaRadiusScaled = 540 * SCALE;
+  const slotMachineDistance = plazaRadiusScaled * 0.85;
+  
+  // Slot machine positions
+  const directions = [
+    { angle: 0, id: 'slot_machine_north' },
+    { angle: Math.PI / 2, id: 'slot_machine_east' },
+    { angle: Math.PI, id: 'slot_machine_south' },
+    { angle: 3 * Math.PI / 2, id: 'slot_machine_west' }
+  ];
+  
+  for (const herald of heraldNPCs) {
+    // Find the slot machine position for this herald
+    const dir = directions.find(d => d.id === herald.slotMachineId);
+    if (!dir) continue;
+    
+    const slotXScaled = centerXScaled + Math.cos(dir.angle) * slotMachineDistance;
+    const slotYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance;
+    const slotX = slotXScaled / SCALE;
+    const slotY = slotYScaled / SCALE;
+    
+    // Wandering radius around slot machine (small area)
+    const wanderRadiusScaled = 100 * SCALE; // 100 pixels radius around machine
+    const wanderRadius = wanderRadiusScaled / SCALE;
+    
+    // Update movement
+    if (time >= herald.changeDirectionTime) {
+      // Pick random target within wander radius of slot machine
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * wanderRadius; // Random distance within radius
+      
+      // Calculate target relative to slot machine
+      const targetX = slotX + Math.cos(angle) * distance;
+      const targetY = slotY + Math.sin(angle) * distance;
+      
+      herald.targetX = targetX;
+      herald.targetY = targetY;
+      
+      // Increment cycle
+      herald.movementCycle++;
+      
+      // Random change direction time (3-7 seconds)
+      herald.changeDirectionTime = time + 3000 + Math.random() * 4000;
+    }
+    
+    // Move towards target
+    const dx = herald.targetX - herald.x;
+    const dy = herald.targetY - herald.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance > 2) {
+      const moveX = (dx / distance) * herald.speed;
+      const moveY = (dy / distance) * herald.speed;
+      
+      // Calculate new position
+      let newX = herald.x + moveX;
+      let newY = herald.y + moveY;
+      
+      // Constrain to wander radius around slot machine
+      const newXScaled = newX * SCALE;
+      const newYScaled = newY * SCALE;
+      const distFromSlot = Math.sqrt(
+        Math.pow(newXScaled - slotXScaled, 2) + Math.pow(newYScaled - slotYScaled, 2)
+      );
+      
+      // If too far from slot machine, pull back towards it
+      if (distFromSlot > wanderRadiusScaled) {
+        const angleToSlot = Math.atan2(slotYScaled - newYScaled, slotXScaled - newXScaled);
+        newX = (slotXScaled + Math.cos(angleToSlot) * wanderRadiusScaled) / SCALE;
+        newY = (slotYScaled + Math.sin(angleToSlot) * wanderRadiusScaled) / SCALE;
+      }
+      
+      herald.x = newX;
+      herald.y = newY;
+      
+      // Determine direction
+      if (Math.abs(dx) > Math.abs(dy)) {
+        herald.direction = dx > 0 ? 'right' : 'left';
+      } else {
+        herald.direction = dy > 0 ? 'down' : 'up';
+      }
+    } else {
+      // Reached target, pick new one soon
+      herald.changeDirectionTime = time + 500 + Math.random() * 1000;
+    }
+    
+    // Update position in slotHeraldPositions map
+    slotHeraldPositions.set(herald.id, { x: herald.x * SCALE, y: herald.y * SCALE });
+  }
+}
+
+// Build static slot machine cache (machines without animated parts)
+function buildSlotMachineCache(): void {
+  if (slotMachineCacheInitialized) return;
+  
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 300 * p;
+  const slotMachineDistance = plazaRadius * 0.85;
+  const slotMachineWidth = PLAYER_WIDTH * SCALE * 1.2;
+  const slotMachineHeight = PLAYER_HEIGHT * SCALE * 1.5;
+  const depthOffset = 8 * p;
+  
+  // Create cache canvas (large enough for all 4 machines)
+  const cacheSize = plazaRadius * 2.5;
+  slotMachineCache = document.createElement('canvas');
+  slotMachineCache.width = cacheSize;
+  slotMachineCache.height = cacheSize;
+  const cacheCtx = slotMachineCache.getContext('2d');
+  if (!cacheCtx) {
+    slotMachineCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  // Offset to center the cache
+  const offsetX = cacheSize / 2;
+  const offsetY = cacheSize / 2;
+  
+  const directions = [
+    { angle: 0, id: 'slot_machine_north', name: 'Orb Fortune' },
+    { angle: Math.PI / 2, id: 'slot_machine_east', name: 'Orb Destiny' },
+    { angle: Math.PI, id: 'slot_machine_south', name: 'Orb Glory' },
+    { angle: 3 * Math.PI / 2, id: 'slot_machine_west', name: 'Orb Victory' }
+  ];
+  
+  for (const dir of directions) {
+    const slotX = offsetX + Math.cos(dir.angle) * slotMachineDistance;
+    const slotY = offsetY + Math.sin(dir.angle) * slotMachineDistance;
+    const theme = SLOT_MACHINE_THEMES[dir.id];
+    
+    // Calculate 3D perspective points
+    const topWidth = slotMachineWidth * 0.85;
+    const bottomWidth = slotMachineWidth;
+    const machineTopY = slotY - slotMachineHeight / 2;
+    const machineBottomY = slotY + slotMachineHeight / 2;
+    
+    cacheCtx.save();
+    
+    // Draw drop shadow
+    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    cacheCtx.beginPath();
+    cacheCtx.ellipse(slotX + depthOffset, slotY + slotMachineHeight / 2 + depthOffset, slotMachineWidth * 0.5, depthOffset * 0.5, 0, 0, Math.PI * 2);
+    cacheCtx.fill();
+    
+    // Draw back face
+    const backOffsetX = depthOffset * 0.5;
+    const backOffsetY = depthOffset * 0.3;
+    cacheCtx.fillStyle = '#0a0a0a';
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(slotX - bottomWidth / 2 + backOffsetX, machineBottomY + backOffsetY);
+    cacheCtx.lineTo(slotX + bottomWidth / 2 + backOffsetX, machineBottomY + backOffsetY);
+    cacheCtx.lineTo(slotX + topWidth / 2 + backOffsetX, machineTopY + backOffsetY);
+    cacheCtx.lineTo(slotX - topWidth / 2 + backOffsetX, machineTopY + backOffsetY);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+    
+    // Draw right side face
+    cacheCtx.fillStyle = '#151515';
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(slotX + bottomWidth / 2, machineBottomY);
+    cacheCtx.lineTo(slotX + bottomWidth / 2 + backOffsetX, machineBottomY + backOffsetY);
+    cacheCtx.lineTo(slotX + topWidth / 2 + backOffsetX, machineTopY + backOffsetY);
+    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+    
+    // Draw main front face with lighting gradient
+    const frontGradient = cacheCtx.createLinearGradient(
+      slotX - slotMachineWidth / 2, slotY,
+      slotX + slotMachineWidth / 2, slotY
+    );
+    frontGradient.addColorStop(0, '#2a2a2a');
+    frontGradient.addColorStop(0.5, '#1f1f1f');
+    frontGradient.addColorStop(1, '#151515');
+    cacheCtx.fillStyle = frontGradient;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(slotX - bottomWidth / 2, machineBottomY);
+    cacheCtx.lineTo(slotX + bottomWidth / 2, machineBottomY);
+    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
+    cacheCtx.lineTo(slotX - topWidth / 2, machineTopY);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+    
+    // Top highlight
+    cacheCtx.strokeStyle = '#3a3a3a';
+    cacheCtx.lineWidth = 2 * p;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(slotX - topWidth / 2, machineTopY);
+    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
+    cacheCtx.stroke();
+    
+    // Themed frame
+    cacheCtx.strokeStyle = theme.primary;
+    cacheCtx.lineWidth = 3 * p;
+    cacheCtx.shadowBlur = 8 * p;
+    cacheCtx.shadowColor = theme.glow;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(slotX - bottomWidth / 2, machineBottomY);
+    cacheCtx.lineTo(slotX + bottomWidth / 2, machineBottomY);
+    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
+    cacheCtx.lineTo(slotX - topWidth / 2, machineTopY);
+    cacheCtx.closePath();
+    cacheCtx.stroke();
+    cacheCtx.shadowBlur = 0;
+    
+    // Corner accents
+    const cornerSize = 6 * p;
+    cacheCtx.fillStyle = theme.secondary;
+    cacheCtx.fillRect(slotX - topWidth / 2, machineTopY, cornerSize, cornerSize);
+    cacheCtx.fillRect(slotX + topWidth / 2 - cornerSize, machineTopY, cornerSize, cornerSize);
+    cacheCtx.fillRect(slotX - bottomWidth / 2, machineBottomY - cornerSize, cornerSize, cornerSize);
+    cacheCtx.fillRect(slotX + bottomWidth / 2 - cornerSize, machineBottomY - cornerSize, cornerSize, cornerSize);
+    
+    // Screen area (static parts)
+    const screenWidth = slotMachineWidth * 0.65;
+    const screenHeight = slotMachineHeight * 0.4;
+    const screenX = slotX - screenWidth / 2;
+    const screenY = machineTopY + 15 * p;
+    const screenDepth = 3 * p;
+    
+    // Screen inset shadows
+    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(screenX, screenY);
+    cacheCtx.lineTo(screenX + screenWidth, screenY);
+    cacheCtx.lineTo(screenX + screenWidth - screenDepth, screenY + screenDepth);
+    cacheCtx.lineTo(screenX + screenDepth, screenY + screenDepth);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+    
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(screenX, screenY);
+    cacheCtx.lineTo(screenX + screenDepth, screenY + screenDepth);
+    cacheCtx.lineTo(screenX + screenDepth, screenY + screenHeight - screenDepth);
+    cacheCtx.lineTo(screenX, screenY + screenHeight);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+    
+    // Screen background
+    const screenGradient = cacheCtx.createLinearGradient(screenX + screenDepth, screenY + screenDepth, screenX + screenWidth - screenDepth, screenY + screenHeight - screenDepth);
+    screenGradient.addColorStop(0, '#000000');
+    screenGradient.addColorStop(0.5, `${theme.primary}08`);
+    screenGradient.addColorStop(1, '#000000');
+    cacheCtx.fillStyle = screenGradient;
+    cacheCtx.fillRect(screenX + screenDepth, screenY + screenDepth, screenWidth - screenDepth * 2, screenHeight - screenDepth * 2);
+    
+    // Screen border
+    cacheCtx.strokeStyle = theme.primary;
+    cacheCtx.lineWidth = 2 * p;
+    cacheCtx.shadowBlur = 6 * p;
+    cacheCtx.shadowColor = theme.glow;
+    cacheCtx.strokeRect(screenX + screenDepth, screenY + screenDepth, screenWidth - screenDepth * 2, screenHeight - screenDepth * 2);
+    cacheCtx.strokeStyle = `${theme.primary}66`;
+    cacheCtx.lineWidth = 1 * p;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(screenX, screenY);
+    cacheCtx.lineTo(screenX + screenWidth, screenY);
+    cacheCtx.moveTo(screenX, screenY);
+    cacheCtx.lineTo(screenX, screenY + screenHeight);
+    cacheCtx.stroke();
+    cacheCtx.shadowBlur = 0;
+    
+    // Decorative lights (base positions, no pulsing in cache)
+    for (let i = 0; i < 5; i++) {
+      const lightX = screenX + (i + 1) * (screenWidth / 6);
+      const lightY = machineTopY + 8 * p;
+      cacheCtx.fillStyle = `${theme.primary}80`;
+      cacheCtx.shadowBlur = 4 * p;
+      cacheCtx.shadowColor = theme.glow;
+      cacheCtx.beginPath();
+      cacheCtx.arc(lightX, lightY, 3 * p, 0, Math.PI * 2);
+      cacheCtx.fill();
+      cacheCtx.shadowBlur = 0;
+    }
+    
+    // Name label (below the machine)
+    const nameLabelY = machineBottomY + 12 * p; // Position below the machine
+    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    cacheCtx.font = `bold ${8 * p}px "Press Start 2P", monospace`;
+    cacheCtx.textAlign = 'center';
+    cacheCtx.textBaseline = 'middle';
+    cacheCtx.fillText(dir.name, slotX + 1 * p, nameLabelY + 1 * p); // Shadow offset
+    cacheCtx.fillStyle = theme.primary;
+    cacheCtx.shadowBlur = 3 * p;
+    cacheCtx.shadowColor = theme.glow;
+    cacheCtx.fillText(dir.name, slotX, nameLabelY);
+    cacheCtx.shadowBlur = 0;
+    
+    cacheCtx.restore();
+  }
+  
+  slotMachineCacheInitialized = true;
+}
+
+// Draw slot machines on casino map (N/S/E/W near plaza edge)
+export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, hoveredSlotMachineId?: string | null): void {
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 300 * p;
+  
+  // Position 4 slot machines at cardinal directions near plaza edge
+  // Place them at 85% of plaza radius to be near the edge
+  const slotMachineDistance = plazaRadius * 0.85;
+  // Scale slot machines to match NPC size (slightly larger for visibility)
+  const slotMachineWidth = PLAYER_WIDTH * SCALE * 1.2; // 20% larger than player width
+  const slotMachineHeight = PLAYER_HEIGHT * SCALE * 1.5; // 50% taller than player height
+  const depthOffset = 8 * p; // Depth offset for 3D effect
+  
+  // Directions: North (0), East (π/2), South (π), West (3π/2)
+  const directions = [
+    { angle: 0, id: 'slot_machine_north', name: 'Orb Fortune' },      // North
+    { angle: Math.PI / 2, id: 'slot_machine_east', name: 'Orb Destiny' },   // East
+    { angle: Math.PI, id: 'slot_machine_south', name: 'Orb Glory' },      // South
+    { angle: 3 * Math.PI / 2, id: 'slot_machine_west', name: 'Orb Victory' } // West
+  ];
+  
+  // Build static cache if needed
+  buildSlotMachineCache();
+  
+  // Clear previous positions
+  slotMachinePositions.clear();
+  slotHeraldPositions.clear();
+  
+  // Update herald wandering
+  updateHeralds(time);
+  
+  // Update dealer speech bubbles (including slot heralds)
+  updateDealerSpeechBubbles(time);
+  
+  // Draw cached static slot machines
+  if (slotMachineCache) {
+    const cacheSize = plazaRadius * 2.5;
+    const offsetX = centerX - cacheSize / 2;
+    const offsetY = centerY - cacheSize / 2;
+    ctx.drawImage(slotMachineCache, offsetX, offsetY);
+  }
+  
+  // Draw 8 seats around each slot machine
+  for (const dir of directions) {
+    const slotX = centerX + Math.cos(dir.angle) * slotMachineDistance;
+    const slotY = centerY + Math.sin(dir.angle) * slotMachineDistance;
+    const seatRadius = 80 * p; // Distance from machine center
+    
+    for (let seat = 0; seat < 8; seat++) {
+      const seatAngle = (seat / 8) * Math.PI * 2; // Evenly spaced around circle
+      const seatX = slotX + Math.cos(seatAngle) * seatRadius;
+      const seatY = slotY + Math.sin(seatAngle) * seatRadius;
+      
+      // Draw seat (small circle)
+      ctx.save();
+      ctx.fillStyle = '#2a2a2a';
+      ctx.beginPath();
+      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#4a4a4a';
+      ctx.lineWidth = 1 * p;
+      ctx.beginPath();
+      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+  
+  // Now draw animated parts on top (light beams, hover effects, pulsing lights)
+  for (const dir of directions) {
+    const slotX = centerX + Math.cos(dir.angle) * slotMachineDistance;
+    const slotY = centerY + Math.sin(dir.angle) * slotMachineDistance;
+    const theme = SLOT_MACHINE_THEMES[dir.id];
+    
+    // Store position for click detection
+    slotMachinePositions.set(dir.id, { 
+      x: slotX - slotMachineWidth / 2, 
+      y: slotY - slotMachineHeight / 2, 
+      width: slotMachineWidth, 
+      height: slotMachineHeight 
+    });
+    
+    const isHovered = hoveredSlotMachineId === dir.id;
+    
+    ctx.save();
+    
+    // Hover glow effect (themed) - animated, drawn on top
+    if (isHovered) {
+      ctx.globalAlpha = 0.4;
+      const glowGradient = ctx.createRadialGradient(slotX, slotY, 0, slotX, slotY, slotMachineWidth * 1.5);
+      glowGradient.addColorStop(0, `${theme.glow}cc`);
+      glowGradient.addColorStop(0.5, `${theme.glow}66`);
+      glowGradient.addColorStop(1, `${theme.glow}00`);
+      ctx.fillStyle = glowGradient;
+      ctx.beginPath();
+      ctx.arc(slotX, slotY, slotMachineWidth * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    
+    // Calculate positions for animated elements
+    const topWidth = slotMachineWidth * 0.85;
+    const bottomWidth = slotMachineWidth;
+    const machineTopY = slotY - slotMachineHeight / 2;
+    const machineBottomY = slotY + slotMachineHeight / 2;
+    const screenWidth = slotMachineWidth * 0.65;
+    const screenX = slotX - screenWidth / 2;
+    
+    // Decorative lights (pulsing, themed, with 3D depth) - animated overlay
+    const pulsePhase = Math.sin(time * 0.003) * 0.3 + 0.7;
+    for (let i = 0; i < 5; i++) {
+      const lightX = screenX + (i + 1) * (screenWidth / 6);
+      const lightY = machineTopY + 8 * p;
+      // Light glow (behind)
+      ctx.globalAlpha = pulsePhase * 0.5;
+      ctx.fillStyle = theme.glow;
+      ctx.shadowBlur = 8 * p;
+      ctx.shadowColor = theme.glow;
+      ctx.beginPath();
+      ctx.arc(lightX, lightY, 5 * p, 0, Math.PI * 2);
+      ctx.fill();
+      // Light itself (front)
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = `${theme.primary}${Math.floor(pulsePhase * 255).toString(16).padStart(2, '0')}`;
+      ctx.shadowBlur = 4 * p;
+      ctx.beginPath();
+      ctx.arc(lightX, lightY, 3 * p, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    
+    // === ANIMATED LIGHTBEAM ABOVE SLOT MACHINE ===
+    // Draw lightbeam from top of machine (BEFORE herald so it's behind NPC)
+    const beamHeight = 100 * p;
+    const baseBeamWidth = 8 * p;
+    const beamStartY = machineTopY; // Top of machine
+    
+    // Animate beam (pulsing width and intensity) - each machine pulses at different phase
+    const beamPulse = Math.sin(time * 0.003 + dir.angle) * 0.2 + 1; // Each machine pulses at different phase
+    const beamIntensity = Math.sin(time * 0.002 + dir.angle) * 0.25 + 0.75; // Intensity between 0.5 and 1.0
+    const animatedBeamWidth = baseBeamWidth * beamPulse;
+    const animatedBeamX = slotX - animatedBeamWidth / 2;
+    
+    // Convert theme color to RGB for gradient
+    const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 255, g: 255, b: 255 };
+    };
+    
+    const themeRgb = hexToRgb(theme.primary);
+    const themeSecondaryRgb = hexToRgb(theme.secondary);
+    
+    // Slot machine lightbeam gradient (themed colors)
+    const slotBeamGradient = ctx.createLinearGradient(
+      animatedBeamX, 
+      beamStartY, 
+      animatedBeamX, 
+      beamStartY - beamHeight
+    );
+    slotBeamGradient.addColorStop(0, `rgba(255, 255, 255, ${beamIntensity})`);
+    slotBeamGradient.addColorStop(0.2, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${beamIntensity * 0.9})`);
+    slotBeamGradient.addColorStop(0.5, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${beamIntensity * 0.6})`);
+    slotBeamGradient.addColorStop(0.8, `rgba(${themeSecondaryRgb.r}, ${themeSecondaryRgb.g}, ${themeSecondaryRgb.b}, ${beamIntensity * 0.3})`);
+    slotBeamGradient.addColorStop(1, `rgba(${themeSecondaryRgb.r}, ${themeSecondaryRgb.g}, ${themeSecondaryRgb.b}, 0)`);
+    
+    // Draw main beam
+    ctx.fillStyle = slotBeamGradient;
+    ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
+    
+    // Batch shadow operations for slot beam
+    const slotGlowIntensity = beamIntensity * 0.6;
+    ctx.shadowBlur = 20 * p * beamPulse;
+    ctx.shadowColor = `${theme.glow}${Math.floor(slotGlowIntensity * 255).toString(16).padStart(2, '0')}`;
+    
+    // Slot beam outer glow (pulsing)
+    ctx.fillRect(animatedBeamX - 2 * p, beamStartY - beamHeight, animatedBeamWidth + 4 * p, beamHeight);
+    
+    // Slot beam inner core (bright center)
+    const slotCoreGradient = ctx.createLinearGradient(
+      animatedBeamX, 
+      beamStartY, 
+      animatedBeamX, 
+      beamStartY - beamHeight * 0.7
+    );
+    slotCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${beamIntensity * 0.9})`);
+    slotCoreGradient.addColorStop(1, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, 0)`);
+    ctx.fillStyle = slotCoreGradient;
+    ctx.fillRect(animatedBeamX + 1 * p, beamStartY - beamHeight * 0.7, animatedBeamWidth - 2 * p, beamHeight * 0.7);
+    
+    // Reset shadow after slot beam operations
+    ctx.shadowBlur = 0;
+    
+    // Slot beam shimmer effect (moving highlight)
+    const slotShimmerOffset = ((time * 0.0015 + dir.angle) % (beamHeight * 0.4));
+    const slotShimmerGradient = ctx.createLinearGradient(
+      animatedBeamX, 
+      beamStartY - slotShimmerOffset, 
+      animatedBeamX, 
+      beamStartY - slotShimmerOffset - beamHeight * 0.25
+    );
+    slotShimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    slotShimmerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${beamIntensity * 0.5})`);
+    slotShimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = slotShimmerGradient;
+    ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
+    
+    // Draw slot herald NPC next to the machine
+    // Draw heralds (they wander, so get position from updateHeralds)
+    const herald = SLOT_HERALDS.find(h => h.slotMachineId === dir.id);
+    if (herald) {
+      const heraldNPC = heraldNPCs.find(h => h.id === herald.id);
+      if (heraldNPC) {
+        // Create herald dealer type
+        const heraldDealerType: DealerType = {
+          id: herald.id,
+          name: herald.name,
+          outfit: herald.outfit,
+          messages: herald.messages
+        };
+        
+        // Draw herald NPC at their current wandering position
+        // drawSingleDealer expects scaled coordinates (it divides by SCALE internally)
+        const heraldX = heraldNPC.x * SCALE;
+        const heraldY = heraldNPC.y * SCALE;
+        // Pass the herald's current direction so they face the way they're walking
+        drawSingleDealer(ctx, heraldDealerType, heraldX, heraldY, time, false, heraldNPC.direction);
+      }
+    }
+    
+    ctx.restore();
+  }
+}
+
+// Check if click is on a slot machine
+export function getClickedSlotMachine(worldX: number, worldY: number): string | null {
+  const p = SCALE;
+  
+  for (const [slotId, position] of slotMachinePositions.entries()) {
+    if (worldX >= position.x && worldX <= position.x + position.width &&
+        worldY >= position.y && worldY <= position.y + position.height) {
+      return slotId;
+    }
+  }
+  
+  return null;
+}
+
+// Check if mouse is hovering over a slot machine
+export function getHoveredSlotMachine(worldX: number, worldY: number): string | null {
+  for (const [slotId, position] of slotMachinePositions.entries()) {
+    if (worldX >= position.x && worldX <= position.x + position.width &&
+        worldY >= position.y && worldY <= position.y + position.height) {
+      return slotId;
     }
   }
   

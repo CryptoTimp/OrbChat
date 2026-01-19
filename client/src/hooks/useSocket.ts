@@ -468,6 +468,31 @@ function attachListeners(sock: Socket) {
         timestamp: Date.now()
       });
       
+      // Special handling for slots - don't update balance immediately, let animation complete first
+      if (rewardType === 'slots') {
+        // Don't update balance here - the SlotMachineModal will handle it after animation completes
+        // This prevents immediate balance updates that reveal win/loss before animation
+        // BUT: Still update Firebase if this is the final balance (after payout)
+        // The modal will handle the local state update, but we should ensure Firebase is updated
+        console.log('[useSocket] Slots balance update - deferring to SlotMachineModal after animation');
+        console.log('[useSocket] Slots balance update - orbs:', orbs, 'rewardAmount:', rewardAmount);
+        
+        // If this is the final balance update (after payout), update Firebase
+        // The first update (bet deduction with negative rewardAmount) is handled by the modal's optimistic update
+        // The second update (final balance with net payout) should also update Firebase
+        // We can detect the final update because rewardAmount will be different from a simple bet deduction
+        if (playerId === state.playerId && rewardAmount !== undefined) {
+          // This is likely the final balance update (includes payout)
+          // The modal will also update Firebase, but this ensures it's updated even if modal is closed
+          updateUserOrbs(playerId, orbs).catch(error => {
+            console.error('[useSocket] Failed to update Firebase orbs for slots final balance:', error);
+          });
+          console.log('[useSocket] Updated Firebase for slots balance:', orbs, 'rewardAmount:', rewardAmount);
+        }
+        
+        return; // Skip local state update - modal will handle it
+      }
+      
       // Special handling for idle rewards - show incremental update with floating text
       if (rewardType === 'idle' && rewardAmount && rewardAmount > 0) {
         // Update balance directly with the reward amount for visual feedback
@@ -1517,6 +1542,85 @@ function attachListeners(sock: Socket) {
       state.updatePlayerOrbs(playerId, newBalance);
     }
   });
+
+  // Slot machine result
+  sock.on('slot_machine_joined', ({ slotMachineId, seat }) => {
+    console.log('[useSocket] Slot machine joined:', slotMachineId, 'seat:', seat);
+    const state = useGameStore.getState();
+    // Open the slot machine modal when player is seated
+    state.openSlotMachine(slotMachineId);
+    
+    // Calculate seat position and store it for movement detection
+    const SCALE = GAME_CONSTANTS.SCALE;
+    const WORLD_WIDTH_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH * SCALE;
+    const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
+    const centerXScaled = WORLD_WIDTH_SCALED / 2;
+    const centerYScaled = WORLD_HEIGHT_SCALED / 2;
+    const plazaRadiusScaled = 300 * SCALE;
+    const slotMachineDistance = plazaRadiusScaled * 0.85;
+    
+    const directions = [
+      { angle: 0, id: 'slot_machine_north' },
+      { angle: Math.PI / 2, id: 'slot_machine_east' },
+      { angle: Math.PI, id: 'slot_machine_south' },
+      { angle: 3 * Math.PI / 2, id: 'slot_machine_west' }
+    ];
+    
+    const dir = directions.find(d => d.id === slotMachineId);
+    if (dir) {
+      const slotXScaled = centerXScaled + Math.cos(dir.angle) * slotMachineDistance;
+      const slotYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance;
+      const seatRadiusScaled = 80 * SCALE;
+      const seatAngle = (seat / 8) * Math.PI * 2;
+      const seatXScaled = slotXScaled + Math.cos(seatAngle) * seatRadiusScaled;
+      const seatYScaled = slotYScaled + Math.sin(seatAngle) * seatRadiusScaled;
+      
+      // Convert to unscaled coordinates
+      const seatX = seatXScaled / SCALE;
+      const seatY = seatYScaled / SCALE;
+      
+      // Store seat position in window for GameCanvas to access
+      (window as any).currentSlotMachineSeat = { slotMachineId, seatX, seatY };
+    }
+  });
+  
+  sock.on('slot_machine_left', ({ slotMachineId }) => {
+    console.log('[useSocket] Slot machine left:', slotMachineId);
+    const state = useGameStore.getState();
+    // Close the slot machine modal when player leaves
+    state.closeSlotMachine(slotMachineId);
+    
+    // Clear seat position
+    if ((window as any).currentSlotMachineSeat?.slotMachineId === slotMachineId) {
+      (window as any).currentSlotMachineSeat = null;
+    }
+  });
+  
+  sock.on('slot_machine_left', ({ slotMachineId }) => {
+    console.log('[useSocket] Slot machine left:', slotMachineId);
+    const state = useGameStore.getState();
+    // Close the slot machine modal when player leaves
+    state.closeSlotMachine(slotMachineId);
+  });
+  
+  sock.on('slot_machine_result', ({ slotMachineId, slotMachineName, symbols, payout, newBalance }) => {
+    console.log('[useSocket] Received slot_machine_result:', { slotMachineId, slotMachineName, symbols, payout, newBalance });
+    
+    // DON'T update balance here - let the SlotMachineModal handle it after animation completes
+    // This prevents immediate balance updates that reveal win/loss before animation
+    
+    // Dispatch custom event for SlotMachineModal to listen to
+    const event = new CustomEvent('slot_machine_result', {
+      detail: { slotMachineId, slotMachineName, symbols, payout, newBalance }
+    });
+    window.dispatchEvent(event);
+  });
+
+  // Slot machine error
+  sock.on('slot_machine_error', ({ slotMachineId, message }) => {
+    console.error('[useSocket] Slot machine error:', slotMachineId, message);
+    addNotification('error', message);
+  });
 }
 
 export function useSocket() {
@@ -2483,6 +2587,41 @@ export function useSocket() {
     sock.emit('blackjack_split', { tableId, handIndex });
   }, []);
   
+  // Slot machine seat functions
+  const joinSlotMachine = useCallback((slotMachineId: string) => {
+    const sock = getOrCreateSocket();
+    console.log('[useSocket] Emitting join_slot_machine for machine:', slotMachineId, 'socket connected:', sock.connected, 'socket id:', sock.id);
+    
+    // Add error handler for this specific emit
+    const errorHandler = (error: any) => {
+      console.error('[useSocket] Error emitting join_slot_machine:', error);
+    };
+    
+    sock.emit('join_slot_machine', { slotMachineId }, errorHandler);
+    
+    // Also listen for any errors
+    const oneTimeErrorListener = (error: any) => {
+      console.error('[useSocket] Socket error:', error);
+      sock.off('error', oneTimeErrorListener);
+    };
+    sock.once('error', oneTimeErrorListener);
+  }, []);
+  
+  const leaveSlotMachine = useCallback((slotMachineId: string) => {
+    const sock = getOrCreateSocket();
+    sock.emit('leave_slot_machine', { slotMachineId });
+  }, []);
+  
+  const spinSlotMachine = useCallback((slotMachineId: string, betAmount: number) => {
+    const sock = getOrCreateSocket();
+    if (!sock.connected) {
+      console.error('[useSocket] Socket not connected!');
+      return;
+    }
+    console.log('[useSocket] Emitting spin_slot_machine:', { slotMachineId, betAmount });
+    sock.emit('spin_slot_machine', { slotMachineId, betAmount });
+  }, []);
+  
   // Trade functions
   const requestTrade = useCallback((otherPlayerId: string) => {
     const sock = getOrCreateSocket();
@@ -2707,6 +2846,9 @@ export function useSocket() {
     blackjackStand,
     blackjackDoubleDown,
     blackjackSplit,
+    joinSlotMachine,
+    leaveSlotMachine,
+    spinSlotMachine,
     requestTrade,
     modifyTradeOffer,
     acceptTrade,

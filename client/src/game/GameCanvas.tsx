@@ -39,6 +39,9 @@ import {
   drawBlackjackTables,
   getClickedBlackjackTable,
   getHoveredBlackjackTable,
+  drawSlotMachines,
+  getClickedSlotMachine,
+  getHoveredSlotMachine,
   setCasinoRoomPlayerCount,
   setMillionairesLoungeRoomPlayerCount,
   setRoomPlayerCount,
@@ -123,7 +126,7 @@ export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { getKeys } = useKeyboard();
-  const { move, collectOrb, interactWithShrine, interactWithTreasureChest, startCuttingTree, completeCuttingTree, cancelCuttingTree, joinRoom, listRooms } = useSocket();
+  const { move, collectOrb, interactWithShrine, interactWithTreasureChest, startCuttingTree, completeCuttingTree, cancelCuttingTree, joinRoom, listRooms, joinSlotMachine, leaveSlotMachine } = useSocket();
   const toggleLogDealer = useGameStore(state => state.toggleLogDealer);
   const toggleBuyOrbs = useGameStore(state => state.toggleBuyOrbs);
   const toggleTreasureChestDealer = useGameStore(state => state.toggleTreasureChestDealer);
@@ -212,10 +215,33 @@ export function GameCanvas() {
   const pendingMillionairesLoungePortalInteractionRef = useRef<boolean>(false);
   const pendingMillionairesLoungeReturnPortalInteractionRef = useRef<boolean>(false);
   const pendingBlackjackTableInteractionRef = useRef<string | null>(null);
+  const pendingSlotMachineInteractionRef = useRef<string | null>(null);
+  
+  // Sync seat position from window (set by useSocket)
+  useEffect(() => {
+    const checkSeat = () => {
+      const seat = (window as any).currentSlotMachineSeat;
+      if (seat) {
+        currentSlotMachineSeatRef.current = seat;
+      } else {
+        currentSlotMachineSeatRef.current = null;
+      }
+    };
+    
+    // Check immediately
+    checkSeat();
+    
+    // Check periodically (every 100ms)
+    const interval = setInterval(checkSeat, 100);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const currentSlotMachineSeatRef = useRef<{ slotMachineId: string; seatX: number; seatY: number } | null>(null);
   
   // Hovered dealer state
   const [hoveredDealerId, setHoveredDealerId] = useState<string | null>(null);
   const hoveredBlackjackTableRef = useRef<string | null>(null);
+  const hoveredSlotMachineRef = useRef<string | null>(null);
   
   // Hovered NPC stall state
   const hoveredNPCStallRef = useRef<{ tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null>(null);
@@ -442,6 +468,11 @@ export function GameCanvas() {
         pendingBlackjackTableInteractionRef.current = null;
       }
       
+      // Clear pending slot machine interaction if clicking elsewhere
+      if (pendingSlotMachineInteractionRef.current) {
+        pendingSlotMachineInteractionRef.current = null;
+      }
+      
       // Clear pending log dealer interaction if clicking elsewhere
       if (pendingLogDealerInteractionRef.current) {
         pendingLogDealerInteractionRef.current = false;
@@ -629,6 +660,41 @@ export function GameCanvas() {
             setClickTarget(returnPortalPos.x / SCALE, returnPortalPos.y / SCALE);
             // Set flag to indicate return portal was clicked
             pendingReturnPortalInteractionRef.current = true;
+          }
+          return; // Don't move via normal click handling
+        }
+        
+        // Check if clicking on slot machine
+        const clickedSlotMachineId = getClickedSlotMachine(worldXScaled, worldYScaled);
+        if (clickedSlotMachineId) {
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer) {
+            playClickSound();
+            // Import slotMachinePositions dynamically
+            import('./renderer').then(({ slotMachinePositions }) => {
+              const slotPos = slotMachinePositions.get(clickedSlotMachineId);
+              if (slotPos) {
+                // Check if player is in range
+                const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+                const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+                const slotCenterX = slotPos.x + slotPos.width / 2;
+                const slotCenterY = slotPos.y + slotPos.height / 2;
+                const dx = slotCenterX - playerCenterX;
+                const dy = slotCenterY - playerCenterY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const interactionRange = 100 * SCALE;
+                
+                if (dist < interactionRange) {
+                  // Player is in range, join slot machine (will open modal when seated)
+                  joinSlotMachine(clickedSlotMachineId);
+                } else {
+                  // Player is far away, walk to slot machine first
+                  setClickTarget(slotCenterX / SCALE, slotCenterY / SCALE);
+                  // Store pending interaction
+                  pendingSlotMachineInteractionRef.current = clickedSlotMachineId;
+                }
+              }
+            });
           }
           return; // Don't move via normal click handling
         }
@@ -930,13 +996,23 @@ export function GameCanvas() {
         hoveredBlackjackTableRef.current = null;
       }
       
+      // Check for hover on slot machines (casino map)
+      let hoveredSlotMachine: string | null = null;
+      if (currentMapType === 'casino') {
+        hoveredSlotMachine = getHoveredSlotMachine(worldXScaled, worldYScaled);
+        hoveredSlotMachineRef.current = hoveredSlotMachine;
+      } else {
+        hoveredSlotMachineRef.current = null;
+      }
+      
       // Check for hover on players
       const players = useGameStore.getState().players;
       const localPlayerId = useGameStore.getState().playerId;
       const hoveredPlayer = getHoveredPlayer(worldXScaled, worldYScaled, players, localPlayerId);
       
-      // Change cursor style when hovering over shrine, NPC stall, dealer, tree, portal, blackjack table, or player
-      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData || hoveredPortal || hoveredLoungePortal || hoveredReturnPortal || hoveredLoungeReturnPortal || hoveredBlackjackTable || hoveredPlayer) {
+      // Change cursor style when hovering over shrine, NPC stall, dealer, tree, portal, blackjack table, slot machine, or player
+      const hoveredSlotMachineId = hoveredSlotMachineRef.current;
+      if (hoveredShrineId || hoveredChestId || hoveredStall || hoveredDealerData || hoveredTreeData || hoveredPortal || hoveredLoungePortal || hoveredReturnPortal || hoveredLoungeReturnPortal || hoveredBlackjackTable || hoveredSlotMachineId || hoveredPlayer) {
         canvas.style.cursor = 'pointer';
       } else {
         canvas.style.cursor = 'default';
@@ -1976,6 +2052,40 @@ export function GameCanvas() {
         }
       }
       
+      // Check if player reached slot machine after clicking it
+      if (pendingSlotMachineInteractionRef.current && currentMapType === 'casino') {
+        const slotMachineId = pendingSlotMachineInteractionRef.current;
+        // Import slotMachinePositions dynamically
+        import('./renderer').then((rendererModule) => {
+          const slotPos = rendererModule.slotMachinePositions.get(slotMachineId);
+          
+          if (slotPos) {
+            const playerCenterX = x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+            const playerCenterY = y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+            const slotCenterX = slotPos.x + slotPos.width / 2;
+            const slotCenterY = slotPos.y + slotPos.height / 2;
+            const dx = slotCenterX - playerCenterX;
+            const dy = slotCenterY - playerCenterY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const interactionRange = 100 * SCALE;
+            
+            if (dist < interactionRange) {
+              // Player is in range, join slot machine (will open modal when seated)
+              playClickSound();
+              joinSlotMachine(slotMachineId);
+              pendingSlotMachineInteractionRef.current = null; // Clear flag
+              setClickTarget(null, null); // Clear click target
+            }
+          } else {
+            // Slot machine not found, clear pending interaction
+            pendingSlotMachineInteractionRef.current = null;
+          }
+        }).catch(() => {
+          // If import fails, clear pending interaction
+          pendingSlotMachineInteractionRef.current = null;
+        });
+      }
+      
       // Check if player reached blackjack table after clicking it
       if (pendingBlackjackTableInteractionRef.current && currentMapType === 'casino') {
         const tableId = pendingBlackjackTableInteractionRef.current;
@@ -2288,6 +2398,9 @@ export function GameCanvas() {
     if (currentMapType === 'casino') {
       // Draw return portal in casino map
       drawReturnPortal(ctx, currentTime, camera, previousRoomId, roomId);
+      // Draw slot machines (before players so players appear on top)
+      const hoveredSlotMachineId = hoveredSlotMachineRef.current;
+      drawSlotMachines(ctx, currentTime, hoveredSlotMachineId);
       // Draw blackjack tables (before players so players appear on top)
       const hoveredTableId = hoveredBlackjackTableRef.current;
       drawBlackjackTables(ctx, currentTime, hoveredTableId);

@@ -51,6 +51,7 @@ interface GameState {
   blackjackTableOpen: boolean;
   selectedTableId: string | null;
   blackjackGameState: BlackjackTableState | null;
+  openSlotMachines: Set<string>; // Set of slot machine IDs that are currently open
   confirmModal: {
     isOpen: boolean;
     title: string;
@@ -138,6 +139,8 @@ interface GameState {
   openBlackjackTable: (tableId: string) => void;
   closeBlackjackTable: () => void;
   updateBlackjackState: (state: BlackjackTableState | null) => void;
+  openSlotMachine: (slotMachineId: string) => void;
+  closeSlotMachine: (slotMachineId: string) => void;
   setConfirmModal: (modal: GameState['confirmModal']) => void;
   
   // Player context menu actions
@@ -236,10 +239,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   treasureChestModalOpen: false,
   selectedTreasureChest: null,
   treasureChestDealerOpen: false,
-  blackjackTableOpen: false,
-  selectedTableId: null,
-  blackjackGameState: null,
-  confirmModal: {
+    blackjackTableOpen: false,
+    selectedTableId: null,
+    blackjackGameState: null,
+    openSlotMachines: new Set<string>(),
+    confirmModal: {
     isOpen: false,
     title: '',
     message: '',
@@ -729,6 +733,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   openBlackjackTable: (tableId) => set({ blackjackTableOpen: true, selectedTableId: tableId }),
   closeBlackjackTable: () => set({ blackjackTableOpen: false, selectedTableId: null, blackjackGameState: null }),
   updateBlackjackState: (state) => set({ blackjackGameState: state }),
+  openSlotMachine: (slotMachineId) => {
+    const current = get().openSlotMachines;
+    if (!current.has(slotMachineId)) {
+      const updated = new Set(current);
+      updated.add(slotMachineId);
+      set({ openSlotMachines: updated });
+    }
+  },
+  closeSlotMachine: (slotMachineId) => {
+    const current = get().openSlotMachines;
+    if (current.has(slotMachineId)) {
+      const updated = new Set(current);
+      updated.delete(slotMachineId);
+      set({ openSlotMachines: updated });
+    }
+  },
   setConfirmModal: (modal) => set({ confirmModal: modal }),
   
   // Player context menu actions

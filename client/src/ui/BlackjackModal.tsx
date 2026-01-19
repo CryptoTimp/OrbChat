@@ -420,7 +420,7 @@ export function BlackjackModal() {
         // Extract table number from tableId (e.g., "blackjack_table_1" -> 1)
         const tableNumber = selectedTableId.replace('blackjack_table_', '');
         const dealerId = `blackjack_dealer_${tableNumber}`;
-        
+      
         // Check if any players won or lost
         const dealerValue = calculateHandValueClient(blackjackGameState.dealerHand);
         const dealerBust = dealerValue > 21;
@@ -436,7 +436,7 @@ export function BlackjackModal() {
             const handValue = calculateHandValueClient(hand.cards);
             const isBust = handValue > 21;
             const isBlackjack = hand.isBlackjack;
-            
+        
             // Player busts = loss
             if (isBust) {
               hasLosers = true;
@@ -498,7 +498,7 @@ export function BlackjackModal() {
           ];
           const message = messages[Math.floor(Math.random() * messages.length)];
           setDealerSpeechBubble(dealerId, message);
-        } else {
+      } else {
           // Push (ties) or no players
           const messages = [
             'Push! Try again!',
@@ -512,7 +512,7 @@ export function BlackjackModal() {
       
       // Update previous game state
       previousGameStateRef.current = currentGameState;
-    }
+      }
   }, [blackjackGameState?.gameState, blackjackGameState?.players, localPlayer?.orbs, balanceBeforeRound]);
   
   // Force re-render when balance changes
@@ -633,10 +633,10 @@ export function BlackjackModal() {
           <div className="flex items-center gap-4">
             {localPlayer && balanceColorInfo && (
               <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 font-pixel text-sm">Balance:</span>
-                  <span className="font-pixel text-lg font-bold" style={{ color: balanceColorInfo.color }}>
-                    {localPlayer.orbs.toLocaleString()} <span className="text-cyan-400 text-sm">orbs</span>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 font-pixel text-sm">Balance:</span>
+                <span className="font-pixel text-lg font-bold" style={{ color: balanceColorInfo.color }}>
+                  {localPlayer.orbs.toLocaleString()} <span className="text-cyan-400 text-sm">orbs</span>
                   </span>
                 </div>
                 {sessionStartingBalance !== null && (
@@ -656,7 +656,7 @@ export function BlackjackModal() {
                         <span className="text-gray-400 font-pixel">Last Win:</span>
                         <span className="font-pixel font-bold text-green-400">
                           +{sessionLastWin.toLocaleString()}
-                        </span>
+                </span>
                       </div>
                     )}
                   </div>
@@ -874,7 +874,7 @@ export function BlackjackModal() {
                       <div className="space-y-3">
                         <label className="block text-gray-300 font-pixel text-sm text-center">
                           Select Bet Amount
-                        </label>
+                          </label>
                         <div className="grid grid-cols-3 gap-2">
                           {[50000, 100000, 250000, 500000, 750000, 1000000].map((amount) => {
                             const isSelected = betAmount === amount;

@@ -8,6 +8,7 @@ import { InventoryModal } from './ui/InventoryModal';
 import { SettingsModal } from './ui/SettingsModal';
 import { LogDealerModal } from './ui/LogDealerModal';
 import { BlackjackModal } from './ui/BlackjackModal';
+import { SlotMachineModal } from './ui/SlotMachineModal';
 import { LootBoxModal } from './ui/LootBoxModal';
 import { TreasureChestModal } from './ui/TreasureChestModal';
 import { TreasureChestDealerModal } from './ui/TreasureChestDealerModal';
@@ -35,6 +36,7 @@ function App() {
   const playerName = useGameStore(state => state.playerName);
   const selectedLootBox = useGameStore(state => state.selectedLootBox);
   const setSelectedLootBox = useGameStore(state => state.setSelectedLootBox);
+  const openSlotMachines = useGameStore(state => state.openSlotMachines);
   
   // Listen to Firebase auth state
   useEffect(() => {
@@ -127,6 +129,9 @@ function App() {
       {/* Log dealer modal */}
       <LogDealerModal />
       <BlackjackModal />
+      {Array.from(openSlotMachines).map(slotMachineId => (
+        <SlotMachineModal key={slotMachineId} slotMachineId={slotMachineId} />
+      ))}
       
       {/* Treasure chest modal */}
       <TreasureChestModal />
