@@ -7799,7 +7799,7 @@ const SLOT_HERALDS: Array<{
     name: 'Orb Glory Herald',
     outfit: ['hat_halo', 'armor_blue', 'legs_blue', 'acc_wings_blue', 'acc_aura_blue'],
     messages: [
-      'Orb Glory for legendary wins!',
+      'Orb Glory for legendary wins!!',
       'Blue brilliance brings fortune!',
       'Glory awaits the brave!',
       'Spin Orb Glory for epic rewards!',
