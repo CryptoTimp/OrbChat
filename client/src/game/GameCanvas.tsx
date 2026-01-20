@@ -2413,11 +2413,11 @@ export function GameCanvas() {
     // Draw blackjack tables BEFORE players (so players appear on top of tables)
     if (currentMapType === 'casino') {
       // Draw pulsing lines around the dark grey central plaza ring
-      drawCasinoPlazaPulsingLines(ctx, currentTime, camera);
+      drawCasinoPlazaPulsingLines(ctx, currentTime);
       // Draw slot machines (before players so players appear on top)
       // This includes the central light grey circle that the portal sits on
       const hoveredSlotMachineId = hoveredSlotMachineRef.current;
-      drawSlotMachines(ctx, currentTime, hoveredSlotMachineId, camera);
+      drawSlotMachines(ctx, currentTime, hoveredSlotMachineId);
       // Draw return portal AFTER the central circle so it appears on top
       drawReturnPortal(ctx, currentTime, camera, previousRoomId, roomId);
       // Draw blackjack tables (before players so players appear on top)

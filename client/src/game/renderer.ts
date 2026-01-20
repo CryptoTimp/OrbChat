@@ -3458,21 +3458,11 @@ function buildPulseTrailSegmentCache(): void {
 }
 
 // Draw pulsing loading spinner lines around the dark grey central plaza ring
-export function drawCasinoPlazaPulsingLines(ctx: CanvasRenderingContext2D, time: number, camera?: Camera): void {
+export function drawCasinoPlazaPulsingLines(ctx: CanvasRenderingContext2D, time: number): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
   const plazaRadius = 600 * p; // Match the central plaza radius
-  
-  // Viewport culling: skip if central plaza is not visible
-  if (camera) {
-    const centerWorldX = centerX / SCALE;
-    const centerWorldY = centerY / SCALE;
-    const plazaSize = plazaRadius / SCALE;
-    if (!isVisible(camera, centerWorldX, centerWorldY, plazaSize * 2, plazaSize * 2)) {
-      return; // Skip drawing if plaza is not visible
-    }
-  }
   
   // Slot machine theme colors (in order: North, East, South, West)
   const slotThemes = [
@@ -3502,8 +3492,7 @@ export function drawCasinoPlazaPulsingLines(ctx: CanvasRenderingContext2D, time:
   ctx.save();
   
   // Optimized: Pre-calculate segment angles and positions
-  // Reduced segments for better performance with speed boosts
-  const trailSegments = 8; // Reduced from 12 to 8 for better FPS
+  const trailSegments = 12;
   const segmentAngleStep = trailLength / trailSegments;
   
   // Draw each colored line with trail
@@ -9355,7 +9344,7 @@ function buildCasinoPathsCache(): void {
 }
 
 // Draw slot machines on casino map (N/S/E/W near plaza edge)
-export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, hoveredSlotMachineId?: string | null, camera?: Camera): void {
+export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, hoveredSlotMachineId?: string | null): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
@@ -9491,28 +9480,6 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     
     // === PULSING COLORED LINE DOWN PATH CENTER ===
     // Draw a pulsing colored line from center plaza to slot machine
-    // Viewport culling: skip if path is not visible
-    const pathMidX = centerX + Math.cos(dir.angle) * ((pathStartRadius + slotMachineDistance) / 2);
-    const pathMidY = centerY + Math.sin(dir.angle) * ((pathStartRadius + slotMachineDistance) / 2);
-    const pathLengthWorld = pathLength / SCALE;
-    const pathWidthWorld = pathWidth / SCALE;
-    
-    // Check if path is visible (rough check - path is long and narrow)
-    let shouldDrawPathLine = true;
-    if (camera) {
-      const pathMidWorldX = pathMidX / SCALE;
-      const pathMidWorldY = pathMidY / SCALE;
-      // Check if path midpoint is visible (with generous bounds for long path)
-      if (!isVisible(camera, pathMidWorldX, pathMidWorldY, pathLengthWorld, pathWidthWorld * 3)) {
-        shouldDrawPathLine = false;
-      }
-    }
-    
-    if (!shouldDrawPathLine) {
-      ctx.restore();
-      continue; // Skip this path's pulse line
-    }
-    
     ctx.save();
     
     // Calculate path center line coordinates
@@ -9522,9 +9489,9 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     const pathEndY = centerY + Math.sin(dir.angle) * slotMachineDistance;
     
     // Animation parameters for pulsing line
-    // Optimized: Larger segments and fewer calculations for better FPS
+    // Optimized: Larger segments and fewer calculations
     const lineSpeed = 0.002; // Speed of pulse movement
-    const lineSegmentLength = 80 * p; // Increased from 60 to 80 for fewer segments (better performance)
+    const lineSegmentLength = 60 * p; // Increased from 50 to 60 for even fewer segments
     const lineWidth = 4 * p; // Width of the line
     const totalPathLength = pathLength;
     const segmentCount = Math.ceil(totalPathLength / lineSegmentLength);
@@ -11556,31 +11523,12 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
   const dy = y - anim.lastY;
   const distance = Math.sqrt(dx * dx + dy * dy);
   
-  // Reset animation state if position jump is too large (teleportation, map change, etc.)
-  // This prevents animation state corruption that could cause laggy movement
-  const MAX_REASONABLE_DISTANCE = 50; // Max reasonable distance per frame (prevents huge jumps)
-  if (distance > MAX_REASONABLE_DISTANCE) {
-    // Large jump detected - reset animation state to prevent corruption
-    anim.lastX = x;
-    anim.lastY = y;
-    anim.distanceTraveled = 0;
-    anim.isMoving = false;
-    anim.frame = 0;
-    anim.idleTime = time;
-    anim.idleBobPhase = 0;
-    return anim; // Return reset state
-  }
-  
-  // Clamp distance to prevent issues with very fast movement (speed boosts)
-  // This prevents animation state corruption that could cause laggy movement
-  const clampedDistance = Math.min(distance, 20); // Max distance per frame for normal movement
-  
   // Force stationary for dealers (they should never move)
   const isDealer = playerId.startsWith('orb_dealer') || playerId.startsWith('loot_box_dealer') || 
                    playerId.startsWith('blackjack_dealer') || playerId.startsWith('slot_herald') ||
                    playerId.startsWith('log_dealer') || playerId.startsWith('treasure_chest_dealer');
   
-  const isMoving = isDealer ? false : (clampedDistance > 0.02);
+  const isMoving = isDealer ? false : (distance > 0.02);
   
   if (isMoving) {
     // Player is moving
@@ -11588,8 +11536,8 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
     anim.idleTime = time;
     anim.idleBobPhase = 0;
     
-    // Accumulate distance traveled (use clamped distance to prevent state corruption)
-    anim.distanceTraveled += clampedDistance;
+    // Accumulate distance traveled
+    anim.distanceTraveled += distance;
     
     // Advance animation frame based on distance traveled
     // Animation speed scales naturally with movement speed since faster = more distance per frame
