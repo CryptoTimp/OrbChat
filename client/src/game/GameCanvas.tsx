@@ -129,7 +129,7 @@ const collectedOrbsWithParticles = new Set<string>();
 const EMPTY_OUTFIT_ARRAY: string[] = [];
 
 import { instrumentFunction } from '../utils/functionProfiler';
-import { orbArrayPool, playerArrayPool } from '../utils/arrayPool';
+import { orbArrayPool, playerArrayPool, numberArrayPool } from '../utils/arrayPool';
 
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2338,13 +2338,17 @@ export function GameCanvas() {
               let actualOrbValue = orb.value || 10;
               
               // Calculate orb multiplier from equipped items (only for non-shrine orbs)
+              // Optimized: Use outfit directly, avoid array allocation and find() iteration
               if (orbType !== 'shrine') {
                 let orbMultiplier = 1.0;
-                const equippedOutfit = currentLocalPlayer.sprite?.outfit || [];
-                for (const itemId of equippedOutfit) {
-                  const item = shopItems.find(s => s.id === itemId);
-                  if (item?.orbMultiplier && isFinite(item.orbMultiplier)) {
-                    orbMultiplier = Math.min(2.5, Math.max(orbMultiplier, item.orbMultiplier));
+                const equippedOutfit = currentLocalPlayer.sprite?.outfit;
+                if (equippedOutfit && equippedOutfit.length > 0) {
+                  // Optimized: Manual loop instead of find() to avoid array iteration overhead
+                  for (let j = 0; j < shopItems.length; j++) {
+                    const item = shopItems[j];
+                    if (equippedOutfit.includes(item.id) && item.orbMultiplier && isFinite(item.orbMultiplier)) {
+                      orbMultiplier = Math.min(2.5, Math.max(orbMultiplier, item.orbMultiplier));
+                    }
                   }
                 }
                 actualOrbValue = Math.floor(actualOrbValue * orbMultiplier);
@@ -2474,21 +2478,56 @@ export function GameCanvas() {
       }
       
       // If there are many visible orbs, limit rendering to closest ones for performance
+      // Optimized: Use manual selection instead of sort to avoid array allocation
       if (visibleOrbs.length > 50) {
-        // Calculate distance from camera center and sort
+        // Calculate distance from camera center
         const cameraCenterX = (camera.x + CANVAS_WIDTH / camera.zoom / 2) / SCALE;
         const cameraCenterY = (camera.y + CANVAS_HEIGHT / camera.zoom / 2) / SCALE;
         
-        visibleOrbs.sort((a, b) => {
-          const distA = Math.sqrt(Math.pow(a.x - cameraCenterX, 2) + Math.pow(a.y - cameraCenterY, 2));
-          const distB = Math.sqrt(Math.pow(b.x - cameraCenterX, 2) + Math.pow(b.y - cameraCenterY, 2));
-          return distA - distB;
-        });
+        // Find closest 50 orbs without sorting (selection algorithm)
+        // Optimized: Use array pools and avoid creating distance array by calculating on-the-fly
+        const closestOrbs = orbArrayPool.acquire();
+        const distances = numberArrayPool.acquire();
         
-        // Only render closest 50 orbs when there are many
-        for (let i = 0; i < Math.min(50, visibleOrbs.length); i++) {
-          drawOrb(ctx, visibleOrbs[i], currentTime);
+        // Calculate all distances
+        for (let i = 0; i < visibleOrbs.length; i++) {
+          const orb = visibleOrbs[i];
+          const dist = Math.sqrt(Math.pow(orb.x - cameraCenterX, 2) + Math.pow(orb.y - cameraCenterY, 2));
+          distances.push(dist);
         }
+        
+        // Select 50 closest using partial selection (avoid full sort)
+        for (let target = 0; target < Math.min(50, visibleOrbs.length); target++) {
+          let minIndex = target;
+          let minDist = distances[target];
+          
+          for (let i = target + 1; i < visibleOrbs.length; i++) {
+            if (distances[i] < minDist) {
+              minDist = distances[i];
+              minIndex = i;
+            }
+          }
+          
+          // Swap to position
+          if (minIndex !== target) {
+            const tempOrb = visibleOrbs[target];
+            const tempDist = distances[target];
+            visibleOrbs[target] = visibleOrbs[minIndex];
+            distances[target] = distances[minIndex];
+            visibleOrbs[minIndex] = tempOrb;
+            distances[minIndex] = tempDist;
+          }
+          
+          closestOrbs.push(visibleOrbs[target]);
+        }
+        
+        // Render closest orbs
+        for (const orb of closestOrbs) {
+          drawOrb(ctx, orb, currentTime);
+        }
+        
+        orbArrayPool.release(closestOrbs);
+        numberArrayPool.release(distances);
       } else {
         // Render all visible orbs when there aren't too many
         for (const orb of visibleOrbs) {

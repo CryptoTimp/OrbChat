@@ -8475,6 +8475,14 @@ const SLOT_MACHINE_TO_ANGLE: Record<string, number> = {
   'slot_machine_west': 3 * Math.PI / 2
 };
 
+// Module-level constant to avoid array allocation in drawSlotMachines
+const SLOT_MACHINE_DIRECTIONS = [
+  { angle: 0, id: 'slot_machine_north', name: 'Orb Fortune' },      // North
+  { angle: Math.PI / 2, id: 'slot_machine_east', name: 'Orb Destiny' },   // East
+  { angle: Math.PI, id: 'slot_machine_south', name: 'Orb Glory' },      // South
+  { angle: 3 * Math.PI / 2, id: 'slot_machine_west', name: 'Orb Victory' } // West
+];
+
 // Draw blackjack tables on casino map
 function drawBlackjackTablesImpl(ctx: CanvasRenderingContext2D, time: number, hoveredTableId?: string | null, hoveredDealerId?: string | null): void {
   const p = SCALE;
@@ -9430,12 +9438,8 @@ function drawSlotMachinesImpl(ctx: CanvasRenderingContext2D, time: number, hover
   const slotMachineHeight = PLAYER_HEIGHT * SCALE * 1.5; // 50% taller than player height
   
   // Directions: North (0), East (π/2), South (π), West (3π/2)
-  const directions = [
-    { angle: 0, id: 'slot_machine_north', name: 'Orb Fortune' },      // North
-    { angle: Math.PI / 2, id: 'slot_machine_east', name: 'Orb Destiny' },   // East
-    { angle: Math.PI, id: 'slot_machine_south', name: 'Orb Glory' },      // South
-    { angle: 3 * Math.PI / 2, id: 'slot_machine_west', name: 'Orb Victory' } // West
-  ];
+  // Optimized: Use module-level constant to avoid array allocation every frame
+  const directions = SLOT_MACHINE_DIRECTIONS;
   
   // Build static caches if needed
   buildSlotMachineCache();
@@ -9546,14 +9550,10 @@ function drawSlotMachinesImpl(ctx: CanvasRenderingContext2D, time: number, hover
     
     ctx.save();
     
-    // Hover glow effect (themed) - animated, drawn on top
+    // Hover glow effect (themed) - animated, drawn on top (optimized: use simple fill instead of gradient)
     if (isHovered) {
-      ctx.globalAlpha = 0.4;
-      const glowGradient = ctx.createRadialGradient(slotX, slotY, 0, slotX, slotY, slotMachineWidth * 1.5);
-      glowGradient.addColorStop(0, `${theme.glow}cc`);
-      glowGradient.addColorStop(0.5, `${theme.glow}66`);
-      glowGradient.addColorStop(1, `${theme.glow}00`);
-      ctx.fillStyle = glowGradient;
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = theme.glow;
       ctx.beginPath();
       ctx.arc(slotX, slotY, slotMachineWidth * 1.5, 0, Math.PI * 2);
       ctx.fill();
@@ -10798,19 +10798,22 @@ const orbCollectionParticles: OrbCollectionParticle[] = [];
 const ORB_PARTICLE_LIFETIME = 600; // ms
 const ORB_PARTICLES_PER_COLLECTION = 16;
 
+// Module-level constant to avoid object allocation in spawnOrbCollectionParticles
+const ORB_COLLECTION_COLOR_MAP: Record<string, { r: number; g: number; b: number }> = {
+  'common': { r: 0, g: 220, b: 255 },      // Cyan
+  'uncommon': { r: 46, g: 204, b: 113 },   // Green
+  'rare': { r: 52, g: 152, b: 219 },       // Blue
+  'epic': { r: 155, g: 89, b: 182 },       // Purple
+  'legendary': { r: 255, g: 215, b: 0 },   // Gold
+  'normal': { r: 0, g: 220, b: 255 },      // Legacy cyan
+  'gold': { r: 255, g: 215, b: 0 },        // Legacy gold
+};
+const DEFAULT_ORB_COLOR = { r: 0, g: 220, b: 255 };
+
 // Spawn orb collection particles
 export function spawnOrbCollectionParticles(x: number, y: number, orbType: string): void {
-  // Colors matching rarity system
-  const colorMap: Record<string, { r: number; g: number; b: number }> = {
-    'common': { r: 0, g: 220, b: 255 },      // Cyan
-    'uncommon': { r: 46, g: 204, b: 113 },   // Green
-    'rare': { r: 52, g: 152, b: 219 },       // Blue
-    'epic': { r: 155, g: 89, b: 182 },       // Purple
-    'legendary': { r: 255, g: 215, b: 0 },   // Gold
-    'normal': { r: 0, g: 220, b: 255 },      // Legacy cyan
-    'gold': { r: 255, g: 215, b: 0 },        // Legacy gold
-  };
-  const baseColor = colorMap[orbType] || { r: 0, g: 220, b: 255 };
+  // Colors matching rarity system (optimized: use module-level constant)
+  const baseColor = ORB_COLLECTION_COLOR_MAP[orbType] || DEFAULT_ORB_COLOR;
   
   for (let i = 0; i < ORB_PARTICLES_PER_COLLECTION; i++) {
     // Random angle for explosion
@@ -10835,9 +10838,9 @@ export function spawnOrbCollectionParticles(x: number, y: number, orbType: strin
     });
   }
   
-  // Limit total particles
-  while (orbCollectionParticles.length > 200) {
-    orbCollectionParticles.shift();
+  // Limit total particles (optimized: use length assignment instead of shift to avoid array allocation)
+  if (orbCollectionParticles.length > 200) {
+    orbCollectionParticles.splice(0, orbCollectionParticles.length - 200);
   }
 }
 
@@ -10846,14 +10849,14 @@ export function drawOrbCollectionParticles(ctx: CanvasRenderingContext2D, deltaT
   const now = Date.now();
   const dt = deltaTime / 1000; // Convert to seconds
   
-  // Update and draw particles
-  for (let i = orbCollectionParticles.length - 1; i >= 0; i--) {
+  // Update and draw particles (optimized: manual removal instead of splice to avoid array allocation)
+  let writeIndex = 0;
+  for (let i = 0; i < orbCollectionParticles.length; i++) {
     const particle = orbCollectionParticles[i];
     const age = now - particle.createdAt;
     
-    // Remove dead particles
+    // Skip dead particles (they'll be overwritten)
     if (age > particle.lifetime) {
-      orbCollectionParticles.splice(i, 1);
       continue;
     }
     
@@ -10881,7 +10884,16 @@ export function drawOrbCollectionParticles(ctx: CanvasRenderingContext2D, deltaT
     ctx.beginPath();
     ctx.arc(particle.x, particle.y, particle.size * (1 - lifeProgress * 0.5), 0, Math.PI * 2);
     ctx.fill();
+    
+    // Keep alive particles (compact array in-place)
+    if (writeIndex !== i) {
+      orbCollectionParticles[writeIndex] = particle;
+    }
+    writeIndex++;
   }
+  
+  // Trim array to remove dead particles
+  orbCollectionParticles.length = writeIndex;
   
   ctx.globalAlpha = 1;
 }
@@ -11288,21 +11300,24 @@ interface FloatingText {
 const floatingTexts: FloatingText[] = [];
 const FLOATING_TEXT_LIFETIME = 1200; // ms
 
+// Module-level constant to avoid object allocation in spawnFloatingText
+const FLOATING_TEXT_COLORS: Record<string, string> = {
+  'common': '#00dcff',     // Cyan
+  'uncommon': '#2ecc71',   // Green
+  'rare': '#3498db',       // Blue
+  'epic': '#9b59b6',       // Purple
+  'legendary': '#ffd700',  // Gold
+  'normal': '#00dcff',     // Legacy cyan
+  'gold': '#ffd700',       // Legacy gold
+  'shrine': '#dc143c',     // Red (crimson) for shrine orbs
+  'idle': '#22c55e',       // Green for idle rewards
+};
+const DEFAULT_FLOATING_TEXT_COLOR = '#00dcff';
+
 // Spawn floating text (called when collecting orbs)
 export function spawnFloatingText(x: number, y: number, value: number, orbType: string, scale: number = 1.0): void {
-  // Colors matching rarity system
-  const colors: Record<string, string> = {
-    'common': '#00dcff',     // Cyan
-    'uncommon': '#2ecc71',   // Green
-    'rare': '#3498db',       // Blue
-    'epic': '#9b59b6',       // Purple
-    'legendary': '#ffd700',  // Gold
-    'normal': '#00dcff',     // Legacy cyan
-    'gold': '#ffd700',       // Legacy gold
-    'shrine': '#dc143c',     // Red (crimson) for shrine orbs
-    'idle': '#22c55e',       // Green for idle rewards
-  };
-  const color = colors[orbType] || '#00dcff';
+  // Colors matching rarity system (optimized: use module-level constant)
+  const color = FLOATING_TEXT_COLORS[orbType] || DEFAULT_FLOATING_TEXT_COLOR;
   
   // Debug removed
   
@@ -11316,9 +11331,9 @@ export function spawnFloatingText(x: number, y: number, value: number, orbType: 
     scale,
   });
   
-  // Limit total floating texts
-  while (floatingTexts.length > 20) {
-    floatingTexts.shift();
+  // Limit total floating texts (optimized: use splice instead of shift loop to avoid multiple array allocations)
+  if (floatingTexts.length > 20) {
+    floatingTexts.splice(0, floatingTexts.length - 20);
   }
 }
 
