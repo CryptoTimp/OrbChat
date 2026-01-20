@@ -1478,7 +1478,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
         const centerXScaled = WORLD_WIDTH_SCALED / 2;
         const centerYScaled = WORLD_HEIGHT_SCALED / 2;
-        const plazaRadiusScaled = 300 * SCALE; // Same as client
+        const plazaRadiusScaled = 600 * SCALE; // Doubled from 300 to 600 for more space (same as client)
         const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
         const tableRadiusScaled = plazaRadiusScaled * 0.6;
         const tableIndex = parseInt(tableId.replace('blackjack_table_', '')) - 1;
@@ -2967,11 +2967,39 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     console.log('[Slots] ===== join_slot_machine event received =====');
     console.log('[Slots] Slot Machine ID:', slotMachineId);
     console.log('[Slots] Socket ID:', socket.id);
+    console.log('[Slots] Socket rooms:', Array.from(socket.rooms));
+    console.log('[Slots] All socket mappings:', Array.from(socketToPlayer.entries()).map(([sid, m]) => ({ socketId: sid, playerId: m.playerId, roomId: m.roomId })));
     
-    const mapping = socketToPlayer.get(socket.id);
+    let mapping = socketToPlayer.get(socket.id);
+    
+    // If no mapping found, try to find player by auth playerId (socket might have reconnected)
+    if (!mapping) {
+      const authPlayerId = socket.handshake.auth?.playerId as string | undefined;
+      if (authPlayerId) {
+        // Find any existing mapping for this player
+        const existingMapping = Array.from(socketToPlayer.entries()).find(
+          ([_, m]) => m.playerId === authPlayerId
+        );
+        
+        if (existingMapping) {
+          // Found existing mapping - use it and update to new socket
+          const [oldSocketId, oldMapping] = existingMapping;
+          mapping = oldMapping;
+          // Update mapping to use new socket ID
+          socketToPlayer.delete(oldSocketId);
+          socketToPlayer.set(socket.id, mapping);
+          // Ensure socket is in the room
+          socket.join(mapping.roomId);
+          console.log(`[Slots] Recovered mapping for reconnected socket: ${socket.id} -> player ${mapping.playerId} in room ${mapping.roomId}`);
+        }
+      }
+    }
+    
     if (!mapping) {
       console.error('[Slots] No mapping found for socket', socket.id);
-      socket.emit('slot_machine_error', { slotMachineId, message: 'Not connected to a room' });
+      console.error('[Slots] Available socket IDs:', Array.from(socketToPlayer.keys()));
+      console.error('[Slots] This might indicate the socket was recreated or room join failed');
+      socket.emit('slot_machine_error', { slotMachineId, message: 'Not connected to a room. Please try rejoining the room.' });
       return;
     }
     
@@ -2995,7 +3023,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
       const centerXScaled = WORLD_WIDTH_SCALED / 2;
       const centerYScaled = WORLD_HEIGHT_SCALED / 2;
-      const plazaRadiusScaled = 300 * SCALE;
+      const plazaRadiusScaled = 600 * SCALE; // Doubled from 300 to 600 for more space
       const slotMachineDistance = plazaRadiusScaled * 0.85;
       
       // Slot machine positions (N/S/E/W)
@@ -3017,7 +3045,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const slotYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance;
       
       // 8 seats around slot machine (evenly spaced in a circle)
-      const seatRadiusScaled = 80 * SCALE; // Distance from machine center
+      const seatRadiusScaled = 38 * SCALE; // Distance from machine center (immediately around machine)
       const seatAngle = (result.seat / 8) * Math.PI * 2; // Evenly spaced around circle
       const seatXScaled = slotXScaled + Math.cos(seatAngle) * seatRadiusScaled;
       const seatYScaled = slotYScaled + Math.sin(seatAngle) * seatRadiusScaled;
@@ -3098,7 +3126,31 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     console.log('[Slots] Bet Amount:', betAmount);
     console.log('[Slots] Socket ID:', socket.id);
     
-    const mapping = socketToPlayer.get(socket.id);
+    let mapping = socketToPlayer.get(socket.id);
+    
+    // If no mapping found, try to find player by auth playerId (socket might have reconnected)
+    if (!mapping) {
+      const authPlayerId = socket.handshake.auth?.playerId as string | undefined;
+      if (authPlayerId) {
+        // Find any existing mapping for this player
+        const existingMapping = Array.from(socketToPlayer.entries()).find(
+          ([_, m]) => m.playerId === authPlayerId
+        );
+        
+        if (existingMapping) {
+          // Found existing mapping - use it and update to new socket
+          const [oldSocketId, oldMapping] = existingMapping;
+          mapping = oldMapping;
+          // Update mapping to use new socket ID
+          socketToPlayer.delete(oldSocketId);
+          socketToPlayer.set(socket.id, mapping);
+          // Ensure socket is in the room
+          socket.join(mapping.roomId);
+          console.log(`[Slots] Recovered mapping for reconnected socket: ${socket.id} -> player ${mapping.playerId} in room ${mapping.roomId}`);
+        }
+      }
+    }
+    
     if (!mapping) {
       console.error('[Slots] No mapping found for socket', socket.id);
       socket.emit('slot_machine_error', { slotMachineId, message: 'Not connected to a room' });

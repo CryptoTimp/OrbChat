@@ -1577,7 +1577,7 @@ function attachListeners(sock: Socket) {
     if (dir) {
       const slotXScaled = centerXScaled + Math.cos(dir.angle) * slotMachineDistance;
       const slotYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance;
-      const seatRadiusScaled = 80 * SCALE;
+      const seatRadiusScaled = 38 * SCALE; // Distance from machine center (immediately around machine)
       const seatAngle = (seat / 8) * Math.PI * 2;
       const seatXScaled = slotXScaled + Math.cos(seatAngle) * seatRadiusScaled;
       const seatYScaled = slotYScaled + Math.sin(seatAngle) * seatRadiusScaled;
@@ -2597,7 +2597,26 @@ export function useSocket() {
   // Slot machine seat functions
   const joinSlotMachine = useCallback((slotMachineId: string) => {
     const sock = getOrCreateSocket();
-    console.log('[useSocket] Emitting join_slot_machine for machine:', slotMachineId, 'socket connected:', sock.connected, 'socket id:', sock.id);
+    const state = useGameStore.getState();
+    
+    // Check if player is fully in a room before attempting to join
+    // Need both roomId and localPlayer to ensure room join is complete
+    if (!state.roomId) {
+      console.error('[useSocket] Cannot join slot machine - not in a room. roomId:', state.roomId);
+      return;
+    }
+    
+    if (!state.localPlayer) {
+      console.error('[useSocket] Cannot join slot machine - room join not complete. localPlayer:', state.localPlayer);
+      return;
+    }
+    
+    if (!sock.connected) {
+      console.error('[useSocket] Cannot join slot machine - socket not connected');
+      return;
+    }
+    
+    console.log('[useSocket] Emitting join_slot_machine for machine:', slotMachineId, 'socket connected:', sock.connected, 'socket id:', sock.id, 'roomId:', state.roomId, 'hasLocalPlayer:', !!state.localPlayer);
     
     // Add error handler for this specific emit
     const errorHandler = (error: any) => {

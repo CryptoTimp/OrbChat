@@ -26,6 +26,7 @@ import {
   getClickedLogDealer,
   getClickedDealer,
   getHoveredDealer,
+  getDealerPosition,
   dealerPositions,
   checkPortalClick,
   checkPortalCollision,
@@ -42,6 +43,7 @@ import {
   drawSlotMachines,
   getClickedSlotMachine,
   getHoveredSlotMachine,
+  drawCasinoPlazaPulsingLines,
   setCasinoRoomPlayerCount,
   setMillionairesLoungeRoomPlayerCount,
   setRoomPlayerCount,
@@ -478,9 +480,9 @@ export function GameCanvas() {
         pendingLogDealerInteractionRef.current = false;
       }
       
-      // Check if clicking on log dealer (only in forest map)
+      // Check if clicking on dealers (forest map and casino map)
       const currentMapType = useGameStore.getState().mapType;
-      if (currentMapType === 'forest') {
+      if (currentMapType === 'forest' || currentMapType === 'casino') {
         const clickedDealerId = getClickedDealer(worldXScaled, worldYScaled);
         if (clickedDealerId === 'log_dealer') {
           const localPlayer = useGameStore.getState().localPlayer;
@@ -517,8 +519,8 @@ export function GameCanvas() {
         if (clickedDealerId === 'loot_box_dealer') {
           const localPlayer = useGameStore.getState().localPlayer;
           if (localPlayer) {
-            // Get loot box dealer position from dealerPositions map
-            const dealerPos = dealerPositions.get('loot_box_dealer');
+            // Get loot box dealer position - find the closest one to the click
+            const dealerPos = getDealerPosition('loot_box_dealer', worldXScaled, worldYScaled);
             if (dealerPos) {
               // Player position is in unscaled coordinates, convert to scaled for comparison
               const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
@@ -549,8 +551,8 @@ export function GameCanvas() {
         if (clickedDealerId === 'orb_dealer') {
           const localPlayer = useGameStore.getState().localPlayer;
           if (localPlayer) {
-            // Get orb dealer position from dealerPositions map
-            const dealerPos = dealerPositions.get('orb_dealer');
+            // Get orb dealer position - find the closest one to the click
+            const dealerPos = getDealerPosition('orb_dealer', worldXScaled, worldYScaled);
             if (dealerPos) {
               // Player position is in unscaled coordinates, convert to scaled for comparison
               const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
@@ -686,7 +688,13 @@ export function GameCanvas() {
                 
                 if (dist < interactionRange) {
                   // Player is in range, join slot machine (will open modal when seated)
-                  joinSlotMachine(clickedSlotMachineId);
+                  // Check if player is fully in a room before joining
+                  const state = useGameStore.getState();
+                  if (state.roomId && state.localPlayer) {
+                    joinSlotMachine(clickedSlotMachineId);
+                  } else {
+                    console.warn('[GameCanvas] Cannot join slot machine - not fully in a room. roomId:', state.roomId, 'localPlayer:', !!state.localPlayer);
+                  }
                 } else {
                   // Player is far away, walk to slot machine first
                   setClickTarget(slotCenterX / SCALE, slotCenterY / SCALE);
@@ -948,9 +956,9 @@ export function GameCanvas() {
       const hoveredStallData = hoveredStall ? { tab: hoveredStall.tab, rarity: hoveredStall.rarity } : null;
       setHoveredNPCStall(hoveredStallData);
       
-      // Check for hover on dealers (forest map)
+      // Check for hover on dealers (forest map and casino map)
       let hoveredDealerData: string | null = null;
-      if (currentMapType === 'forest') {
+      if (currentMapType === 'forest' || currentMapType === 'casino') {
         hoveredDealerData = getHoveredDealer(worldXScaled, worldYScaled);
         setHoveredDealerId(hoveredDealerData);
       } else {
@@ -2071,6 +2079,14 @@ export function GameCanvas() {
             
             if (dist < interactionRange) {
               // Player is in range, join slot machine (will open modal when seated)
+              // Check if player is fully in a room before joining
+              const state = useGameStore.getState();
+              if (!state.roomId || !state.localPlayer) {
+                console.warn('[GameCanvas] Cannot join slot machine - not fully in a room. roomId:', state.roomId, 'localPlayer:', !!state.localPlayer);
+                pendingSlotMachineInteractionRef.current = null;
+                setClickTarget(null, null);
+                return;
+              }
               playClickSound();
               joinSlotMachine(slotMachineId);
               pendingSlotMachineInteractionRef.current = null; // Clear flag
@@ -2396,14 +2412,17 @@ export function GameCanvas() {
     
     // Draw blackjack tables BEFORE players (so players appear on top of tables)
     if (currentMapType === 'casino') {
-      // Draw return portal in casino map
-      drawReturnPortal(ctx, currentTime, camera, previousRoomId, roomId);
+      // Draw pulsing lines around the dark grey central plaza ring
+      drawCasinoPlazaPulsingLines(ctx, currentTime);
       // Draw slot machines (before players so players appear on top)
+      // This includes the central light grey circle that the portal sits on
       const hoveredSlotMachineId = hoveredSlotMachineRef.current;
       drawSlotMachines(ctx, currentTime, hoveredSlotMachineId);
+      // Draw return portal AFTER the central circle so it appears on top
+      drawReturnPortal(ctx, currentTime, camera, previousRoomId, roomId);
       // Draw blackjack tables (before players so players appear on top)
       const hoveredTableId = hoveredBlackjackTableRef.current;
-      drawBlackjackTables(ctx, currentTime, hoveredTableId);
+      drawBlackjackTables(ctx, currentTime, hoveredTableId, hoveredDealerId);
     }
     
     // Draw NPC pets first

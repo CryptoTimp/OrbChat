@@ -2222,6 +2222,31 @@ let plazaWallTopCacheInitialized = false;
 let slotMachineCache: HTMLCanvasElement | null = null;
 let slotMachineCacheInitialized = false;
 
+// Cache for casino paths and small plazas (static parts only - animated lights drawn on top)
+let casinoPathsCache: HTMLCanvasElement | null = null;
+let casinoPathsCacheInitialized = false;
+
+// Cache for blackjack table static structure (base, sides, top - without particles/seats/dealer)
+let blackjackTableStaticCache: HTMLCanvasElement | null = null;
+let blackjackTableStaticCacheInitialized = false;
+
+// Cache for herald podiums (static structure)
+let heraldPodiumCache: HTMLCanvasElement | null = null;
+let heraldPodiumCacheInitialized = false;
+
+// Cache for seat podium structure (base, stem, top - without glows, neutral colors)
+let seatPodiumCache: HTMLCanvasElement | null = null;
+let seatPodiumCacheInitialized = false;
+
+// Cache for path light mount/stem structure (static, without light)
+let pathLightMountCache: HTMLCanvasElement | null = null;
+let pathLightMountCacheInitialized = false;
+
+
+// Cache for pulse trail segments (optimization - cache trail segment shapes)
+let pulseTrailSegmentCache: HTMLCanvasElement | null = null;
+let pulseTrailSegmentCacheInitialized = false;
+
 // Pre-calculated gate angles and wall segments for drawPlazaWallTop
 interface GateSegment {
   gateAngle: number;
@@ -3346,7 +3371,7 @@ function drawCasinoBackground(ctx: CanvasRenderingContext2D): void {
   const p = SCALE;
   const tileW = TILE_SIZE * SCALE;
   
-  // Dark void background (full world)
+  // Dark grey casino floor background (full world)
   ctx.fillStyle = '#0a0a0a';
   ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
   
@@ -3361,37 +3386,28 @@ function drawCasinoBackground(ctx: CanvasRenderingContext2D): void {
     ctx.fill();
   }
   
-  // Floating plaza at center of map
+  // Floating plaza at center of map (large circle that whole casino sits on - dark grey, same as background)
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
-  const plazaRadius = 300 * p;
+  const plazaRadius = 600 * p; // Doubled from 300 to 600 for more space
   
-  // Draw floating platform base (dark stone)
-  ctx.fillStyle = '#2a1a1a';
+  // Draw solid fill behind plaza to hide floor (dark grey - same as main casino floor)
+  ctx.fillStyle = '#0a0a0a';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, plazaRadius + 20 * p, 0, Math.PI * 2); // Slightly larger to ensure coverage
+  ctx.fill();
+  
+  // Draw floating platform base (dark grey - same as main casino floor)
+  ctx.fillStyle = '#0a0a0a';
   ctx.beginPath();
   ctx.arc(centerX, centerY, plazaRadius, 0, Math.PI * 2);
   ctx.fill();
   
-  // Draw platform top (lighter stone with checkered pattern)
-  ctx.fillStyle = '#3a2a2a';
+  // Draw platform top (dark grey, solid, no checkered pattern)
+  ctx.fillStyle = '#1a1a1a';
   ctx.beginPath();
   ctx.arc(centerX, centerY, plazaRadius - 4 * p, 0, Math.PI * 2);
   ctx.fill();
-  
-  // Checkered pattern on platform
-  const checkSize = 20 * p;
-  for (let row = -Math.floor(plazaRadius / checkSize); row <= Math.floor(plazaRadius / checkSize); row++) {
-    for (let col = -Math.floor(plazaRadius / checkSize); col <= Math.floor(plazaRadius / checkSize); col++) {
-      const x = centerX + col * checkSize;
-      const y = centerY + row * checkSize;
-      const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
-      if (dist < plazaRadius - 4 * p) {
-        const isLight = (row + col) % 2 === 0;
-        ctx.fillStyle = isLight ? '#4a3a3a' : '#3a2a2a';
-        ctx.fillRect(x - checkSize / 2, y - checkSize / 2, checkSize, checkSize);
-      }
-    }
-  }
   
   // Platform edge highlight
   ctx.strokeStyle = '#5a4a4a';
@@ -3408,6 +3424,161 @@ function drawCasinoBackground(ctx: CanvasRenderingContext2D): void {
   ctx.stroke();
   
   // Note: Return portal is drawn separately on top of this background (not cached)
+  // Note: Pulsing lines around plaza ring are drawn separately (animated, not cached)
+}
+
+// Build cached trail segment shapes for performance
+function buildPulseTrailSegmentCache(): void {
+  if (pulseTrailSegmentCacheInitialized) return;
+  
+  const p = SCALE;
+  const trailLength = Math.PI * 0.4; // Length of trail (in radians)
+  const trailSegments = 12;
+  const segmentAngleStep = trailLength / trailSegments;
+  const lineWidth = 6 * p;
+  const ringRadius = 600 * p - 10 * p; // Approximate radius for segment length calculation
+  const segmentLength = ringRadius * segmentAngleStep; // Approximate segment length
+  
+  // Create cache canvas for trail segments (one per segment type)
+  // We'll cache segments at different opacities
+  const cacheSize = Math.ceil(segmentLength) + 20 * p; // Extra space for glow
+  pulseTrailSegmentCache = document.createElement('canvas');
+  pulseTrailSegmentCache.width = cacheSize;
+  pulseTrailSegmentCache.height = cacheSize;
+  const cacheCtx = pulseTrailSegmentCache.getContext('2d');
+  if (!cacheCtx) {
+    pulseTrailSegmentCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  // Cache is just a reference - we'll still draw dynamically but with optimized calculations
+  pulseTrailSegmentCacheInitialized = true;
+}
+
+// Draw pulsing loading spinner lines around the dark grey central plaza ring
+export function drawCasinoPlazaPulsingLines(ctx: CanvasRenderingContext2D, time: number): void {
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 600 * p; // Match the central plaza radius
+  
+  // Slot machine theme colors (in order: North, East, South, West)
+  const slotThemes = [
+    SLOT_MACHINE_THEMES['slot_machine_north'], // Gold
+    SLOT_MACHINE_THEMES['slot_machine_east'],   // Purple
+    SLOT_MACHINE_THEMES['slot_machine_south'],  // Blue
+    SLOT_MACHINE_THEMES['slot_machine_west']    // Green
+  ];
+  
+  // Animation parameters
+  const rotationSpeed = -0.0004; // Rotation speed (negative for clockwise direction)
+  const trailLength = Math.PI * 0.4; // Length of trail (in radians)
+  const lineCount = 4; // One line per slot machine color
+  const lineWidth = 6 * p; // Width of each line
+  const ringRadius = plazaRadius - 10 * p; // Position lines slightly inside the edge
+  
+  // Pre-calculate theme colors once
+  const themeColors = slotThemes.map(theme => {
+    const hex = theme.primary.replace('#', '');
+    return {
+      r: parseInt(hex.substring(0, 2), 16),
+      g: parseInt(hex.substring(2, 4), 16),
+      b: parseInt(hex.substring(4, 6), 16)
+    };
+  });
+  
+  ctx.save();
+  
+  // Optimized: Pre-calculate segment angles and positions
+  const trailSegments = 12;
+  const segmentAngleStep = trailLength / trailSegments;
+  
+  // Draw each colored line with trail
+  for (let i = 0; i < lineCount; i++) {
+    const theme = slotThemes[i];
+    const color = themeColors[i];
+    const baseAngle = (time * rotationSpeed) + (i * (Math.PI * 2 / lineCount));
+    
+    // Batch draw operations for better performance
+    ctx.lineCap = 'round';
+    
+    // Draw trail segments (optimized loop)
+    for (let j = 0; j < trailSegments; j++) {
+      const trailProgress = j / trailSegments; // 0 to 1
+      const trailAngle = baseAngle + (trailProgress * trailLength);
+      const alpha = (1 - trailProgress) * 0.8; // Fade from 0.8 to 0
+      
+      // Calculate start and end points of line segment
+      const startAngle = trailAngle;
+      const endAngle = trailAngle + segmentAngleStep;
+      
+      // Pre-calculate cos/sin once per segment
+      const cosStart = Math.cos(startAngle);
+      const sinStart = Math.sin(startAngle);
+      const cosEnd = Math.cos(endAngle);
+      const sinEnd = Math.sin(endAngle);
+      
+      const startX = centerX + cosStart * ringRadius;
+      const startY = centerY + sinStart * ringRadius;
+      const endX = centerX + cosEnd * ringRadius;
+      const endY = centerY + sinEnd * ringRadius;
+      
+      // Only draw glow for brightest segments (optimization)
+      const shouldGlow = trailProgress < 0.25;
+      
+      // Draw line segment
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+      ctx.lineWidth = lineWidth * (1 - trailProgress * 0.5);
+      
+      if (shouldGlow) {
+        ctx.shadowBlur = 8 * p;
+        ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha * 0.6})`;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    
+    // Draw bright leading edge (reversed direction - outwards)
+    const leadAngle = baseAngle;
+    const leadCos = Math.cos(leadAngle);
+    const leadSin = Math.sin(leadAngle);
+    const leadNextCos = Math.cos(leadAngle + segmentAngleStep);
+    const leadNextSin = Math.sin(leadAngle + segmentAngleStep);
+    
+    const leadX = centerX + leadCos * ringRadius;
+    const leadY = centerY + leadSin * ringRadius;
+    const leadNextX = centerX + leadNextCos * ringRadius;
+    const leadNextY = centerY + leadNextSin * ringRadius;
+    
+    // Bright leading segment
+    ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 1)`;
+    ctx.lineWidth = lineWidth * 1.2;
+    ctx.shadowBlur = 12 * p;
+    ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`;
+    ctx.beginPath();
+    ctx.moveTo(leadX, leadY);
+    ctx.lineTo(leadNextX, leadNextY);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    // White highlight on leading edge
+    ctx.strokeStyle = `rgba(255, 255, 255, 0.6)`;
+    ctx.lineWidth = lineWidth * 0.4;
+    ctx.beginPath();
+    ctx.moveTo(leadX, leadY);
+    ctx.lineTo(leadNextX, leadNextY);
+    ctx.stroke();
+  }
+  
+  ctx.restore();
 }
 
 // ============ MILLIONAIRE'S LOUNGE MAP ============
@@ -4860,6 +5031,77 @@ function drawPodiumWithStairs(ctx: CanvasRenderingContext2D, x: number, y: numbe
     ctx.fillStyle = '#5a5a4a';
     ctx.fillRect(stoneX - 2.5 * p, stoneY - 2.5 * p, 5 * p, 1.5 * p);
   }
+}
+
+// Simplified podium: just stem and top platform (for heralds)
+function drawSimplePodium(ctx: CanvasRenderingContext2D, x: number, y: number, podiumRadius: number): void {
+  const p = SCALE;
+  const stemHeight = 12 * p; // Height of the stem
+  const stemRadius = podiumRadius * 0.6; // Stem is narrower than top
+  const topPlatformY = y - stemHeight; // Top platform elevated by stem height
+  
+  // === STEM (vertical column) ===
+  // Stem shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.arc(x + 1 * p, y + 1 * p, stemRadius + 1 * p, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Stem base (at ground level)
+  ctx.fillStyle = '#4a4a3a';
+  ctx.beginPath();
+  ctx.arc(x, y, stemRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Stem side (cylinder effect)
+  const stemGradient = ctx.createLinearGradient(x - stemRadius, y, x + stemRadius, y);
+  stemGradient.addColorStop(0, '#3a3a2a');
+  stemGradient.addColorStop(0.5, '#5a5a4a');
+  stemGradient.addColorStop(1, '#3a3a2a');
+  ctx.fillStyle = stemGradient;
+  
+  // Draw cylinder sides connecting base to top
+  ctx.beginPath();
+  ctx.moveTo(x - stemRadius, y);
+  ctx.lineTo(x - stemRadius, topPlatformY);
+  ctx.arc(x, topPlatformY, stemRadius, Math.PI, 0, false);
+  ctx.lineTo(x + stemRadius, y);
+  ctx.arc(x, y, stemRadius, 0, Math.PI, true);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Stem rim at top
+  ctx.strokeStyle = '#6a6a5a';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(x, topPlatformY, stemRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // === TOP PLATFORM ===
+  // Top platform shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.beginPath();
+  ctx.arc(x, topPlatformY, podiumRadius + 1 * p, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Top platform base (side wall)
+  ctx.fillStyle = '#6a6a5a';
+  ctx.beginPath();
+  ctx.arc(x, topPlatformY, podiumRadius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Top platform surface (grey floor)
+  ctx.fillStyle = '#7a7a6a';
+  ctx.beginPath();
+  ctx.arc(x, topPlatformY, podiumRadius - 2 * p, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Top platform rim (decorative edge)
+  ctx.strokeStyle = '#8a8a7a';
+  ctx.lineWidth = 2 * p;
+  ctx.beginPath();
+  ctx.arc(x, topPlatformY, podiumRadius - 2 * p, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 // Draw guard tower (multi-tiered stone tower for centurions and flags)
@@ -7061,33 +7303,33 @@ export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, ca
   // Camera transform is already applied in gameLoop, so we draw directly in world coordinates
   // No need to apply camera transform here since it's already applied to the context
   
-  // Draw circular stairs around portal (3 steps)
+  // Draw circular stairs around portal (3 steps) - light grey to match central area
   const stairCount = 3;
   for (let i = 0; i < stairCount; i++) {
     const stairRadius = portalRadius + (i + 1) * 8 * p;
     
-    // Stair base (dark stone)
-    ctx.fillStyle = '#1a2a1a';
+    // Stair base (light grey)
+    ctx.fillStyle = '#d0d0d0';
     ctx.beginPath();
     ctx.arc(centerX, centerY, stairRadius, 0, Math.PI * 2);
     ctx.fill();
     
-    // Stair top (lighter stone)
-    ctx.fillStyle = '#2a3a2a';
+    // Stair top (lighter grey)
+    ctx.fillStyle = '#e0e0e0';
     ctx.beginPath();
     ctx.arc(centerX, centerY, stairRadius - 2 * p, 0, Math.PI * 2);
     ctx.fill();
     
     // Stair edge highlight
-    ctx.strokeStyle = '#3a4a3a';
+    ctx.strokeStyle = '#c0c0c0';
     ctx.lineWidth = 2 * p;
     ctx.beginPath();
     ctx.arc(centerX, centerY, stairRadius, 0, Math.PI * 2);
     ctx.stroke();
   }
   
-  // Portal base (dark mystical)
-  ctx.fillStyle = '#0a1a0a';
+  // Portal base (light grey to match central area)
+  ctx.fillStyle = '#d0d0d0';
   ctx.beginPath();
   ctx.arc(centerX, centerY, portalRadius, 0, Math.PI * 2);
   ctx.fill();
@@ -7283,7 +7525,7 @@ export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, ca
 }
 
 // Draw a single dealer NPC
-function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType, dealerX: number, dealerY: number, time: number, isHovered: boolean = false, direction: Direction = 'down'): void {
+function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType, dealerX: number, dealerY: number, time: number, isHovered: boolean = false, direction: Direction = 'down', nameColor?: string): void {
   const p = SCALE;
   
   // Draw yellow glow effect when hovered (before NPC, same as NPC stalls)
@@ -7352,13 +7594,13 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
   drawPlayer(ctx, npcPlayerWithBlackjackFlag, false, time, true);
   
   // Draw nameplate with proper zoom (get from context transform like other NPCs)
-  // Use Infinity to show purple infinity icon, and force white text color
+  // Use Infinity to show purple infinity icon, and use nameColor if provided (for heralds)
   const zoom = ctx.getTransform().a || 1;
   const scaledX = npcPlayer.x * SCALE;
   const scaledY = npcPlayer.y * SCALE;
   const scaledWidth = PLAYER_WIDTH * SCALE;
   const nameplateY = scaledY - 20 * p;
-  drawNameTag(ctx, npcPlayer.name, scaledX + scaledWidth / 2, nameplateY, Infinity, zoom, npcPlayer.id, time);
+  drawNameTag(ctx, npcPlayer.name, scaledX + scaledWidth / 2, nameplateY, Infinity, zoom, npcPlayer.id, time, nameColor);
   
   // Check if this is a blackjack dealer (stacked bubbles)
   if (dealerType.id.startsWith('blackjack_dealer_')) {
@@ -7444,16 +7686,61 @@ export function getClickedDealer(worldX: number, worldY: number): string | null 
   const p = SCALE;
   const clickRadius = 30 * p;
   
-  for (const [dealerId, position] of dealerPositions.entries()) {
+  let closestDealer: string | null = null;
+  let closestDist = Infinity;
+  
+  // Find the closest dealer (in case multiple dealers share the same ID)
+  for (const [dealerKey, position] of dealerPositions.entries()) {
     const dx = worldX - position.x;
     const dy = worldY - position.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < clickRadius) {
-      return dealerId;
+    if (dist < clickRadius && dist < closestDist) {
+      closestDist = dist;
+      // Extract base dealer ID (remove "_index" suffix if present)
+      // This ensures click handlers get the correct base ID (orb_dealer, loot_box_dealer, etc.)
+      const baseDealerId = dealerKey.includes('_') && /^\w+_\d+$/.test(dealerKey) 
+        ? dealerKey.split('_').slice(0, -1).join('_') 
+        : dealerKey;
+      closestDealer = baseDealerId;
     }
   }
   
-  return null;
+  return closestDealer;
+}
+
+// Get the position for a specific dealer closest to the click position
+export function getDealerPosition(dealerId: string, worldX: number, worldY: number): { x: number; y: number } | null {
+  // Find the closest dealer with this base ID to the click position
+  let closestPosition: { x: number; y: number } | null = null;
+  let closestDist = Infinity;
+  
+  for (const [dealerKey, position] of dealerPositions.entries()) {
+    // Extract base ID from key (handle both "orb_dealer_0" and "orb_dealer" formats)
+    let baseDealerId: string;
+    if (dealerKey.includes('_') && /^\w+_\d+$/.test(dealerKey)) {
+      // Format: "orb_dealer_0" -> "orb_dealer"
+      baseDealerId = dealerKey.split('_').slice(0, -1).join('_');
+    } else {
+      // Format: "orb_dealer" -> "orb_dealer"
+      baseDealerId = dealerKey;
+    }
+    
+    // If this dealer matches the requested ID
+    if (baseDealerId === dealerId) {
+      // Calculate distance from click position to this dealer
+      const dx = worldX - position.x;
+      const dy = worldY - position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      // Find the closest matching dealer (the one actually clicked)
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestPosition = position;
+      }
+    }
+  }
+  
+  return closestPosition;
 }
 
 // Check if player position collides with casino portal
@@ -7547,15 +7834,343 @@ export function getClickedLogDealer(worldX: number, worldY: number): boolean {
 
 // ============ BLACKJACK TABLES ============
 
+// Build cache for blackjack table static structure (base, sides, top - without particles/seats/dealer)
+function buildBlackjackTableStaticCache(): void {
+  if (blackjackTableStaticCacheInitialized) return;
+  
+  const p = SCALE;
+  const tableRadiusSize = 60 * p; // Table size (major radius)
+  const tableMinorRadius = tableRadiusSize * 0.6; // Minor radius for ellipse
+  const tableHeight = 12 * p; // 3D height of table
+  
+  // Create cache canvas (large enough for table + shadow)
+  const cacheSize = (tableRadiusSize + 4 * p) * 2.5;
+  blackjackTableStaticCache = document.createElement('canvas');
+  blackjackTableStaticCache.width = cacheSize;
+  blackjackTableStaticCache.height = cacheSize;
+  const cacheCtx = blackjackTableStaticCache.getContext('2d');
+  if (!cacheCtx) {
+    blackjackTableStaticCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  // Center of cache
+  const offsetX = cacheSize / 2;
+  const offsetY = cacheSize / 2;
+  
+  // === 3D TABLE BASE (bottom layer) ===
+  const baseGradient = cacheCtx.createLinearGradient(offsetX - tableRadiusSize, offsetY, offsetX + tableRadiusSize, offsetY);
+  baseGradient.addColorStop(0, '#2a1a0a');
+  baseGradient.addColorStop(0.5, '#3a2a1a');
+  baseGradient.addColorStop(1, '#2a1a0a');
+  cacheCtx.fillStyle = baseGradient;
+  cacheCtx.beginPath();
+  cacheCtx.ellipse(offsetX, offsetY + tableHeight, tableRadiusSize + 4 * p, tableMinorRadius + 4 * p, 0, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Table base edge highlight
+  cacheCtx.strokeStyle = '#5a4a3a';
+  cacheCtx.lineWidth = 3 * p;
+  cacheCtx.beginPath();
+  cacheCtx.ellipse(offsetX, offsetY + tableHeight, tableRadiusSize + 4 * p, tableMinorRadius + 4 * p, 0, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // === 3D TABLE SIDES (vertical depth) ===
+  const sideGradient = cacheCtx.createLinearGradient(offsetX, offsetY, offsetX, offsetY + tableHeight);
+  sideGradient.addColorStop(0, '#4a3a2a');
+  sideGradient.addColorStop(1, '#2a1a0a');
+  cacheCtx.fillStyle = sideGradient;
+  
+  // Draw side segments (approximate 3D sides for ellipse)
+  for (let i = 0; i < 16; i++) {
+    const sideAngle = (i / 16) * Math.PI * 2;
+    const nextAngle = ((i + 1) / 16) * Math.PI * 2;
+    const x1 = offsetX + Math.cos(sideAngle) * (tableRadiusSize + 4 * p);
+    const y1 = offsetY + Math.sin(sideAngle) * (tableMinorRadius + 4 * p);
+    const x2 = offsetX + Math.cos(nextAngle) * (tableRadiusSize + 4 * p);
+    const y2 = offsetY + Math.sin(nextAngle) * (tableMinorRadius + 4 * p);
+    
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(x1, y1);
+    cacheCtx.lineTo(x1, y1 + tableHeight);
+    cacheCtx.lineTo(x2, y2 + tableHeight);
+    cacheCtx.lineTo(x2, y2);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+  }
+  
+  // === TABLE TOP (green felt surface) ===
+  const topGradient = cacheCtx.createRadialGradient(offsetX, offsetY, 0, offsetX, offsetY, tableRadiusSize);
+  topGradient.addColorStop(0, '#1a5a1a');
+  topGradient.addColorStop(0.7, '#0d4d0d');
+  topGradient.addColorStop(1, '#0a3a0a');
+  cacheCtx.fillStyle = topGradient;
+  cacheCtx.beginPath();
+  cacheCtx.ellipse(offsetX, offsetY, tableRadiusSize, tableMinorRadius, 0, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Felt texture (subtle pattern)
+  cacheCtx.fillStyle = 'rgba(0, 100, 0, 0.3)';
+  for (let row = -2; row <= 2; row++) {
+    for (let col = -3; col <= 3; col++) {
+      const x = offsetX + col * 8 * p;
+      const y = offsetY + row * 8 * p;
+      const dist = Math.sqrt(((x - offsetX) / tableRadiusSize) ** 2 + ((y - offsetY) / tableMinorRadius) ** 2);
+      if (dist < 1) {
+        cacheCtx.fillRect(x - 2 * p, y - 2 * p, 4 * p, 4 * p);
+      }
+    }
+  }
+  
+  // Table border (white, with inner inset for 3D)
+  cacheCtx.strokeStyle = '#ffffff';
+  cacheCtx.lineWidth = 2 * p;
+  cacheCtx.beginPath();
+  cacheCtx.ellipse(offsetX, offsetY, tableRadiusSize, tableMinorRadius, 0, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // Inner border (darker for depth)
+  cacheCtx.strokeStyle = '#0a3a0a';
+  cacheCtx.lineWidth = 1 * p;
+  cacheCtx.beginPath();
+  cacheCtx.ellipse(offsetX, offsetY, tableRadiusSize - 2 * p, tableMinorRadius - 2 * p, 0, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // Top edge highlight (3D effect)
+  cacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+  cacheCtx.lineWidth = 1 * p;
+  cacheCtx.beginPath();
+  cacheCtx.ellipse(offsetX, offsetY - 1 * p, tableRadiusSize - 1 * p, tableMinorRadius - 1 * p, 0, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  blackjackTableStaticCacheInitialized = true;
+}
+
+// Build cache for herald podium (static structure)
+function buildHeraldPodiumCache(): void {
+  if (heraldPodiumCacheInitialized) return;
+  
+  const p = SCALE;
+  const podiumRadius = 18 * p;
+  const stemHeight = 12 * p;
+  const stemRadius = podiumRadius * 0.6;
+  const topPlatformY = 0; // Top platform at top of cache
+  const cacheHeight = stemHeight + podiumRadius + 4 * p; // Extra space for glow
+  const cacheWidth = podiumRadius * 2 + 4 * p;
+  
+  heraldPodiumCache = document.createElement('canvas');
+  heraldPodiumCache.width = cacheWidth;
+  heraldPodiumCache.height = cacheHeight;
+  const cacheCtx = heraldPodiumCache.getContext('2d');
+  if (!cacheCtx) {
+    heraldPodiumCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  const centerX = cacheWidth / 2;
+  const baseY = cacheHeight - podiumRadius - 2 * p; // Base at bottom
+  
+  // Podium base (dark grey)
+  const baseGradient = cacheCtx.createRadialGradient(centerX, baseY, 0, centerX, baseY, podiumRadius);
+  baseGradient.addColorStop(0, '#2a2a2a');
+  baseGradient.addColorStop(1, '#1a1a1a');
+  cacheCtx.fillStyle = baseGradient;
+  cacheCtx.beginPath();
+  cacheCtx.arc(centerX, baseY, podiumRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Stem (vertical cylinder)
+  const stemGradient = cacheCtx.createLinearGradient(centerX - stemRadius, baseY, centerX + stemRadius, baseY);
+  stemGradient.addColorStop(0, '#1a1a1a');
+  stemGradient.addColorStop(0.5, '#2a2a2a');
+  stemGradient.addColorStop(1, '#1a1a1a');
+  cacheCtx.fillStyle = stemGradient;
+  
+  // Draw stem sides
+  cacheCtx.beginPath();
+  cacheCtx.moveTo(centerX - stemRadius, baseY);
+  cacheCtx.lineTo(centerX - stemRadius, topPlatformY);
+  cacheCtx.arc(centerX, topPlatformY, stemRadius, Math.PI, 0, false);
+  cacheCtx.lineTo(centerX + stemRadius, baseY);
+  cacheCtx.arc(centerX, baseY, stemRadius, 0, Math.PI, true);
+  cacheCtx.closePath();
+  cacheCtx.fill();
+  
+  // Top platform
+  const topGradient = cacheCtx.createRadialGradient(centerX, topPlatformY, 0, centerX, topPlatformY, podiumRadius);
+  topGradient.addColorStop(0, '#3a3a3a');
+  topGradient.addColorStop(1, '#2a2a2a');
+  cacheCtx.fillStyle = topGradient;
+  cacheCtx.beginPath();
+  cacheCtx.arc(centerX, topPlatformY, podiumRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Top edge highlight
+  cacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  cacheCtx.lineWidth = 1 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(centerX, topPlatformY, podiumRadius, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  heraldPodiumCacheInitialized = true;
+}
+
+// Build cache for seat podium structure (base, stem, top - neutral colors, glows drawn separately)
+function buildSeatPodiumCache(): void {
+  if (seatPodiumCacheInitialized) return;
+  
+  const p = SCALE;
+  const podiumBaseRadius = 10 * p;
+  const podiumTopRadius = 7 * p;
+  const podiumHeight = 8 * p;
+  const cacheSize = (podiumBaseRadius + podiumHeight) * 2 + 4 * p;
+  
+  seatPodiumCache = document.createElement('canvas');
+  seatPodiumCache.width = cacheSize;
+  seatPodiumCache.height = cacheSize;
+  const cacheCtx = seatPodiumCache.getContext('2d');
+  if (!cacheCtx) {
+    seatPodiumCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  const centerX = cacheSize / 2;
+  const baseY = cacheSize - podiumBaseRadius - 2 * p; // Base at bottom
+  const topY = baseY - podiumHeight; // Top elevated
+  
+  // Base shadow
+  cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  cacheCtx.beginPath();
+  cacheCtx.ellipse(centerX + 1 * p, baseY + 1 * p, podiumBaseRadius * 1.1, podiumBaseRadius * 0.6, 0, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Podium base (neutral dark gray)
+  const baseGradient = cacheCtx.createRadialGradient(centerX, baseY, 0, centerX, baseY, podiumBaseRadius);
+  baseGradient.addColorStop(0, '#2a2a2a');
+  baseGradient.addColorStop(1, '#1a1a1a');
+  cacheCtx.fillStyle = baseGradient;
+  cacheCtx.beginPath();
+  cacheCtx.arc(centerX, baseY, podiumBaseRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Podium top (neutral)
+  const topGradient = cacheCtx.createRadialGradient(centerX, topY, 0, centerX, topY, podiumTopRadius);
+  topGradient.addColorStop(0, '#3a3a3a');
+  topGradient.addColorStop(1, '#2a2a2a');
+  cacheCtx.fillStyle = topGradient;
+  cacheCtx.beginPath();
+  cacheCtx.arc(centerX, topY, podiumTopRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Podium sides (3D effect - cylinder sides)
+  const sideGradient = cacheCtx.createLinearGradient(centerX - podiumBaseRadius, topY, centerX + podiumBaseRadius, topY);
+  sideGradient.addColorStop(0, '#1a1a1a');
+  sideGradient.addColorStop(0.5, '#2a2a2a');
+  sideGradient.addColorStop(1, '#1a1a1a');
+  cacheCtx.fillStyle = sideGradient;
+  
+  // Draw cylinder sides (connecting base to top)
+  cacheCtx.beginPath();
+  cacheCtx.moveTo(centerX - podiumBaseRadius, baseY);
+  cacheCtx.lineTo(centerX - podiumTopRadius, topY);
+  cacheCtx.arc(centerX, topY, podiumTopRadius, Math.PI, 0, false);
+  cacheCtx.lineTo(centerX + podiumBaseRadius, baseY);
+  cacheCtx.arc(centerX, baseY, podiumBaseRadius, 0, Math.PI, true);
+  cacheCtx.closePath();
+  cacheCtx.fill();
+  
+  seatPodiumCacheInitialized = true;
+}
+
+// Build cache for path light mount/stem structure (static, without light)
+function buildPathLightMountCache(): void {
+  if (pathLightMountCacheInitialized) return;
+  
+  const p = SCALE;
+  const stemHeight = 8 * p;
+  const stemBaseWidth = 3 * p;
+  const stemTopWidth = 2 * p;
+  const mountBaseWidth = 5 * p;
+  const mountBaseHeight = 2 * p;
+  const cacheHeight = stemHeight + mountBaseHeight + 2 * p;
+  const cacheWidth = mountBaseWidth + 2 * p;
+  
+  pathLightMountCache = document.createElement('canvas');
+  pathLightMountCache.width = cacheWidth;
+  pathLightMountCache.height = cacheHeight;
+  const cacheCtx = pathLightMountCache.getContext('2d');
+  if (!cacheCtx) {
+    pathLightMountCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  const centerX = cacheWidth / 2;
+  const baseY = cacheHeight - 1 * p; // Base at bottom
+  
+  // Base mount on path
+  const mountGradient = cacheCtx.createLinearGradient(centerX - mountBaseWidth / 2, baseY, centerX + mountBaseWidth / 2, baseY);
+  mountGradient.addColorStop(0, '#1a1a1a');
+  mountGradient.addColorStop(0.5, '#2a2a2a');
+  mountGradient.addColorStop(1, '#1a1a1a');
+  cacheCtx.fillStyle = mountGradient;
+  cacheCtx.fillRect(centerX - mountBaseWidth / 2, baseY - mountBaseHeight, mountBaseWidth, mountBaseHeight);
+  
+  // Stem (vertical pole)
+  const stemGradient = cacheCtx.createLinearGradient(centerX - stemBaseWidth / 2, baseY, centerX + stemBaseWidth / 2, baseY);
+  stemGradient.addColorStop(0, '#2a2a2a');
+  stemGradient.addColorStop(0.5, '#3a3a3a');
+  stemGradient.addColorStop(1, '#2a2a2a');
+  cacheCtx.fillStyle = stemGradient;
+  
+  // Draw stem as a trapezoid (wider at bottom, narrower at top)
+  const stemTopY = baseY - mountBaseHeight - stemHeight;
+  cacheCtx.beginPath();
+  cacheCtx.moveTo(centerX - stemBaseWidth / 2, baseY - mountBaseHeight);
+  cacheCtx.lineTo(centerX + stemBaseWidth / 2, baseY - mountBaseHeight);
+  cacheCtx.lineTo(centerX + stemTopWidth / 2, stemTopY);
+  cacheCtx.lineTo(centerX - stemTopWidth / 2, stemTopY);
+  cacheCtx.closePath();
+  cacheCtx.fill();
+  
+  // Stem highlight (left side)
+  cacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  cacheCtx.lineWidth = 1 * p;
+  cacheCtx.beginPath();
+  cacheCtx.moveTo(centerX - stemBaseWidth / 2, baseY - mountBaseHeight);
+  cacheCtx.lineTo(centerX - stemTopWidth / 2, stemTopY);
+  cacheCtx.stroke();
+  
+  pathLightMountCacheInitialized = true;
+}
+
 // Store blackjack table positions for click detection
 export const blackjackTablePositions: Map<string, { x: number; y: number; radius: number }> = new Map();
 
 // Draw blackjack tables on casino map
-export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number, hoveredTableId?: string | null): void {
+export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number, hoveredTableId?: string | null, hoveredDealerId?: string | null): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
-  const plazaRadius = 300 * p;
+  const plazaRadius = 600 * p; // Doubled from 300 to 600 for more space
+  
+  // Clear previous dealer positions (for casino dealers)
+  // Note: This only clears positions for dealers we're about to set, not all dealers
+  // We'll clear specific dealer IDs before setting them
+  const casinoDealerIds = ['orb_dealer', 'loot_box_dealer'];
+  for (const dealerId of casinoDealerIds) {
+    dealerPositions.delete(dealerId);
+  }
+  
+  // Build static cache if needed
+  buildBlackjackTableStaticCache();
   
   // Update dealer speech bubbles (including blackjack dealers)
   updateDealerSpeechBubbles(time);
@@ -7575,17 +8190,58 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     
     const tableX = centerX + Math.cos(angle) * tableRadius;
     const tableY = centerY + Math.sin(angle) * tableRadius;
-    const tableRadiusSize = 60 * p; // Table size
+    const tableRadiusSize = 60 * p; // Table size (major radius)
+    const tableMinorRadius = tableRadiusSize * 0.6; // Minor radius for ellipse
+    const tableHeight = 12 * p; // 3D height of table
     
     // Store position for click detection
     blackjackTablePositions.set(tableId, { x: tableX, y: tableY, radius: tableRadiusSize });
     
     const isHovered = hoveredTableId === tableId;
     
-    // Draw table (green felt oval)
     ctx.save();
     
-    // Hover glow effect
+    // === PULSING PARTICLE EFFECTS (emanating downward) - dynamic, not cached ===
+    const pulsePhase = Math.sin(time * 0.003) * 0.5 + 0.5; // 0 to 1
+    const particleCount = 12;
+    for (let i = 0; i < particleCount; i++) {
+      const particleAngle = (i / particleCount) * Math.PI * 2;
+      const particleDist = 8 * p + pulsePhase * 20 * p; // Particles move downward
+      const particleX = tableX + Math.cos(particleAngle) * (tableRadiusSize * 0.7);
+      const particleY = tableY + Math.sin(particleAngle) * (tableMinorRadius * 0.7) + tableHeight + particleDist;
+      
+      // Particle size and opacity fade with distance
+      const particleSize = (1 - pulsePhase) * 3 * p + 1 * p;
+      const particleAlpha = (1 - pulsePhase) * 0.6;
+      
+      // Blue/cyan particle glow
+      const particleGradient = ctx.createRadialGradient(particleX, particleY, 0, particleX, particleY, particleSize * 2);
+      particleGradient.addColorStop(0, `rgba(100, 200, 255, ${particleAlpha})`);
+      particleGradient.addColorStop(0.5, `rgba(50, 150, 255, ${particleAlpha * 0.5})`);
+      particleGradient.addColorStop(1, `rgba(50, 150, 255, 0)`);
+      ctx.fillStyle = particleGradient;
+      ctx.beginPath();
+      ctx.arc(particleX, particleY, particleSize * 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Core particle
+      ctx.fillStyle = `rgba(150, 220, 255, ${particleAlpha})`;
+      ctx.beginPath();
+      ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Shadow beneath table (for floating effect) - dynamic
+    const shadowGradient = ctx.createRadialGradient(tableX, tableY + tableHeight + 4 * p, 0, tableX, tableY + tableHeight + 4 * p, tableRadiusSize * 1.2);
+    shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+    shadowGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.2)');
+    shadowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = shadowGradient;
+    ctx.beginPath();
+    ctx.ellipse(tableX, tableY + tableHeight + 4 * p, tableRadiusSize * 1.2, tableMinorRadius * 1.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Hover glow effect - dynamic
     if (isHovered) {
       ctx.globalAlpha = 0.4;
       const glowGradient = ctx.createRadialGradient(tableX, tableY, 0, tableX, tableY, tableRadiusSize * 1.3);
@@ -7594,74 +8250,110 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
       glowGradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
       ctx.fillStyle = glowGradient;
       ctx.beginPath();
-      ctx.ellipse(tableX, tableY, tableRadiusSize * 1.3, tableRadiusSize * 0.8, 0, 0, Math.PI * 2);
+      ctx.ellipse(tableX, tableY, tableRadiusSize * 1.3, tableMinorRadius * 1.3, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
     }
     
-    // Table base (dark wood)
-    ctx.fillStyle = '#3a2a1a';
-    ctx.beginPath();
-    ctx.ellipse(tableX, tableY, tableRadiusSize + 4 * p, tableRadiusSize * 0.6 + 4 * p, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Table edge (wood trim)
-    ctx.strokeStyle = '#5a4a3a';
-    ctx.lineWidth = 3 * p;
-    ctx.beginPath();
-    ctx.ellipse(tableX, tableY, tableRadiusSize + 4 * p, tableRadiusSize * 0.6 + 4 * p, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Green felt surface
-    ctx.fillStyle = '#0d4d0d';
-    ctx.beginPath();
-    ctx.ellipse(tableX, tableY, tableRadiusSize, tableRadiusSize * 0.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Felt texture (subtle pattern)
-    ctx.fillStyle = 'rgba(0, 100, 0, 0.3)';
-    for (let row = -2; row <= 2; row++) {
-      for (let col = -3; col <= 3; col++) {
-        const x = tableX + col * 8 * p;
-        const y = tableY + row * 8 * p;
-        const dist = Math.sqrt(((x - tableX) / tableRadiusSize) ** 2 + ((y - tableY) / (tableRadiusSize * 0.6)) ** 2);
-        if (dist < 1) {
-          ctx.fillRect(x - 2 * p, y - 2 * p, 4 * p, 4 * p);
-        }
-      }
+    // === DRAW CACHED STATIC TABLE STRUCTURE ===
+    if (blackjackTableStaticCache) {
+      const cacheSize = blackjackTableStaticCache.width;
+      const offsetX = tableX - cacheSize / 2;
+      const offsetY = tableY - cacheSize / 2;
+      ctx.drawImage(blackjackTableStaticCache, offsetX, offsetY);
     }
     
-    // Table border (white)
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2 * p;
-    ctx.beginPath();
-    ctx.ellipse(tableX, tableY, tableRadiusSize, tableRadiusSize * 0.6, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Draw 4 seat positions around table (semi-circle facing dealer)
-    const seatRadius = tableRadiusSize * 0.8;
-    for (let seat = 0; seat < 4; seat++) {
-      const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // Seats on player side (facing dealer) - 4 seats evenly spaced
-      const seatX = tableX + Math.cos(seatAngle) * seatRadius;
-      const seatY = tableY + Math.sin(seatAngle) * seatRadius;
+    // === DRAW SEATS AROUND TABLE EDGE (styled like slot seats) ===
+    // Position seats at the edge of the table (not overlapping)
+    // Calculate seat positions on the ellipse edge
+    const numSeats = 4;
+    for (let seat = 0; seat < numSeats; seat++) {
+      // Seats on player side (semi-circle facing dealer, opposite from dealer at angle 0)
+      const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // 4 seats evenly spaced on player side
       
-      // Draw seat (small circle)
-      ctx.fillStyle = '#2a2a2a';
+      // Calculate position on ellipse edge
+      // For ellipse: x = a*cos(θ), y = b*sin(θ) where a=major, b=minor
+      const edgeX = tableX + Math.cos(seatAngle) * tableRadiusSize;
+      const edgeY = tableY + Math.sin(seatAngle) * tableMinorRadius;
+      
+      // Position seat slightly outside the edge (not overlapping)
+      const seatOffset = 12 * p; // Distance from table edge
+      const seatX = edgeX + Math.cos(seatAngle) * seatOffset;
+      const seatY = edgeY + Math.sin(seatAngle) * seatOffset;
+      
+      ctx.save();
+      
+      // Animated glow intensity (subtle pulsing)
+      const glowPulse = 0.6 + Math.sin(time * 0.002 + seat * 0.5) * 0.2;
+      
+      // Draw glow/flow effect beneath podium (blue/cyan theme for blackjack)
+      const glowRadius = 12 * p;
+      const glowGradient = ctx.createRadialGradient(seatX, seatY, 0, seatX, seatY, glowRadius);
+      glowGradient.addColorStop(0, `rgba(100, 200, 255, ${0.4 * glowPulse})`);
+      glowGradient.addColorStop(0.5, `rgba(50, 150, 255, ${0.2 * glowPulse})`);
+      glowGradient.addColorStop(1, `rgba(50, 150, 255, 0)`);
+      ctx.fillStyle = glowGradient;
       ctx.beginPath();
-      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.arc(seatX, seatY, glowRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      ctx.strokeStyle = '#4a4a4a';
-      ctx.lineWidth = 1 * p;
+      // Build cache if needed
+      buildSeatPodiumCache();
+      
+      // Draw cached podium structure
+      if (seatPodiumCache) {
+        const cacheSize = seatPodiumCache.width;
+        const offsetX = seatX - cacheSize / 2;
+        const offsetY = seatY - cacheSize / 2;
+        ctx.drawImage(seatPodiumCache, offsetX, offsetY);
+      }
+      
+      // Apply blue tint overlay for blackjack seats
+      const podiumBaseRadius = 10 * p;
+      const podiumTopRadius = 7 * p;
+      const topY = seatY;
+      
+      // Blue tint on base
+      const baseTint = ctx.createRadialGradient(seatX, seatY + 8 * p, 0, seatX, seatY + 8 * p, podiumBaseRadius);
+      baseTint.addColorStop(0, 'rgba(120, 180, 220, 0.3)');
+      baseTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = baseTint;
       ctx.beginPath();
-      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.arc(seatX, seatY + 8 * p, podiumBaseRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Blue tint on top
+      const topTint = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
+      topTint.addColorStop(0, 'rgba(140, 200, 240, 0.4)');
+      topTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = topTint;
+      ctx.beginPath();
+      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Top highlight (blue accent)
+      ctx.strokeStyle = `rgba(100, 200, 255, ${0.6 * glowPulse})`;
+      ctx.lineWidth = 1.5 * p;
+      ctx.beginPath();
+      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
       ctx.stroke();
+      
+      // Subtle blue glow on top surface
+      const topGlow = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
+      topGlow.addColorStop(0, `rgba(100, 200, 255, ${0.2 * glowPulse})`);
+      topGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = topGlow;
+      ctx.beginPath();
+      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
     }
     
     // Draw dealer position (opposite side from seats)
     const dealerAngle = 0; // Dealer at top
     const dealerX = tableX + Math.cos(dealerAngle) * (tableRadiusSize * 0.7);
-    const dealerY = tableY + Math.sin(dealerAngle) * (tableRadiusSize * 0.7);
+    const dealerY = tableY + Math.sin(dealerAngle) * (tableMinorRadius * 0.7);
     
     // Draw dealer marker
     ctx.fillStyle = '#8a0000';
@@ -7675,6 +8367,77 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     ctx.arc(dealerX, dealerY, 10 * p, 0, Math.PI * 2);
     ctx.stroke();
     
+    // === ANIMATED GREEN LIGHTBEAM ABOVE BLACKJACK DEALER ===
+    // Draw lightbeam from top of dealer's head (BEFORE dealer so it's behind nameplate)
+    const dealerHeadY = dealerY - (PLAYER_HEIGHT * SCALE) / 2; // Top of dealer's head
+    const beamHeight = 100 * p;
+    const baseBeamWidth = 8 * p;
+    const beamStartY = dealerHeadY - 5 * p; // Slightly above head
+    
+    // Animate beam (pulsing width and intensity) - each dealer pulses at different phase
+    const beamPulse = Math.sin(time * 0.003 + i * Math.PI / 2) * 0.2 + 1; // Each dealer pulses at different phase
+    const beamIntensity = Math.sin(time * 0.002 + i * Math.PI / 2) * 0.25 + 0.75; // Intensity between 0.5 and 1.0
+    const animatedBeamWidth = baseBeamWidth * beamPulse;
+    const animatedBeamX = dealerX - animatedBeamWidth / 2;
+    
+    // Green color for blackjack dealers
+    const greenRgb = { r: 34, g: 197, b: 94 }; // Green-500 equivalent
+    const greenSecondaryRgb = { r: 22, g: 163, b: 74 }; // Green-600 equivalent
+    
+    // Blackjack dealer lightbeam gradient (green colors)
+    const dealerBeamGradient = ctx.createLinearGradient(
+      animatedBeamX, 
+      beamStartY, 
+      animatedBeamX, 
+      beamStartY - beamHeight
+    );
+    dealerBeamGradient.addColorStop(0, `rgba(255, 255, 255, ${beamIntensity})`);
+    dealerBeamGradient.addColorStop(0.2, `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, ${beamIntensity * 0.9})`);
+    dealerBeamGradient.addColorStop(0.5, `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, ${beamIntensity * 0.6})`);
+    dealerBeamGradient.addColorStop(0.8, `rgba(${greenSecondaryRgb.r}, ${greenSecondaryRgb.g}, ${greenSecondaryRgb.b}, ${beamIntensity * 0.3})`);
+    dealerBeamGradient.addColorStop(1, `rgba(${greenSecondaryRgb.r}, ${greenSecondaryRgb.g}, ${greenSecondaryRgb.b}, 0)`);
+    
+    // Draw main beam
+    ctx.fillStyle = dealerBeamGradient;
+    ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
+    
+    // Batch shadow operations for dealer beam
+    const dealerGlowIntensity = beamIntensity * 0.6;
+    ctx.shadowBlur = 20 * p * beamPulse;
+    ctx.shadowColor = `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, ${dealerGlowIntensity})`;
+    
+    // Dealer beam outer glow (pulsing)
+    ctx.fillRect(animatedBeamX - 2 * p, beamStartY - beamHeight, animatedBeamWidth + 4 * p, beamHeight);
+    
+    // Dealer beam inner core (bright center)
+    const dealerCoreGradient = ctx.createLinearGradient(
+      animatedBeamX, 
+      beamStartY, 
+      animatedBeamX, 
+      beamStartY - beamHeight * 0.7
+    );
+    dealerCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${beamIntensity * 0.9})`);
+    dealerCoreGradient.addColorStop(1, `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, 0)`);
+    ctx.fillStyle = dealerCoreGradient;
+    ctx.fillRect(animatedBeamX + 1 * p, beamStartY - beamHeight * 0.7, animatedBeamWidth - 2 * p, beamHeight * 0.7);
+    
+    // Reset shadow after dealer beam operations
+    ctx.shadowBlur = 0;
+    
+    // Dealer beam shimmer effect (moving highlight)
+    const dealerShimmerOffset = ((time * 0.0015 + i * Math.PI / 2) % (beamHeight * 0.4));
+    const dealerShimmerGradient = ctx.createLinearGradient(
+      animatedBeamX, 
+      beamStartY - dealerShimmerOffset, 
+      animatedBeamX, 
+      beamStartY - dealerShimmerOffset - beamHeight * 0.25
+    );
+    dealerShimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    dealerShimmerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${beamIntensity * 0.5})`);
+    dealerShimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = dealerShimmerGradient;
+    ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
+    
     // Draw dealer NPC
     const dealerType = DEALER_TYPES.find(d => d.id === dealerId);
     if (dealerType) {
@@ -7682,6 +8445,109 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     }
     
     ctx.restore();
+  }
+  
+  // Draw orb dealer and loot box dealer around central plaza (between path segments)
+  // Paths go in 4 directions: N (0), E (π/2), S (π), W (3π/2)
+  // Dealers positioned between paths at: π/4, 3π/4, 5π/4, 7π/4
+  const dealerRadius = plazaRadius * 0.35; // Moved closer to center (was 0.4)
+  const dealerAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+  const dealerTypes = ['orb_dealer', 'loot_box_dealer', 'orb_dealer', 'loot_box_dealer']; // Alternating
+  
+  for (let i = 0; i < dealerAngles.length; i++) {
+    const dealerId = dealerTypes[i];
+    const dealerType = DEALER_TYPES.find(d => d.id === dealerId);
+    if (!dealerType) continue;
+    
+    const angle = dealerAngles[i];
+    // Calculate stable position (round to prevent floating point drift)
+    const dealerX = Math.round(centerX + Math.cos(angle) * dealerRadius);
+    const dealerY = Math.round(centerY + Math.sin(angle) * dealerRadius);
+    
+    // Calculate direction to face center (inward)
+    const dx = centerX - dealerX;
+    const dy = centerY - dealerY;
+    let direction: Direction = 'down';
+    if (Math.abs(dx) > Math.abs(dy)) {
+      direction = dx > 0 ? 'right' : 'left';
+    } else {
+      direction = dy > 0 ? 'down' : 'up';
+    }
+    
+    // Store position for click detection with unique key for each instance
+    // Format: "dealerId_index" (e.g., "orb_dealer_0", "orb_dealer_2")
+    // This allows all 4 dealers to be clickable, not just the last 2
+    const uniqueDealerKey = `${dealerId}_${i}`;
+    dealerPositions.set(uniqueDealerKey, { x: dealerX, y: dealerY });
+    
+    // Also store with base ID for backward compatibility (last one wins, but that's OK)
+    dealerPositions.set(dealerId, { x: dealerX, y: dealerY });
+    
+    // Check if this dealer is hovered
+    const isHovered = hoveredDealerId === dealerId;
+    
+    // Draw dealer NPC facing center, stationary (direction ensures they face inward)
+    drawSingleDealer(ctx, dealerType, dealerX, dealerY, time, isHovered, direction);
+  }
+  
+  // Draw heralds on podiums between blackjack tables (stationary, facing center)
+  initializeHeralds();
+  const heraldRadius = plazaRadius * 0.42; // Positioned between center and blackjack tables
+  const heraldAngles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // Cardinal directions (between tables)
+  
+  // Map slot machine IDs to herald angles
+  const slotMachineToAngle: Record<string, number> = {
+    'slot_machine_north': 0,
+    'slot_machine_east': Math.PI / 2,
+    'slot_machine_south': Math.PI,
+    'slot_machine_west': 3 * Math.PI / 2
+  };
+  
+  for (const herald of SLOT_HERALDS) {
+    const heraldAngle = slotMachineToAngle[herald.slotMachineId];
+    if (heraldAngle === undefined) continue;
+    
+    const heraldNPC = heraldNPCs.find(h => h.id === herald.id);
+    if (!heraldNPC) continue;
+    
+    // Podium position (between blackjack tables)
+    const podiumX = centerX + Math.cos(heraldAngle) * heraldRadius;
+    const podiumY = centerY + Math.sin(heraldAngle) * heraldRadius;
+    const podiumRadius = 18 * p; // Much smaller podium size
+    
+    // Build cache if needed
+    buildHeraldPodiumCache();
+    
+    // Draw cached podium (stem and top only)
+    if (heraldPodiumCache) {
+      const cacheWidth = heraldPodiumCache.width;
+      const cacheHeight = heraldPodiumCache.height;
+      const offsetX = podiumX - cacheWidth / 2;
+      const offsetY = podiumY - cacheHeight + podiumRadius + 2 * p; // Align bottom of cache with podium base
+      ctx.drawImage(heraldPodiumCache, offsetX, offsetY);
+    } else {
+      // Fallback to drawing if cache failed
+      drawSimplePodium(ctx, podiumX, podiumY, podiumRadius);
+    }
+    
+    // Get theme color for herald name
+    const theme = SLOT_MACHINE_THEMES[herald.slotMachineId];
+    
+    // Draw herald NPC on top of podium
+    const heraldDealerType: DealerType = {
+      id: herald.id,
+      name: herald.name,
+      outfit: herald.outfit,
+      messages: herald.messages
+    };
+    
+    // Herald is positioned on top of podium (podium elevates them)
+    // Use the herald's stored position (already calculated on podium top)
+    const heraldX = heraldNPC.x * SCALE;
+    const heraldY = heraldNPC.y * SCALE;
+    
+    // Draw herald facing center (direction already calculated in initialization)
+    drawSingleDealer(ctx, heraldDealerType, heraldX, heraldY, time, false, heraldNPC.direction, theme.primary);
   }
 }
 
@@ -7771,7 +8637,7 @@ const SLOT_HERALDS: Array<{
     id: 'slot_herald_fortune',
     slotMachineId: 'slot_machine_north',
     name: 'Orb Fortune Herald',
-    outfit: ['hat_golden', 'armor_golden', 'legs_gold', 'acc_aura_golden'],
+    outfit: ['robe_druid_gold', 'legs_druid_gold', 'acc_visor_gold'],
     messages: [
       'Orb Fortune brings golden riches!',
       'Spin here for legendary wins!',
@@ -7784,7 +8650,7 @@ const SLOT_HERALDS: Array<{
     id: 'slot_herald_destiny',
     slotMachineId: 'slot_machine_east',
     name: 'Orb Destiny Herald',
-    outfit: ['hat_rainbow', 'robe_rainbow', 'legs_rainbow', 'acc_aura_rainbow'],
+    outfit: ['robe_druid_purple', 'legs_druid_purple', 'acc_visor_purple'],
     messages: [
       'Orb Destiny shapes your fate!',
       'Purple power brings epic wins!',
@@ -7797,7 +8663,7 @@ const SLOT_HERALDS: Array<{
     id: 'slot_herald_glory',
     slotMachineId: 'slot_machine_south',
     name: 'Orb Glory Herald',
-    outfit: ['hat_halo', 'armor_blue', 'legs_blue', 'acc_wings_blue', 'acc_aura_blue'],
+    outfit: ['robe_druid_blue', 'legs_druid_blue', 'acc_visor_blue'],
     messages: [
       'Orb Glory for legendary wins!!',
       'Blue brilliance brings fortune!',
@@ -7810,7 +8676,7 @@ const SLOT_HERALDS: Array<{
     id: 'slot_herald_victory',
     slotMachineId: 'slot_machine_west',
     name: 'Orb Victory Herald',
-    outfit: ['hat_crown', 'armor_green', 'legs_green', 'acc_wings_green', 'acc_aura_green'],
+    outfit: ['robe_druid_green', 'legs_druid_green', 'acc_visor_green'],
     messages: [
       'Orb Victory guarantees wins!',
       'Green fortune brings success!',
@@ -7842,48 +8708,64 @@ interface HeraldNPC {
 const heraldNPCs: HeraldNPC[] = [];
 let heraldsInitialized = false;
 
-// Initialize herald NPCs on the plaza ring
+// Initialize herald NPCs on podiums between blackjack tables
 function initializeHeralds(): void {
   if (heraldsInitialized) return;
   
   const centerXScaled = WORLD_WIDTH / 2;
   const centerYScaled = WORLD_HEIGHT / 2;
-  const plazaRadiusScaled = 540 * SCALE; // Plaza ring radius
+  const plazaRadiusScaled = 600 * SCALE; // Casino plaza ring radius (doubled from 300 to 600)
+  const centerX = centerXScaled / SCALE;
+  const centerY = centerYScaled / SCALE;
   
-  // Initialize each herald at their slot machine position, then they'll wander
+  // Blackjack tables are at angles: π/4, 3π/4, 5π/4, 7π/4
+  // Heralds should be placed between tables at cardinal directions: 0, π/2, π, 3π/2
+  const heraldAngles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2];
+  const heraldRadius = plazaRadiusScaled * 0.42; // Positioned between center and blackjack tables
+  
+  // Map slot machine IDs to herald angles (north=0, east=π/2, south=π, west=3π/2)
+  const slotMachineToAngle: Record<string, number> = {
+    'slot_machine_north': 0,
+    'slot_machine_east': Math.PI / 2,
+    'slot_machine_south': Math.PI,
+    'slot_machine_west': 3 * Math.PI / 2
+  };
+  
+  // Initialize each herald on a podium between blackjack tables
   for (const herald of SLOT_HERALDS) {
-    // Find the slot machine position for this herald
-    const directions = [
-      { angle: 0, id: 'slot_machine_north' },
-      { angle: Math.PI / 2, id: 'slot_machine_east' },
-      { angle: Math.PI, id: 'slot_machine_south' },
-      { angle: 3 * Math.PI / 2, id: 'slot_machine_west' }
-    ];
+    const heraldAngle = slotMachineToAngle[herald.slotMachineId];
+    if (heraldAngle === undefined) continue;
     
-    const dir = directions.find(d => d.id === herald.slotMachineId);
-    if (!dir) continue;
+    // Position on podium between blackjack tables
+    const podiumXScaled = centerXScaled + Math.cos(heraldAngle) * heraldRadius;
+    const podiumYScaled = centerYScaled + Math.sin(heraldAngle) * heraldRadius;
     
-    const slotMachineDistance = plazaRadiusScaled * 0.85;
-    const heraldOffset = 50 * SCALE; // Offset from machine
-    const heraldAngle = dir.angle + Math.PI / 2; // Perpendicular
+    // Herald position is on top of podium (podium elevates them)
+    // Simple podium: stem height is 12*SCALE, so top is at y - 12*SCALE
+    const podiumTopY = podiumYScaled - 12 * SCALE; // Top platform is 12 pixels above base
+    const x = podiumXScaled / SCALE;
+    const y = podiumTopY / SCALE;
     
-    // Start position near slot machine
-    const startXScaled = centerXScaled + Math.cos(dir.angle) * slotMachineDistance + Math.cos(heraldAngle) * heraldOffset;
-    const startYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance + Math.sin(heraldAngle) * heraldOffset;
-    
-    const x = startXScaled / SCALE;
-    const y = startYScaled / SCALE;
+    // Determine direction to face center (inward)
+    const dx = centerX - x;
+    const dy = centerY - y;
+    let direction: Direction = 'down';
+    if (Math.abs(dx) > Math.abs(dy)) {
+      direction = dx > 0 ? 'right' : 'left';
+    } else {
+      direction = dy > 0 ? 'down' : 'up';
+    }
     
     heraldNPCs.push({
       id: herald.id,
       name: herald.name,
       x,
       y,
-      targetX: x,
+      targetX: x, // Stationary - no movement
       targetY: y,
-      direction: 'down',
-      speed: 0.3, // Wandering speed
-      changeDirectionTime: Date.now() + 2000 + (heraldNPCs.length * 500),
+      direction,
+      speed: 0, // No movement
+      changeDirectionTime: Date.now() + 999999999, // Never change direction
       movementCycle: 0,
       slotMachineId: herald.slotMachineId
     });
@@ -7892,111 +8774,36 @@ function initializeHeralds(): void {
   heraldsInitialized = true;
 }
 
-// Update herald wandering (keep them near their slot machine)
+// Update herald positions (stationary on podiums, no movement)
 function updateHeralds(time: number): void {
   initializeHeralds();
   
-  const centerXScaled = WORLD_WIDTH / 2;
-  const centerYScaled = WORLD_HEIGHT / 2;
-  const plazaRadiusScaled = 540 * SCALE;
-  const slotMachineDistance = plazaRadiusScaled * 0.85;
-  
-  // Slot machine positions
-  const directions = [
-    { angle: 0, id: 'slot_machine_north' },
-    { angle: Math.PI / 2, id: 'slot_machine_east' },
-    { angle: Math.PI, id: 'slot_machine_south' },
-    { angle: 3 * Math.PI / 2, id: 'slot_machine_west' }
-  ];
-  
+  // Heralds are stationary, just update their position in the map for rendering
   for (const herald of heraldNPCs) {
-    // Find the slot machine position for this herald
-    const dir = directions.find(d => d.id === herald.slotMachineId);
-    if (!dir) continue;
-    
-    const slotXScaled = centerXScaled + Math.cos(dir.angle) * slotMachineDistance;
-    const slotYScaled = centerYScaled + Math.sin(dir.angle) * slotMachineDistance;
-    const slotX = slotXScaled / SCALE;
-    const slotY = slotYScaled / SCALE;
-    
-    // Wandering radius around slot machine (small area)
-    const wanderRadiusScaled = 100 * SCALE; // 100 pixels radius around machine
-    const wanderRadius = wanderRadiusScaled / SCALE;
-    
-    // Update movement
-    if (time >= herald.changeDirectionTime) {
-      // Pick random target within wander radius of slot machine
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * wanderRadius; // Random distance within radius
-      
-      // Calculate target relative to slot machine
-      const targetX = slotX + Math.cos(angle) * distance;
-      const targetY = slotY + Math.sin(angle) * distance;
-      
-      herald.targetX = targetX;
-      herald.targetY = targetY;
-      
-      // Increment cycle
-      herald.movementCycle++;
-      
-      // Random change direction time (3-7 seconds)
-      herald.changeDirectionTime = time + 3000 + Math.random() * 4000;
-    }
-    
-    // Move towards target
-    const dx = herald.targetX - herald.x;
-    const dy = herald.targetY - herald.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    if (distance > 2) {
-      const moveX = (dx / distance) * herald.speed;
-      const moveY = (dy / distance) * herald.speed;
-      
-      // Calculate new position
-      let newX = herald.x + moveX;
-      let newY = herald.y + moveY;
-      
-      // Constrain to wander radius around slot machine
-      const newXScaled = newX * SCALE;
-      const newYScaled = newY * SCALE;
-      const distFromSlot = Math.sqrt(
-        Math.pow(newXScaled - slotXScaled, 2) + Math.pow(newYScaled - slotYScaled, 2)
-      );
-      
-      // If too far from slot machine, pull back towards it
-      if (distFromSlot > wanderRadiusScaled) {
-        const angleToSlot = Math.atan2(slotYScaled - newYScaled, slotXScaled - newXScaled);
-        newX = (slotXScaled + Math.cos(angleToSlot) * wanderRadiusScaled) / SCALE;
-        newY = (slotYScaled + Math.sin(angleToSlot) * wanderRadiusScaled) / SCALE;
-      }
-      
-      herald.x = newX;
-      herald.y = newY;
-      
-      // Determine direction
-      if (Math.abs(dx) > Math.abs(dy)) {
-        herald.direction = dx > 0 ? 'right' : 'left';
-      } else {
-        herald.direction = dy > 0 ? 'down' : 'up';
-      }
-    } else {
-      // Reached target, pick new one soon
-      herald.changeDirectionTime = time + 500 + Math.random() * 1000;
-    }
-    
-    // Update position in slotHeraldPositions map
     slotHeraldPositions.set(herald.id, { x: herald.x * SCALE, y: herald.y * SCALE });
   }
 }
 
 // Build static slot machine cache (machines without animated parts)
 function buildSlotMachineCache(): void {
-  if (slotMachineCacheInitialized) return;
+  // Reset cache if plaza radius changed (force rebuild on map size change)
+  if (slotMachineCacheInitialized) {
+    const p = SCALE;
+    const plazaRadius = 600 * p;
+    const cacheSize = plazaRadius * 2.5;
+    // If cache exists but size doesn't match, reset it
+    if (slotMachineCache && (slotMachineCache.width !== cacheSize || slotMachineCache.height !== cacheSize)) {
+      slotMachineCacheInitialized = false;
+      slotMachineCache = null;
+    } else {
+      return;
+    }
+  }
   
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
-  const plazaRadius = 300 * p;
+  const plazaRadius = 600 * p; // Doubled from 300 to 600 for more space
   const slotMachineDistance = plazaRadius * 0.85;
   const slotMachineWidth = PLAYER_WIDTH * SCALE * 1.2;
   const slotMachineHeight = PLAYER_HEIGHT * SCALE * 1.5;
@@ -8176,18 +8983,7 @@ function buildSlotMachineCache(): void {
       cacheCtx.shadowBlur = 0;
     }
     
-    // Name label (below the machine)
-    const nameLabelY = machineBottomY + 12 * p; // Position below the machine
-    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    cacheCtx.font = `bold ${8 * p}px "Press Start 2P", monospace`;
-    cacheCtx.textAlign = 'center';
-    cacheCtx.textBaseline = 'middle';
-    cacheCtx.fillText(dir.name, slotX + 1 * p, nameLabelY + 1 * p); // Shadow offset
-    cacheCtx.fillStyle = theme.primary;
-    cacheCtx.shadowBlur = 3 * p;
-    cacheCtx.shadowColor = theme.glow;
-    cacheCtx.fillText(dir.name, slotX, nameLabelY);
-    cacheCtx.shadowBlur = 0;
+    // Name label removed from cache - will be drawn in animated section halfway up the light beam
     
     cacheCtx.restore();
   }
@@ -8195,12 +8991,364 @@ function buildSlotMachineCache(): void {
   slotMachineCacheInitialized = true;
 }
 
+// Build static casino paths and small plazas cache
+function buildCasinoPathsCache(): void {
+  if (casinoPathsCacheInitialized) {
+    // Reset cache if plaza radius changed (force rebuild on map size change)
+    const p = SCALE;
+    const plazaRadius = 600 * p;
+    const cacheSize = plazaRadius * 3; // Large enough for paths and plazas
+    if (casinoPathsCache && (casinoPathsCache.width !== cacheSize || casinoPathsCache.height !== cacheSize)) {
+      casinoPathsCacheInitialized = false;
+      casinoPathsCache = null;
+    } else {
+      return;
+    }
+  }
+  
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 600 * p;
+  const slotMachineDistance = plazaRadius * 0.85;
+  
+  // Create cache canvas (large enough for paths and plazas)
+  const cacheSize = plazaRadius * 3;
+  casinoPathsCache = document.createElement('canvas');
+  casinoPathsCache.width = cacheSize;
+  casinoPathsCache.height = cacheSize;
+  const cacheCtx = casinoPathsCache.getContext('2d');
+  if (!cacheCtx) {
+    casinoPathsCacheInitialized = true;
+    return;
+  }
+  
+  cacheCtx.imageSmoothingEnabled = false;
+  
+  // Offset to center the cache
+  const offsetX = cacheSize / 2;
+  const offsetY = cacheSize / 2;
+  
+  // === PATHS TO SLOT MACHINES (drawn first, so central circle can overlap them) ===
+  // Define portal circle radius here (used by paths, then drawn after paths)
+  const portalCircleRadius = 100 * p; // Circle around the center portal
+  
+  const directions = [
+    { angle: 0, id: 'slot_machine_north' },      // North
+    { angle: Math.PI / 2, id: 'slot_machine_east' },   // East
+    { angle: Math.PI, id: 'slot_machine_south' },      // South
+    { angle: 3 * Math.PI / 2, id: 'slot_machine_west' } // West
+  ];
+  
+  const pathWidth = 48 * p; // Width of the path (doubled from 24 to 48)
+  const pathStartRadius = portalCircleRadius; // Start path at the edge of the central circle for seamless connection
+  
+  for (const dir of directions) {
+    const slotX = offsetX + Math.cos(dir.angle) * slotMachineDistance;
+    const slotY = offsetY + Math.sin(dir.angle) * slotMachineDistance;
+    
+    // Calculate path length
+    const pathLength = slotMachineDistance - pathStartRadius;
+    const pathDepth = 6 * p; // 3D depth height
+    
+    cacheCtx.save();
+    cacheCtx.translate(offsetX, offsetY);
+    cacheCtx.rotate(dir.angle);
+    
+    // === 3D PATH BASE (bottom layer) ===
+    const pathBaseGradient = cacheCtx.createLinearGradient(pathStartRadius, 0, pathStartRadius + pathLength, 0);
+    pathBaseGradient.addColorStop(0, '#b0b0b0');
+    pathBaseGradient.addColorStop(0.5, '#c0c0c0');
+    pathBaseGradient.addColorStop(1, '#b0b0b0');
+    cacheCtx.fillStyle = pathBaseGradient;
+    // Start path slightly inside circle edge to ensure seamless connection (no gap)
+    cacheCtx.fillRect(portalCircleRadius - 2 * p, -pathWidth / 2 - 2 * p, pathLength + 4 * p, pathWidth + 4 * p);
+    
+    // === 3D PATH SIDES (vertical depth) ===
+    // Left side (top edge when rotated)
+    const leftSideGradient = cacheCtx.createLinearGradient(0, -pathWidth / 2, 0, -pathWidth / 2 + pathDepth);
+    leftSideGradient.addColorStop(0, '#c0c0c0');
+    leftSideGradient.addColorStop(1, '#a0a0a0');
+    cacheCtx.fillStyle = leftSideGradient;
+    cacheCtx.fillRect(pathStartRadius, -pathWidth / 2, pathLength, pathDepth);
+    
+    // Right side (bottom edge when rotated)
+    const rightSideGradient = cacheCtx.createLinearGradient(0, pathWidth / 2, 0, pathWidth / 2 + pathDepth);
+    rightSideGradient.addColorStop(0, '#c0c0c0');
+    rightSideGradient.addColorStop(1, '#a0a0a0');
+    cacheCtx.fillStyle = rightSideGradient;
+    cacheCtx.fillRect(pathStartRadius, pathWidth / 2, pathLength, pathDepth);
+    
+    // Front edge (end of path)
+    const frontEdgeGradient = cacheCtx.createLinearGradient(pathStartRadius + pathLength, -pathWidth / 2, pathStartRadius + pathLength, pathWidth / 2);
+    frontEdgeGradient.addColorStop(0, '#c0c0c0');
+    frontEdgeGradient.addColorStop(0.5, '#b0b0b0');
+    frontEdgeGradient.addColorStop(1, '#c0c0c0');
+    cacheCtx.fillStyle = frontEdgeGradient;
+    cacheCtx.fillRect(pathStartRadius + pathLength, -pathWidth / 2, pathDepth, pathWidth);
+    
+    // === PATH TOP (light grey surface) ===
+    const pathTopGradient = cacheCtx.createLinearGradient(pathStartRadius, 0, pathStartRadius + pathLength, 0);
+    pathTopGradient.addColorStop(0, '#e8e8e8');
+    pathTopGradient.addColorStop(0.5, '#e0e0e0');
+    pathTopGradient.addColorStop(1, '#d8d8d8');
+    cacheCtx.fillStyle = pathTopGradient;
+    cacheCtx.fillRect(pathStartRadius, -pathWidth / 2, pathLength, pathWidth);
+    
+    // Top edge highlight (3D effect)
+    cacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    cacheCtx.lineWidth = 1.5 * p;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pathStartRadius, -pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, -pathWidth / 2);
+    cacheCtx.stroke();
+    
+    // Path edges (subtle darker grey lines for definition)
+    cacheCtx.strokeStyle = '#b0b0b0';
+    cacheCtx.lineWidth = 1 * p;
+    // Top edge
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pathStartRadius, -pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, -pathWidth / 2);
+    cacheCtx.stroke();
+    // Bottom edge
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pathStartRadius, pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, pathWidth / 2);
+    cacheCtx.stroke();
+    
+    cacheCtx.restore();
+    
+    // === SMALL PLAZA AROUND EACH SLOT MACHINE (with 3D depth) ===
+    const smallPlazaRadius = 120 * p; // Radius of small plaza around slot machine
+    const smallPlazaCenterX = slotX;
+    const smallPlazaCenterY = slotY;
+    const smallPlazaDepth = 8 * p; // 3D depth height
+    
+    // Shadow beneath small plaza (for floating effect)
+    const smallPlazaShadowGradient = cacheCtx.createRadialGradient(smallPlazaCenterX, smallPlazaCenterY + smallPlazaDepth + 2 * p, 0, smallPlazaCenterX, smallPlazaCenterY + smallPlazaDepth + 2 * p, smallPlazaRadius * 1.2);
+    smallPlazaShadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
+    smallPlazaShadowGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.15)');
+    smallPlazaShadowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    cacheCtx.fillStyle = smallPlazaShadowGradient;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY + smallPlazaDepth + 2 * p, smallPlazaRadius * 1.2, 0, Math.PI * 2);
+    cacheCtx.fill();
+    
+    // === 3D SMALL PLAZA BASE (bottom layer) ===
+    const smallPlazaBaseGradient = cacheCtx.createRadialGradient(smallPlazaCenterX, smallPlazaCenterY, 0, smallPlazaCenterX, smallPlazaCenterY, smallPlazaRadius);
+    smallPlazaBaseGradient.addColorStop(0, '#b0b0b0');
+    smallPlazaBaseGradient.addColorStop(0.7, '#c0c0c0');
+    smallPlazaBaseGradient.addColorStop(1, '#a0a0a0');
+    cacheCtx.fillStyle = smallPlazaBaseGradient;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY + smallPlazaDepth, smallPlazaRadius + 10 * p, 0, Math.PI * 2); // Slightly larger to ensure coverage
+    cacheCtx.fill();
+    
+    // Base edge highlight
+    cacheCtx.strokeStyle = '#a0a0a0';
+    cacheCtx.lineWidth = 2 * p;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY + smallPlazaDepth, smallPlazaRadius + 10 * p, 0, Math.PI * 2);
+    cacheCtx.stroke();
+    
+    // === 3D PLAZA SIDES (vertical depth) ===
+    // Draw side segments to create 3D cylinder effect
+    const smallPlazaSideGradient = cacheCtx.createLinearGradient(smallPlazaCenterX, smallPlazaCenterY, smallPlazaCenterX, smallPlazaCenterY + smallPlazaDepth);
+    smallPlazaSideGradient.addColorStop(0, '#c0c0c0');
+    smallPlazaSideGradient.addColorStop(1, '#a0a0a0');
+    cacheCtx.fillStyle = smallPlazaSideGradient;
+    
+    for (let i = 0; i < 32; i++) {
+      const angle1 = (i / 32) * Math.PI * 2;
+      const angle2 = ((i + 1) / 32) * Math.PI * 2;
+      const x1 = smallPlazaCenterX + Math.cos(angle1) * (smallPlazaRadius + 10 * p);
+      const y1 = smallPlazaCenterY + Math.sin(angle1) * (smallPlazaRadius + 10 * p);
+      const x2 = smallPlazaCenterX + Math.cos(angle2) * (smallPlazaRadius + 10 * p);
+      const y2 = smallPlazaCenterY + Math.sin(angle2) * (smallPlazaRadius + 10 * p);
+      
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(x1, y1);
+      cacheCtx.lineTo(x1, y1 + smallPlazaDepth);
+      cacheCtx.lineTo(x2, y2 + smallPlazaDepth);
+      cacheCtx.lineTo(x2, y2);
+      cacheCtx.closePath();
+      cacheCtx.fill();
+    }
+    
+    // === SMALL PLAZA TOP (light grey surface) ===
+    const smallPlazaTopGradient = cacheCtx.createRadialGradient(smallPlazaCenterX, smallPlazaCenterY, 0, smallPlazaCenterX, smallPlazaCenterY, smallPlazaRadius);
+    smallPlazaTopGradient.addColorStop(0, '#e8e8e8');
+    smallPlazaTopGradient.addColorStop(0.7, '#e0e0e0');
+    smallPlazaTopGradient.addColorStop(1, '#d0d0d0');
+    cacheCtx.fillStyle = smallPlazaTopGradient;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY, smallPlazaRadius, 0, Math.PI * 2);
+    cacheCtx.fill();
+    
+    // Top edge highlight (3D effect)
+    cacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    cacheCtx.lineWidth = 1.5 * p;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY - 1 * p, smallPlazaRadius - 1 * p, 0, Math.PI * 2);
+    cacheCtx.stroke();
+    
+    // Small plaza edge highlight (light grey ring)
+    cacheCtx.strokeStyle = '#d0d0d0';
+    cacheCtx.lineWidth = 3 * p;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY, smallPlazaRadius, 0, Math.PI * 2);
+    cacheCtx.stroke();
+    
+    // Inner decorative ring on small plaza (light grey)
+    cacheCtx.strokeStyle = '#c0c0c0';
+    cacheCtx.lineWidth = 2 * p;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY, smallPlazaRadius - 15 * p, 0, Math.PI * 2);
+    cacheCtx.stroke();
+  }
+  
+  // === CENTRAL CIRCLE WITH RETURN PORTAL (light grey with 3D depth) ===
+  // Draw AFTER paths so it overlaps and hides path edges
+  // portalCircleRadius already defined above (before paths section)
+  const portalRingRadius = 80 * p; // Ring around the center portal
+  const portalRingWidth = 6 * p;
+  const circleDepth = 8 * p; // 3D depth height
+  const overlapRadius = portalCircleRadius + 8 * p; // Extend slightly to overlap path edges
+  
+  // Shadow beneath central circle (for floating effect)
+  const shadowGradient = cacheCtx.createRadialGradient(offsetX, offsetY + circleDepth + 2 * p, 0, offsetX, offsetY + circleDepth + 2 * p, overlapRadius * 1.2);
+  shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
+  shadowGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.15)');
+  shadowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  cacheCtx.fillStyle = shadowGradient;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY + circleDepth + 2 * p, overlapRadius * 1.2, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // === 3D CENTRAL CIRCLE BASE (bottom layer) ===
+  const baseGradient = cacheCtx.createRadialGradient(offsetX, offsetY, 0, offsetX, offsetY, overlapRadius);
+  baseGradient.addColorStop(0, '#b0b0b0');
+  baseGradient.addColorStop(0.7, '#c0c0c0');
+  baseGradient.addColorStop(1, '#a0a0a0');
+  cacheCtx.fillStyle = baseGradient;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY + circleDepth, overlapRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Base edge highlight
+  cacheCtx.strokeStyle = '#a0a0a0';
+  cacheCtx.lineWidth = 2 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY + circleDepth, overlapRadius, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // === 3D CIRCLE SIDES (vertical depth) ===
+  // Draw side segments to create 3D cylinder effect
+  const sideGradient = cacheCtx.createLinearGradient(offsetX, offsetY, offsetX, offsetY + circleDepth);
+  sideGradient.addColorStop(0, '#c0c0c0');
+  sideGradient.addColorStop(1, '#a0a0a0');
+  cacheCtx.fillStyle = sideGradient;
+  
+  for (let i = 0; i < 32; i++) {
+    const angle1 = (i / 32) * Math.PI * 2;
+    const angle2 = ((i + 1) / 32) * Math.PI * 2;
+    const x1 = offsetX + Math.cos(angle1) * overlapRadius;
+    const y1 = offsetY + Math.sin(angle1) * overlapRadius;
+    const x2 = offsetX + Math.cos(angle2) * overlapRadius;
+    const y2 = offsetY + Math.sin(angle2) * overlapRadius;
+    
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(x1, y1);
+    cacheCtx.lineTo(x1, y1 + circleDepth);
+    cacheCtx.lineTo(x2, y2 + circleDepth);
+    cacheCtx.lineTo(x2, y2);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+  }
+  
+  // === CIRCLE TOP (light grey surface) - extends to overlap paths ===
+  const topGradient = cacheCtx.createRadialGradient(offsetX, offsetY, 0, offsetX, offsetY, overlapRadius);
+  topGradient.addColorStop(0, '#e8e8e8');
+  topGradient.addColorStop(0.7, '#e0e0e0');
+  topGradient.addColorStop(1, '#d0d0d0');
+  cacheCtx.fillStyle = topGradient;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, overlapRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Top edge highlight (3D effect)
+  cacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+  cacheCtx.lineWidth = 1.5 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY - 1 * p, overlapRadius - 1 * p, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // Inner border for depth
+  cacheCtx.strokeStyle = '#b0b0b0';
+  cacheCtx.lineWidth = 1 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, portalCircleRadius - 2 * p, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // === RING AROUND RETURN PORTAL (with 3D depth) ===
+  const ringDepth = 4 * p;
+  
+  // Ring base (bottom)
+  cacheCtx.fillStyle = '#b0b0b0';
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY + ringDepth, portalRingRadius, 0, Math.PI * 2);
+  cacheCtx.fill();
+  
+  // Ring sides (3D depth)
+  for (let i = 0; i < 32; i++) {
+    const angle1 = (i / 32) * Math.PI * 2;
+    const angle2 = ((i + 1) / 32) * Math.PI * 2;
+    const x1 = offsetX + Math.cos(angle1) * portalRingRadius;
+    const y1 = offsetY + Math.sin(angle1) * portalRingRadius;
+    const x2 = offsetX + Math.cos(angle2) * portalRingRadius;
+    const y2 = offsetY + Math.sin(angle2) * portalRingRadius;
+    
+    cacheCtx.fillStyle = '#c0c0c0';
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(x1, y1);
+    cacheCtx.lineTo(x1, y1 + ringDepth);
+    cacheCtx.lineTo(x2, y2 + ringDepth);
+    cacheCtx.lineTo(x2, y2);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+  }
+  
+  // Ring top (light grey)
+  cacheCtx.strokeStyle = '#d0d0d0';
+  cacheCtx.lineWidth = portalRingWidth + 2 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, portalRingRadius, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // Ring top highlight
+  cacheCtx.strokeStyle = '#e0e0e0';
+  cacheCtx.lineWidth = portalRingWidth;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, portalRingRadius, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  // Ring inner glow
+  cacheCtx.strokeStyle = '#c0c0c0';
+  cacheCtx.lineWidth = 2 * p;
+  cacheCtx.beginPath();
+  cacheCtx.arc(offsetX, offsetY, portalRingRadius - portalRingWidth / 2, 0, Math.PI * 2);
+  cacheCtx.stroke();
+  
+  casinoPathsCacheInitialized = true;
+}
+
 // Draw slot machines on casino map (N/S/E/W near plaza edge)
 export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, hoveredSlotMachineId?: string | null): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
-  const plazaRadius = 300 * p;
+  const plazaRadius = 600 * p; // Doubled from 300 to 600 for more space
   
   // Position 4 slot machines at cardinal directions near plaza edge
   // Place them at 85% of plaza radius to be near the edge
@@ -8218,8 +9366,9 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     { angle: 3 * Math.PI / 2, id: 'slot_machine_west', name: 'Orb Victory' } // West
   ];
   
-  // Build static cache if needed
+  // Build static caches if needed
   buildSlotMachineCache();
+  buildCasinoPathsCache();
   
   // Clear previous positions
   slotMachinePositions.clear();
@@ -8231,6 +9380,192 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
   // Update dealer speech bubbles (including slot heralds)
   updateDealerSpeechBubbles(time);
   
+  // Draw cached static paths and small plazas
+  if (casinoPathsCache) {
+    const cacheSize = plazaRadius * 3;
+    const offsetX = centerX - cacheSize / 2;
+    const offsetY = centerY - cacheSize / 2;
+    ctx.drawImage(casinoPathsCache, offsetX, offsetY);
+  }
+  
+  // Draw animated lights along paths (dynamic, not cached) - on edges with mounts
+  const portalCircleRadius = 100 * p; // Match the central circle radius (same as in cache)
+  const pathStartRadius = portalCircleRadius; // Start path at the edge of the central circle
+  const pathLength = slotMachineDistance - pathStartRadius;
+  const lightSpacing = 50 * p; // Distance between lights
+  const lightCount = Math.floor(pathLength / lightSpacing);
+  const pathWidth = 48 * p; // Match the cached path width
+  
+  for (const dir of directions) {
+    const theme = SLOT_MACHINE_THEMES[dir.id];
+    if (!theme) continue;
+    
+    // Parse theme color to RGB
+    const parseColor = (color: string) => {
+      const hex = color.replace('#', '');
+      return {
+        r: parseInt(hex.substring(0, 2), 16),
+        g: parseInt(hex.substring(2, 4), 16),
+        b: parseInt(hex.substring(4, 6), 16)
+      };
+    };
+    const themeRgb = parseColor(theme.primary);
+    
+    // Build cache if needed
+    buildPathLightMountCache();
+    
+    // Draw animated lights on edges of the path with mounts
+    for (let i = 0; i < lightCount; i++) {
+      const lightDistance = pathStartRadius + (i * lightSpacing);
+      const pathCenterX = centerX + Math.cos(dir.angle) * lightDistance;
+      const pathCenterY = centerY + Math.sin(dir.angle) * lightDistance;
+      
+      // Calculate positions for lights on both edges (perpendicular to path)
+      const perpAngle = dir.angle + Math.PI / 2; // Perpendicular angle
+      const edgeOffset = pathWidth / 2 + 6 * p; // Position lights just outside path edge
+      
+      // Top edge light position
+      const topLightX = pathCenterX + Math.cos(perpAngle) * edgeOffset;
+      const topLightY = pathCenterY + Math.sin(perpAngle) * edgeOffset;
+      
+      // Bottom edge light position
+      const bottomLightX = pathCenterX - Math.cos(perpAngle) * edgeOffset;
+      const bottomLightY = pathCenterY - Math.sin(perpAngle) * edgeOffset;
+      
+      // Animated pulse effect
+      const pulsePhase = (time * 0.003 + i * 0.2) % (Math.PI * 2);
+      const pulse = Math.sin(pulsePhase) * 0.3 + 0.7; // Pulse between 0.4 and 1.0
+      
+      // Draw lights on both edges
+      for (const [lightX, lightY] of [[topLightX, topLightY], [bottomLightX, bottomLightY]]) {
+        const stemHeight = 8 * p;
+        const mountBaseHeight = 2 * p;
+        
+        // Draw cached mount/stem structure
+        if (pathLightMountCache) {
+          const cacheWidth = pathLightMountCache.width;
+          const cacheHeight = pathLightMountCache.height;
+          const offsetX = lightX - cacheWidth / 2;
+          const offsetY = lightY - cacheHeight + 1 * p; // Align bottom of cache with path
+          ctx.drawImage(pathLightMountCache, offsetX, offsetY);
+        }
+        
+        // Light position (at top of stem)
+        const lightYPos = lightY + mountBaseHeight - stemHeight;
+        
+        // Light glow
+        const lightRadius = 4 * p;
+        const glowGradient = ctx.createRadialGradient(lightX, lightYPos, 0, lightX, lightYPos, lightRadius * 3);
+        glowGradient.addColorStop(0, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.8 * pulse})`);
+        glowGradient.addColorStop(0.5, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.4 * pulse})`);
+        glowGradient.addColorStop(1, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, 0)`);
+        ctx.fillStyle = glowGradient;
+        ctx.beginPath();
+        ctx.arc(lightX, lightYPos, lightRadius * 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Light core
+        ctx.fillStyle = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${pulse})`;
+        ctx.beginPath();
+        ctx.arc(lightX, lightYPos, lightRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Light highlight
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 * pulse})`;
+        ctx.beginPath();
+        ctx.arc(lightX - 1 * p, lightYPos - 1 * p, lightRadius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    // === PULSING COLORED LINE DOWN PATH CENTER ===
+    // Draw a pulsing colored line from center plaza to slot machine
+    ctx.save();
+    
+    // Calculate path center line coordinates
+    const pathStartX = centerX + Math.cos(dir.angle) * pathStartRadius;
+    const pathStartY = centerY + Math.sin(dir.angle) * pathStartRadius;
+    const pathEndX = centerX + Math.cos(dir.angle) * slotMachineDistance;
+    const pathEndY = centerY + Math.sin(dir.angle) * slotMachineDistance;
+    
+    // Animation parameters for pulsing line
+    // Optimized: Larger segments and fewer calculations
+    const lineSpeed = 0.002; // Speed of pulse movement
+    const lineSegmentLength = 60 * p; // Increased from 50 to 60 for even fewer segments
+    const lineWidth = 4 * p; // Width of the line
+    const totalPathLength = pathLength;
+    const segmentCount = Math.ceil(totalPathLength / lineSegmentLength);
+    
+    // Pre-calculate direction cos/sin for performance (reuse from above)
+    const dirCos = Math.cos(dir.angle);
+    const dirSin = Math.sin(dir.angle);
+    
+    // Pre-calculate segment positions to reduce calculations
+    const segmentPositions: Array<{ startX: number; startY: number; endX: number; endY: number; progress: number }> = [];
+    for (let seg = 0; seg < segmentCount; seg++) {
+      const segmentProgress = seg / segmentCount;
+      const segmentDistance = segmentProgress * totalPathLength;
+      segmentPositions.push({
+        startX: pathStartX + dirCos * segmentDistance,
+        startY: pathStartY + dirSin * segmentDistance,
+        endX: pathStartX + dirCos * (segmentDistance + lineSegmentLength),
+        endY: pathStartY + dirSin * (segmentDistance + lineSegmentLength),
+        progress: segmentProgress
+      });
+    }
+    
+    // Use already parsed theme color (themeRgb was parsed above in the lights loop)
+    
+    // Draw pulsing line segments with trail effect (optimized - batch calculations)
+    ctx.lineCap = 'round';
+    for (const seg of segmentPositions) {
+      // Pulse animation - wave moving OUTWARD from center (towards slot machine)
+      const pulsePhase = (time * lineSpeed - seg.progress * 2) % (Math.PI * 2);
+      const sinPulse = Math.sin(pulsePhase);
+      const pulse = sinPulse * 0.4 + 0.6; // Pulse between 0.2 and 1.0
+      
+      // Only draw if pulse is visible (optimization - skip very dim segments)
+      if (pulse < 0.25) continue;
+      
+      // Fade trail effect - segments further from pulse have lower alpha
+      const distanceFromPulse = Math.abs(sinPulse);
+      const alpha = pulse * (1 - distanceFromPulse * 0.5);
+      
+      // Draw line segment (optimized - combine glow and main stroke)
+      const shouldGlow = pulse > 0.7;
+      ctx.strokeStyle = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${alpha})`;
+      ctx.lineWidth = lineWidth * pulse;
+      
+      if (shouldGlow) {
+        ctx.shadowBlur = 6 * p * pulse;
+        ctx.shadowColor = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${alpha * 0.6})`;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(seg.startX, seg.startY);
+      ctx.lineTo(seg.endX, seg.endY);
+      ctx.stroke();
+      
+      // Bright highlight for leading edge of pulse (only when very bright)
+      if (pulse > 0.95) {
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+        ctx.lineWidth = lineWidth * 0.5;
+        ctx.shadowBlur = 8 * p;
+        ctx.beginPath();
+        ctx.moveTo(seg.startX, seg.startY);
+        ctx.lineTo(seg.endX, seg.endY);
+        ctx.stroke();
+      }
+      
+      ctx.shadowBlur = 0;
+    }
+    
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+  
   // Draw cached static slot machines
   if (slotMachineCache) {
     const cacheSize = plazaRadius * 2.5;
@@ -8239,29 +9574,96 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     ctx.drawImage(slotMachineCache, offsetX, offsetY);
   }
   
-  // Draw 8 seats around each slot machine
+  // Draw 8 podiums around each slot machine
   for (const dir of directions) {
     const slotX = centerX + Math.cos(dir.angle) * slotMachineDistance;
     const slotY = centerY + Math.sin(dir.angle) * slotMachineDistance;
-    const seatRadius = 80 * p; // Distance from machine center
+    const seatRadius = 38 * p; // Distance from machine center (immediately around machine)
+    const theme = SLOT_MACHINE_THEMES[dir.id];
+    
+    // Parse theme colors to RGB for glow effect
+    const parseColor = (color: string) => {
+      const hex = color.replace('#', '');
+      return {
+        r: parseInt(hex.substring(0, 2), 16),
+        g: parseInt(hex.substring(2, 4), 16),
+        b: parseInt(hex.substring(4, 6), 16)
+      };
+    };
+    const themeRgb = parseColor(theme.primary);
+    const themeSecondaryRgb = parseColor(theme.secondary);
     
     for (let seat = 0; seat < 8; seat++) {
       const seatAngle = (seat / 8) * Math.PI * 2; // Evenly spaced around circle
       const seatX = slotX + Math.cos(seatAngle) * seatRadius;
       const seatY = slotY + Math.sin(seatAngle) * seatRadius;
       
-      // Draw seat (small circle)
       ctx.save();
-      ctx.fillStyle = '#2a2a2a';
+      
+      // Animated glow intensity (subtle pulsing)
+      const glowPulse = 0.6 + Math.sin(time * 0.002 + seat * 0.5) * 0.2;
+      
+      // Draw glow/flow effect beneath podium (themed color)
+      const glowRadius = 12 * p;
+      const glowGradient = ctx.createRadialGradient(seatX, seatY, 0, seatX, seatY, glowRadius);
+      glowGradient.addColorStop(0, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.4 * glowPulse})`);
+      glowGradient.addColorStop(0.5, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.2 * glowPulse})`);
+      glowGradient.addColorStop(1, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, 0)`);
+      ctx.fillStyle = glowGradient;
       ctx.beginPath();
-      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.arc(seatX, seatY, glowRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      ctx.strokeStyle = '#4a4a4a';
-      ctx.lineWidth = 1 * p;
+      // Build cache if needed
+      buildSeatPodiumCache();
+      
+      // Draw cached podium structure
+      if (seatPodiumCache) {
+        const cacheSize = seatPodiumCache.width;
+        const offsetX = seatX - cacheSize / 2;
+        const offsetY = seatY - cacheSize / 2;
+        ctx.drawImage(seatPodiumCache, offsetX, offsetY);
+      }
+      
+      // Apply theme tint overlay for slot seats
+      const podiumBaseRadius = 10 * p;
+      const podiumTopRadius = 7 * p;
+      const topY = seatY;
+      
+      // Theme tint on base
+      const baseTint = ctx.createRadialGradient(seatX, seatY + 8 * p, 0, seatX, seatY + 8 * p, podiumBaseRadius);
+      baseTint.addColorStop(0, `rgba(${Math.min(255, themeRgb.r + 20)}, ${Math.min(255, themeRgb.g + 20)}, ${Math.min(255, themeRgb.b + 20)}, 0.3)`);
+      baseTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = baseTint;
       ctx.beginPath();
-      ctx.arc(seatX, seatY, 8 * p, 0, Math.PI * 2);
+      ctx.arc(seatX, seatY + 8 * p, podiumBaseRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Theme tint on top
+      const topTint = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
+      topTint.addColorStop(0, `rgba(${Math.min(255, themeRgb.r + 40)}, ${Math.min(255, themeRgb.g + 40)}, ${Math.min(255, themeRgb.b + 40)}, 0.4)`);
+      topTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = topTint;
+      ctx.beginPath();
+      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Top highlight (themed accent)
+      ctx.strokeStyle = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.6 * glowPulse})`;
+      ctx.lineWidth = 1.5 * p;
+      ctx.beginPath();
+      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
       ctx.stroke();
+      
+      // Subtle theme glow on top surface
+      const topGlow = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
+      topGlow.addColorStop(0, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.2 * glowPulse})`);
+      topGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = topGlow;
+      ctx.beginPath();
+      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
       ctx.restore();
     }
   }
@@ -8408,28 +9810,20 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     ctx.fillStyle = slotShimmerGradient;
     ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
     
-    // Draw slot herald NPC next to the machine
-    // Draw heralds (they wander, so get position from updateHeralds)
-    const herald = SLOT_HERALDS.find(h => h.slotMachineId === dir.id);
-    if (herald) {
-      const heraldNPC = heraldNPCs.find(h => h.id === herald.id);
-      if (heraldNPC) {
-        // Create herald dealer type
-        const heraldDealerType: DealerType = {
-          id: herald.id,
-          name: herald.name,
-          outfit: herald.outfit,
-          messages: herald.messages
-        };
-        
-        // Draw herald NPC at their current wandering position
-        // drawSingleDealer expects scaled coordinates (it divides by SCALE internally)
-        const heraldX = heraldNPC.x * SCALE;
-        const heraldY = heraldNPC.y * SCALE;
-        // Pass the herald's current direction so they face the way they're walking
-        drawSingleDealer(ctx, heraldDealerType, heraldX, heraldY, time, false, heraldNPC.direction);
-      }
-    }
+    // Name label (halfway up the light beam)
+    const nameLabelY = beamStartY - beamHeight / 2; // Position halfway up the beam
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.font = `bold ${8 * p}px "Press Start 2P", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(dir.name, slotX + 1 * p, nameLabelY + 1 * p); // Shadow offset
+    ctx.fillStyle = theme.primary;
+    ctx.shadowBlur = 4 * p;
+    ctx.shadowColor = theme.glow;
+    ctx.fillText(dir.name, slotX, nameLabelY);
+    ctx.shadowBlur = 0;
+    
+    // Heralds are drawn separately on podiums between blackjack tables (not here)
     
     ctx.restore();
   }
@@ -8755,7 +10149,12 @@ export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType,
     
     try {
       // Draw base background first (in case functions don't fill the whole canvas)
-      cacheCtx.fillStyle = '#1a1a1a';
+      // For casino, use dark grey; for others use default
+      if (map === 'casino') {
+        cacheCtx.fillStyle = '#0a0a0a';
+      } else {
+        cacheCtx.fillStyle = '#1a1a1a';
+      }
       cacheCtx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
       
       switch (map) {
@@ -10123,7 +11522,13 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
   const dx = x - anim.lastX;
   const dy = y - anim.lastY;
   const distance = Math.sqrt(dx * dx + dy * dy);
-  const isMoving = distance > 0.02;
+  
+  // Force stationary for dealers (they should never move)
+  const isDealer = playerId.startsWith('orb_dealer') || playerId.startsWith('loot_box_dealer') || 
+                   playerId.startsWith('blackjack_dealer') || playerId.startsWith('slot_herald') ||
+                   playerId.startsWith('log_dealer') || playerId.startsWith('treasure_chest_dealer');
+  
+  const isMoving = isDealer ? false : (distance > 0.02);
   
   if (isMoving) {
     // Player is moving
@@ -10515,6 +11920,10 @@ function getShirtColor(outfit: string[]): string {
   if (outfit.includes('shirt_tuxedo')) return '#1a1a2e';
   if (outfit.includes('robe_wizard')) return '#8e44ad';
   if (outfit.includes('robe_dark')) return '#1a1a1a';
+  if (outfit.includes('robe_druid_gold')) return '#fbbf24';
+  if (outfit.includes('robe_druid_purple')) return '#8b5cf6';
+  if (outfit.includes('robe_druid_blue')) return '#3b82f6';
+  if (outfit.includes('robe_druid_green')) return '#10b981';
   if (outfit.includes('dress_princess')) return '#ff69b4';
   if (outfit.includes('robe_angel')) return '#ffefd5';
   if (outfit.includes('armor_knight')) return '#7f8c8d';
@@ -10721,6 +12130,22 @@ function drawShirt(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX:
     ctx.fillRect(bodyX + bodyW / 2 - p, bodyY, 2 * p, bodyH);
     ctx.fillStyle = '#e74c3c';
     ctx.fillRect(bodyX + bodyW / 2 - p, bodyY + p, 2 * p, 2 * p);
+  } else if (style === 'robe_druid_gold' || style === 'robe_druid_purple' || 
+             style === 'robe_druid_blue' || style === 'robe_druid_green') {
+    // Druid robe: similar to wizard but with natural/flowing look
+    // Draw sleeves
+    ctx.fillRect(bodyX - 3 * p, bodyY + 2 * p, 3 * p, 5 * p);
+    ctx.fillRect(bodyX + bodyW, bodyY + 2 * p, 3 * p, 5 * p);
+    // Draw hood/flowing top
+    ctx.fillStyle = color;
+    ctx.fillRect(bodyX - 2 * p, bodyY - 2 * p, bodyW + 4 * p, 4 * p);
+    // Natural texture pattern (subtle)
+    ctx.fillStyle = `rgba(0,0,0,0.1)`;
+    ctx.fillRect(bodyX + 2 * p, bodyY + 3 * p, bodyW - 4 * p, 1 * p);
+    ctx.fillRect(bodyX + 2 * p, bodyY + 5 * p, bodyW - 4 * p, 1 * p);
+    // Robes have longer bottom
+    ctx.fillStyle = color;
+    ctx.fillRect(bodyX - p, bodyY + bodyH - p, bodyW + 2 * p, 3 * p);
   } else if (style.startsWith('robe_')) {
     // Robes have longer bottom
     ctx.fillRect(bodyX - p, bodyY + bodyH - p, bodyW + 2 * p, 3 * p);
@@ -10921,6 +12346,11 @@ function getLegColor(outfit: string[]): string {
       case 'legs_celestial': return '#e8e8ff';
       case 'legs_galaxy': return '#1a0a3e';
       case 'legs_rainbow': return '#ff6b6b';
+      // Druid legs (theme-colored)
+      case 'legs_druid_gold': return '#f59e0b';
+      case 'legs_druid_purple': return '#7c3aed';
+      case 'legs_druid_blue': return '#2563eb';
+      case 'legs_druid_green': return '#059669';
       // Godlike legs
       case 'legs_godlike_void': return '#2d0a4e';
       case 'legs_godlike_chaos': return '#4a0000';
@@ -13220,6 +14650,79 @@ function drawFaceAccessories(ctx: CanvasRenderingContext2D, player: PlayerWithCh
     clearGlow(ctx);
   }
   
+  // Theme-colored electronic visors for druid heralds
+  if (outfit.includes('acc_visor_gold')) {
+    applyAccGlow('acc_visor_gold');
+    ctx.fillStyle = '#fbbf24';
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, 4 * p);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, p);
+    ctx.fillRect(headX - 2 * p, headY + 6 * p, headW + 4 * p, p);
+    // Electronic glow effect
+    ctx.fillStyle = '#ffd700';
+    ctx.globalAlpha = 0.6;
+    ctx.fillRect(headX + 2 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.fillRect(headX + headW - 4 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.globalAlpha = 1;
+    clearGlow(ctx);
+  }
+  
+  if (outfit.includes('acc_visor_purple')) {
+    applyAccGlow('acc_visor_purple');
+    ctx.fillStyle = '#8b5cf6';
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, 4 * p);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#7c3aed';
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, p);
+    ctx.fillRect(headX - 2 * p, headY + 6 * p, headW + 4 * p, p);
+    // Electronic glow effect
+    ctx.fillStyle = '#a78bfa';
+    ctx.globalAlpha = 0.6;
+    ctx.fillRect(headX + 2 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.fillRect(headX + headW - 4 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.globalAlpha = 1;
+    clearGlow(ctx);
+  }
+  
+  if (outfit.includes('acc_visor_blue')) {
+    applyAccGlow('acc_visor_blue');
+    ctx.fillStyle = '#3b82f6';
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, 4 * p);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, p);
+    ctx.fillRect(headX - 2 * p, headY + 6 * p, headW + 4 * p, p);
+    // Electronic glow effect
+    ctx.fillStyle = '#60a5fa';
+    ctx.globalAlpha = 0.6;
+    ctx.fillRect(headX + 2 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.fillRect(headX + headW - 4 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.globalAlpha = 1;
+    clearGlow(ctx);
+  }
+  
+  if (outfit.includes('acc_visor_green')) {
+    applyAccGlow('acc_visor_green');
+    ctx.fillStyle = '#10b981';
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, 4 * p);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#059669';
+    ctx.fillRect(headX - 2 * p, headY + 3 * p, headW + 4 * p, p);
+    ctx.fillRect(headX - 2 * p, headY + 6 * p, headW + 4 * p, p);
+    // Electronic glow effect
+    ctx.fillStyle = '#34d399';
+    ctx.globalAlpha = 0.6;
+    ctx.fillRect(headX + 2 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.fillRect(headX + headW - 4 * p, headY + 4 * p, 2 * p, 2 * p);
+    ctx.globalAlpha = 1;
+    clearGlow(ctx);
+  }
+  
   // Neck accessories
   if (outfit.includes('acc_scarf')) {
     applyAccGlow('acc_scarf');
@@ -13523,7 +15026,7 @@ function getRainbowColor(time: number): string {
   return `hsl(${hue}, 100%, 60%)`;
 }
 
-export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, orbs: number = 0, zoom: number = 1, playerId?: string, time: number = Date.now()): void {
+export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, orbs: number = 0, zoom: number = 1, playerId?: string, time: number = Date.now(), nameColor?: string): void {
   // Scale font size and dimensions inversely to zoom (bigger when zoomed out, smaller when zoomed in)
   const baseFontSize = 10;
   const fontSize = baseFontSize / zoom;
@@ -13675,7 +15178,7 @@ export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: numb
   // Check if this is YON - apply rainbow animated color
   const isYON = name === 'YON';
   
-  // Use orb color for player names (NPCs use white)
+  // Use orb color for player names (NPCs use white, unless nameColor is provided)
   const isNPC = playerId && (playerId.startsWith('villager_') || playerId.startsWith('centurion_') || playerId.startsWith('npc_'));
   if (isYON) {
     // Rainbow animated color for YON
@@ -13683,6 +15186,11 @@ export function drawNameTag(ctx: CanvasRenderingContext2D, name: string, x: numb
     ctx.fillStyle = rainbowColor;
     ctx.shadowColor = rainbowColor;
     ctx.shadowBlur = 8 / zoom; // Glowing rainbow effect
+  } else if (nameColor) {
+    // Use provided name color (for heralds with slot machine theme colors)
+    ctx.fillStyle = nameColor;
+    ctx.shadowColor = nameColor;
+    ctx.shadowBlur = 4 / zoom; // Add glow effect
   } else if (isNPC || isInfinity) {
     ctx.fillStyle = '#ffffff'; // NPCs and game NPCs use white
   } else {

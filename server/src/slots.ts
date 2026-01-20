@@ -93,12 +93,13 @@ export function leaveSlotMachine(slotMachineId: string, playerId: string): { suc
   return { success: true };
 }
 
-// Symbol weights for probability
+// Symbol weights for probability (based on user testing)
+// Common: 50%, Uncommon: 20%, Rare: 10%, Epic: 8%, Legendary: 6%, Godlike: 3%, Orb: 1%
 const SYMBOL_WEIGHTS: Record<SlotSymbol, number> = {
-  common: 40,
-  uncommon: 25,
-  rare: 15,
-  epic: 10,
+  common: 50,
+  uncommon: 20,
+  rare: 10,
+  epic: 8,
   legendary: 6,
   godlike: 3,
   orb: 1
@@ -106,7 +107,8 @@ const SYMBOL_WEIGHTS: Record<SlotSymbol, number> = {
 
 const TOTAL_WEIGHT = Object.values(SYMBOL_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
 
-// Payout multipliers
+// Payout multipliers (adjusted based on user testing - common odds increased to 50%, so payouts reduced)
+// Payouts are multipliers of bet amount
 const PAYOUTS: Record<string, number> = {
   '5_orb': 1000,
   '5_godlike': 500,
@@ -114,21 +116,21 @@ const PAYOUTS: Record<string, number> = {
   '5_epic': 100,
   '5_rare': 50,
   '5_uncommon': 20,
-  '5_common': 10,
+  '5_common': 5, // 5 commons: 25k (bet 5k = 25k, bet 25k = 125k) - reduced since odds increased
   '4_orb': 200,
   '4_godlike': 100,
   '4_legendary': 50,
   '4_epic': 25,
   '4_rare': 15,
   '4_uncommon': 8,
-  '4_common': 5,
+  '4_common': 3, // 4 commons: 15k (bet 5k = 15k, bet 25k = 75k) - reduced from 5x
   '3_orb': 50,
   '3_godlike': 25,
   '3_legendary': 10,
   '3_epic': 5,
   '3_rare': 3,
   '3_uncommon': 2,
-  '3_common': 1.5,
+  '3_common': 0.5, // 3 commons: 2.5k (bet 5k = 2.5k, bet 25k = 12.5k) - lose half bet since odds increased
 };
 
 // Generate a random symbol based on weights
