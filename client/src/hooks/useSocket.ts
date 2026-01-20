@@ -342,11 +342,17 @@ function attachListeners(sock: Socket) {
         const dy = Math.abs(y - localPlayer.y);
         const distance = Math.sqrt(dx * dx + dy * dy);
         // If position change is significant (>50 pixels), it's likely a special teleport (e.g., blackjack table)
-        // Otherwise, ignore it to prevent feedback loops from normal movement
-        if (distance > 50) {
-          state.setLocalPlayerPosition(x, y, direction);
-          // Update animation state position to match server position without resetting
+        // OR if the distance is moderate (20-50 pixels), it might be a server correction due to desync
+        // Update animation state to prevent jump detection in both cases
+        if (distance > 20) {
+          // For large changes (>50), update position (teleportation)
+          // For moderate changes (20-50), update animation state but don't update position to prevent feedback loop
+          if (distance > 50) {
+            state.setLocalPlayerPosition(x, y, direction);
+          }
+          // Always update animation state position to match server position without resetting
           // This prevents jump detection and back-and-forth teleportation with speed boosts
+          // This is especially important for players with network latency or frame rate issues
           import('../game/renderer').then(({ updatePlayerAnimationPosition }) => {
             updatePlayerAnimationPosition(playerId, x, y);
           });

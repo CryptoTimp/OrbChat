@@ -11489,8 +11489,10 @@ export function updatePlayerAnimationPosition(playerId: string, x: number, y: nu
   if (anim) {
     // Update position tracking to match server position
     // This prevents jump detection when server corrects position
+    // Also reset distanceTraveled to prevent animation frame skipping after position correction
     anim.lastX = x;
     anim.lastY = y;
+    anim.distanceTraveled = 0; // Reset to prevent animation glitches after position sync
   }
 }
 
