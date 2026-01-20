@@ -1,5 +1,7 @@
 import { PlayerWithChat, Orb, GAME_CONSTANTS, CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, MapType, ShopItem, ItemRarity, Direction, Shrine, TreasureChest } from '../types';
 import { Camera, worldToScreen, isVisible } from './Camera';
+import { instrumentFunction } from '../utils/functionProfiler';
+import { particleArrayPool, playerArrayPool } from '../utils/arrayPool';
 
 const { TILE_SIZE, SCALE, MAP_WIDTH, MAP_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ORB_SIZE } = GAME_CONSTANTS;
 
@@ -435,19 +437,24 @@ export function getHoveredPlayer(
 export function getCenturionPlayers(): PlayerWithChat[] {
   initializeCenturions();
   
-  return centurionNPCs.map(centurion => ({
-    id: centurion.id,
-    name: centurion.name,
-    x: centurion.x,
-    y: centurion.y,
-    direction: centurion.direction,
-    orbs: 0,
-    roomId: '',
-    sprite: {
-      body: 'default',
-      outfit: centurion.outfit,
-    },
-  }));
+  // Reuse array from pool to avoid allocation
+  const players: PlayerWithChat[] = [];
+  for (const centurion of centurionNPCs) {
+    players.push({
+      id: centurion.id,
+      name: centurion.name,
+      x: centurion.x,
+      y: centurion.y,
+      direction: centurion.direction,
+      orbs: 0,
+      roomId: '',
+      sprite: {
+        body: 'default',
+        outfit: centurion.outfit,
+      },
+    });
+  }
+  return players;
 }
 
 // Update wandering villagers (returns array of player objects to be drawn with other players)
@@ -1522,23 +1529,31 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
   }
   
   // Floor-spanning effect for godlike items (only spawns once if at least 1 godlike piece is equipped)
-  const hasGodlike = outfit.some(item => item.includes('godlike'));
-  if (hasGodlike && Math.random() < 0.08) { // Spawn rate for floor effect
-    // Determine which godlike set to use (void, chaos, or abyss)
-    let floorSet: 'void' | 'chaos' | 'abyss' = 'void';
-    let floorColors: string[] = ['#ffffff', '#4b0082', '#800080', '#000000'];
-    
-    // Check which set the player has
-    if (outfit.some(item => item.includes('godlike_chaos'))) {
-      floorSet = 'chaos';
-      floorColors = ['#00ffff', '#0080ff', '#00bfff', '#0066cc'];
-    } else if (outfit.some(item => item.includes('godlike_abyss'))) {
-      floorSet = 'abyss';
-      floorColors = ['#1a0033', '#4b0082', '#000000', '#6a0dad'];
-    } else if (outfit.some(item => item.includes('godlike_void'))) {
-      floorSet = 'void';
-      floorColors = ['#ffffff', '#4b0082', '#800080', '#000000'];
+  // Optimized: Manual loop instead of .some() to avoid array iteration overhead
+  let hasGodlike = false;
+  let floorSet: 'void' | 'chaos' | 'abyss' = 'void';
+  let floorColors: string[] = ['#ffffff', '#4b0082', '#800080', '#000000'];
+  
+  for (const item of outfit) {
+    if (item.includes('godlike')) {
+      hasGodlike = true;
+      if (item.includes('godlike_chaos')) {
+        floorSet = 'chaos';
+        floorColors = ['#00ffff', '#0080ff', '#00bfff', '#0066cc'];
+        break; // Found chaos, use it (highest priority)
+      } else if (item.includes('godlike_abyss') && floorSet !== 'chaos') {
+        floorSet = 'abyss';
+        floorColors = ['#1a0033', '#4b0082', '#000000', '#6a0dad'];
+        // Don't break, continue to check for chaos (chaos takes priority)
+      } else if (item.includes('godlike_void') && floorSet === 'void') {
+        floorSet = 'void';
+        floorColors = ['#ffffff', '#4b0082', '#800080', '#000000'];
+        // Don't break, continue to check for chaos/abyss (they take priority)
+      }
     }
+  }
+  
+  if (hasGodlike && Math.random() < 0.08) { // Spawn rate for floor effect
     
     // Spawn floor particles in a circle around the player
     const floorParticleCount = 12; // Particles spanning the floor
@@ -1567,12 +1582,23 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
   }
   
   // Limit particles per player (increased for godlike to allow beams to fully extend)
-  const godlikeCount = outfit.filter(item => item.includes('godlike')).length;
+  // Count godlike items without creating new array
+  let godlikeCount = 0;
+  for (const item of outfit) {
+    if (item.includes('godlike')) godlikeCount++;
+  }
   const maxParticles = godlikeCount > 0 ? 25 + (godlikeCount * 8) : 12; // Higher limit for godlike items
   if (particles.length > maxParticles) {
-    // Remove oldest non-beam particles first to preserve beams
-    const beamParticles = particles.filter(p => p.type === 'godlike_beam' || p.type === 'godlike_wing_beam' || p.type === 'godlike_hat_wisp');
-    const nonBeamParticles = particles.filter(p => p.type !== 'godlike_beam' && p.type !== 'godlike_wing_beam' && p.type !== 'godlike_hat_wisp');
+    // Remove oldest non-beam particles first to preserve beams (reuse arrays)
+    const beamParticles = particleArrayPool.acquire();
+    const nonBeamParticles = particleArrayPool.acquire();
+    for (const p of particles) {
+      if (p.type === 'godlike_beam' || p.type === 'godlike_wing_beam' || p.type === 'godlike_hat_wisp') {
+        beamParticles.push(p);
+      } else {
+        nonBeamParticles.push(p);
+      }
+    }
     
     // Keep all beam particles, remove oldest non-beam particles
     if (nonBeamParticles.length > maxParticles - beamParticles.length) {
@@ -1583,6 +1609,10 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
     // Reconstruct particles array with beams first, then non-beams
     particles.length = 0;
     particles.push(...beamParticles, ...nonBeamParticles);
+    
+    // Release temp arrays
+    particleArrayPool.release(beamParticles);
+    particleArrayPool.release(nonBeamParticles);
   }
 }
 
@@ -3509,15 +3539,16 @@ export function drawCasinoPlazaPulsingLines(ctx: CanvasRenderingContext2D, time:
   const lineWidth = 6 * p; // Width of each line
   const ringRadius = plazaRadius - 10 * p; // Position lines slightly inside the edge
   
-  // Pre-calculate theme colors once
-  const themeColors = slotThemes.map(theme => {
+  // Pre-calculate theme colors once (reuse array to avoid allocation)
+  const themeColors: Array<{ r: number; g: number; b: number }> = [];
+  for (const theme of slotThemes) {
     const hex = theme.primary.replace('#', '');
-    return {
+    themeColors.push({
       r: parseInt(hex.substring(0, 2), 16),
       g: parseInt(hex.substring(2, 4), 16),
       b: parseInt(hex.substring(4, 6), 16)
-    };
-  });
+    });
+  }
   
   ctx.save();
   
@@ -4726,7 +4757,15 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
   ];
   
   // Update NPC speech bubbles
-  updateNPCSpeechBubbles(stalls.filter(s => s.tab !== undefined) as Array<{ tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity; name: string }>, time);
+  // Filter stalls with tabs (reuse array to avoid allocation)
+  const stallsWithTabs = particleArrayPool.acquire();
+  for (const stall of stalls) {
+    if (stall.tab !== undefined) {
+      stallsWithTabs.push(stall as any);
+    }
+  }
+  updateNPCSpeechBubbles(stallsWithTabs as Array<{ tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity; name: string }>, time);
+  particleArrayPool.release(stallsWithTabs);
   
   for (const stall of stalls) {
     // Skip unassigned NPC (8th one)
@@ -7821,19 +7860,31 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
     const bubbles = blackjackDealerBubbles.get(dealerType.id) || [];
     const currentTime = Date.now();
     
-    // Remove expired bubbles
-    const activeBubbles = bubbles.filter(b => currentTime - b.createdAt < BLACKJACK_BUBBLE_DURATION);
+    // Remove expired bubbles (reuse array to avoid allocation)
+    const activeBubbles = particleArrayPool.acquire();
+    for (const b of bubbles) {
+      if (currentTime - b.createdAt < BLACKJACK_BUBBLE_DURATION) {
+        activeBubbles.push(b);
+      }
+    }
     if (activeBubbles.length !== bubbles.length) {
-      blackjackDealerBubbles.set(dealerType.id, activeBubbles);
+      bubbles.length = 0;
+      bubbles.push(...activeBubbles);
+      blackjackDealerBubbles.set(dealerType.id, bubbles);
     }
     
     // Draw stacked bubbles (newest on top)
     if (activeBubbles.length > 0) {
-      // Sort by creation time (oldest first) to ensure consistent drawing order
-      const sortedBubbles = [...activeBubbles].sort((a, b) => a.createdAt - b.createdAt);
+      // Sort by creation time (oldest first) - reuse array
+      const sortedBubbles = particleArrayPool.acquire();
+      sortedBubbles.push(...activeBubbles);
+      sortedBubbles.sort((a, b) => a.createdAt - b.createdAt);
       
       const bubbleSpacing = 30 / zoom; // Space between bubbles
       const baseY = nameplateY - 2 / zoom; // Start just above nameplate
+      
+      // Release sorted bubbles array after use
+      particleArrayPool.release(sortedBubbles);
       
       // Draw from oldest to newest (bottom to top)
       for (let i = 0; i < sortedBubbles.length; i++) {
@@ -7905,14 +7956,15 @@ export function getClickedDealer(worldX: number, worldY: number): string | null 
   
   // Find the closest dealer (in case multiple dealers share the same ID)
   // Prioritize blackjack dealers by checking them first
-  const blackjackDealers: Array<[string, { x: number; y: number }]> = [];
-  const otherDealers: Array<[string, { x: number; y: number }]> = [];
+  // Reuse arrays from pool to avoid allocations
+  const blackjackDealers = playerArrayPool.acquire();
+  const otherDealers = playerArrayPool.acquire();
   
   for (const [dealerKey, position] of dealerPositions.entries()) {
     if (dealerKey.startsWith('blackjack_dealer_')) {
-      blackjackDealers.push([dealerKey, position]);
+      blackjackDealers.push([dealerKey, position] as any);
     } else {
-      otherDealers.push([dealerKey, position]);
+      otherDealers.push([dealerKey, position] as any);
     }
   }
   
@@ -7942,6 +7994,10 @@ export function getClickedDealer(worldX: number, worldY: number): string | null 
       closestDealer = baseDealerId;
     }
   }
+  
+  // Release arrays back to pool
+  playerArrayPool.release(blackjackDealers as any);
+  playerArrayPool.release(otherDealers as any);
   
   return closestDealer;
 }
@@ -8402,8 +8458,25 @@ export function buildBlackjackTablePositionsCache(): void {
   }
 }
 
+// Constants to avoid array allocations
+const CASINO_DEALER_IDS = ['orb_dealer', 'loot_box_dealer'];
+const TABLE_NUMBERS = [2, 4];
+const DEALER_CONFIGS = [
+  { angle: 3 * Math.PI / 4, dealerId: 'orb_dealer' },
+  { angle: 7 * Math.PI / 4, dealerId: 'loot_box_dealer' }
+];
+
+// Module-level constants to avoid allocations in drawBlackjackTables
+const HERALD_ANGLES = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // Cardinal directions
+const SLOT_MACHINE_TO_ANGLE: Record<string, number> = {
+  'slot_machine_north': 0,
+  'slot_machine_east': Math.PI / 2,
+  'slot_machine_south': Math.PI,
+  'slot_machine_west': 3 * Math.PI / 2
+};
+
 // Draw blackjack tables on casino map
-export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number, hoveredTableId?: string | null, hoveredDealerId?: string | null): void {
+function drawBlackjackTablesImpl(ctx: CanvasRenderingContext2D, time: number, hoveredTableId?: string | null, hoveredDealerId?: string | null): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
@@ -8412,8 +8485,7 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
   // Clear previous dealer positions (for casino dealers)
   // Note: This only clears positions for dealers we're about to set, not all dealers
   // We'll clear specific dealer IDs before setting them
-  const casinoDealerIds = ['orb_dealer', 'loot_box_dealer'];
-  for (const dealerId of casinoDealerIds) {
+  for (const dealerId of CASINO_DEALER_IDS) {
     dealerPositions.delete(dealerId);
   }
   
@@ -8433,10 +8505,8 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
   const tableMinorRadius = tableRadiusSize * 0.6; // Minor radius for ellipse
   
   // Map to original table numbers: index 0 = table 2, index 1 = table 4
-  const tableNumbers = [2, 4];
-  
   for (let i = 0; i < 2; i++) {
-    const tableNumber = tableNumbers[i];
+    const tableNumber = TABLE_NUMBERS[i];
     const tableId = `blackjack_table_${tableNumber}`;
     const dealerId = `blackjack_dealer_${tableNumber}`;
     
@@ -8475,14 +8545,10 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     
     // Shadow removed for performance
     
-    // Hover glow effect - dynamic
+    // Hover glow effect - dynamic (optimized: use simple fill instead of gradient)
     if (isHovered) {
-      ctx.globalAlpha = 0.4;
-      const glowGradient = ctx.createRadialGradient(tableX, tableY, 0, tableX, tableY, tableRadiusSize * 1.3);
-      glowGradient.addColorStop(0, 'rgba(255, 215, 0, 0.8)');
-      glowGradient.addColorStop(0.5, 'rgba(255, 215, 0, 0.4)');
-      glowGradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
-      ctx.fillStyle = glowGradient;
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
       ctx.beginPath();
       ctx.ellipse(tableX, tableY, tableRadiusSize * 1.3, tableMinorRadius * 1.3, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -8564,24 +8630,19 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     dealerPositions.set(dealerId, { x: dealerX, y: dealerY });
     
     // Draw dealer seat (light grey) - draw before dealer so dealer appears on top
+    // Optimized: Use simple fills instead of gradients to avoid memory allocations
     const dealerSeatRadius = 10 * p;
     const dealerSeatBaseY = dealerY + 8 * p; // Base of seat (below dealer)
     const dealerSeatTopY = dealerY; // Top of seat (at dealer feet level)
     
-    // Seat base (light grey)
-    const dealerSeatBaseGradient = ctx.createRadialGradient(dealerX, dealerSeatBaseY, 0, dealerX, dealerSeatBaseY, dealerSeatRadius);
-    dealerSeatBaseGradient.addColorStop(0, '#d0d0d0');
-    dealerSeatBaseGradient.addColorStop(1, '#b0b0b0');
-    ctx.fillStyle = dealerSeatBaseGradient;
+    // Seat base (light grey) - simple fill
+    ctx.fillStyle = '#c0c0c0';
     ctx.beginPath();
     ctx.arc(dealerX, dealerSeatBaseY, dealerSeatRadius, 0, Math.PI * 2);
     ctx.fill();
     
-    // Seat top (lighter grey)
-    const dealerSeatTopGradient = ctx.createRadialGradient(dealerX, dealerSeatTopY, 0, dealerX, dealerSeatTopY, dealerSeatRadius * 0.7);
-    dealerSeatTopGradient.addColorStop(0, '#e0e0e0');
-    dealerSeatTopGradient.addColorStop(1, '#c0c0c0');
-    ctx.fillStyle = dealerSeatTopGradient;
+    // Seat top (lighter grey) - simple fill
+    ctx.fillStyle = '#d0d0d0';
     ctx.beginPath();
     ctx.arc(dealerX, dealerSeatTopY, dealerSeatRadius * 0.7, 0, Math.PI * 2);
     ctx.fill();
@@ -8635,12 +8696,8 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
   // Draw orb dealer and loot box dealer around central plaza (between path segments)
   // Only 2 dealers: orb dealer at top left (3π/4), loot box dealer at bottom right (7π/4)
   const dealerRadius = plazaRadius * 0.35; // Moved closer to center (was 0.4)
-  const dealerConfigs = [
-    { angle: 3 * Math.PI / 4, dealerId: 'orb_dealer' },      // Top left - orb dealer
-    { angle: 7 * Math.PI / 4, dealerId: 'loot_box_dealer' } // Bottom right - loot box dealer
-  ];
   
-  for (const config of dealerConfigs) {
+  for (const config of DEALER_CONFIGS) {
     const dealerType = DEALER_TYPES.find(d => d.id === config.dealerId);
     if (!dealerType) continue;
     
@@ -8671,18 +8728,14 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
   // Draw heralds on podiums between blackjack tables (stationary, facing center)
   initializeHeralds();
   const heraldRadius = plazaRadius * 0.42; // Positioned between center and blackjack tables
-  const heraldAngles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // Cardinal directions (between tables)
+  // Optimized: Module-level constant to avoid array allocation every frame
+  // heraldAngles moved to module level (see HERALD_ANGLES constant)
   
-  // Map slot machine IDs to herald angles
-  const slotMachineToAngle: Record<string, number> = {
-    'slot_machine_north': 0,
-    'slot_machine_east': Math.PI / 2,
-    'slot_machine_south': Math.PI,
-    'slot_machine_west': 3 * Math.PI / 2
-  };
+  // Optimized: Module-level constant to avoid object allocation every frame
+  // slotMachineToAngle moved to module level (see SLOT_MACHINE_TO_ANGLE constant)
   
   for (const herald of SLOT_HERALDS) {
-    const heraldAngle = slotMachineToAngle[herald.slotMachineId];
+    const heraldAngle = SLOT_MACHINE_TO_ANGLE[herald.slotMachineId];
     if (heraldAngle === undefined) continue;
     
     const heraldNPC = heraldNPCs.find(h => h.id === herald.id);
@@ -8911,7 +8964,7 @@ function initializeHeralds(): void {
   
   // Initialize each herald on a podium between blackjack tables
   for (const herald of SLOT_HERALDS) {
-    const heraldAngle = slotMachineToAngle[herald.slotMachineId];
+    const heraldAngle = SLOT_MACHINE_TO_ANGLE[herald.slotMachineId];
     if (heraldAngle === undefined) continue;
     
     // Position on podium between blackjack tables
@@ -9360,8 +9413,10 @@ export function buildSlotMachinePositionsCache(): void {
   }
 }
 
+export const drawBlackjackTables = instrumentFunction(drawBlackjackTablesImpl, 'renderer.drawBlackjackTables');
+
 // Draw slot machines on casino map (N/S/E/W near plaza edge)
-export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, hoveredSlotMachineId?: string | null): void {
+function drawSlotMachinesImpl(ctx: CanvasRenderingContext2D, time: number, hoveredSlotMachineId?: string | null): void {
   const p = SCALE;
   const centerX = WORLD_WIDTH / 2;
   const centerY = WORLD_HEIGHT / 2;
@@ -9824,7 +9879,7 @@ export function clearBackgroundCache(mapType?: MapType): void {
   }
 }
 
-export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType, camera?: Camera): void {
+function drawBackgroundImpl(ctx: CanvasRenderingContext2D, mapType?: MapType, camera?: Camera): void {
   // Ensure we have a valid map type
   const map = mapType || currentMapType || 'cafe';
   
@@ -9926,6 +9981,8 @@ export function drawBackground(ctx: CanvasRenderingContext2D, mapType?: MapType,
     ctx.drawImage(cache, 0, 0);
   }
 }
+
+export const drawBackground = instrumentFunction(drawBackgroundImpl, 'renderer.drawBackground');
 
 // Legacy function name for compatibility
 export function drawGrass(ctx: CanvasRenderingContext2D): void {
@@ -10042,7 +10099,7 @@ const ORB_RARITY_CONFIG: Record<string, {
 let orbRenderCount = 0;
 let lastOrbRenderReset = 0;
 
-export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): void {
+function drawOrbImpl(ctx: CanvasRenderingContext2D, orb: Orb, time: number): void {
   const scaledX = orb.x * SCALE;
   const scaledY = orb.y * SCALE;
   
@@ -10072,68 +10129,44 @@ export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): 
   
   const rotation = time / 1000; // Slow rotation for shimmer effect
   
-  // Outer glow (multiple layers for depth)
+  // Outer glow (optimized: use simple fill instead of gradient to avoid memory allocation)
   const outerGlowRadius = radius * config.glowSize;
-  const glowGradient1 = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, outerGlowRadius);
-  glowGradient1.addColorStop(0, config.colors.outer);
-  glowGradient1.addColorStop(0.3, config.colors.outer.replace(/[\d.]+\)$/, '0.5)'));
-  glowGradient1.addColorStop(0.6, config.colors.outer.replace(/[\d.]+\)$/, '0.2)'));
-  glowGradient1.addColorStop(1, config.colors.outerGlow);
-  
-  ctx.fillStyle = glowGradient1;
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = config.colors.outer;
   ctx.beginPath();
   ctx.arc(centerX, centerY, outerGlowRadius, 0, Math.PI * 2);
   ctx.fill();
   
   // Secondary outer glow (softer) - skip for distant orbs to improve performance
   if (isHighQuality) {
-    const glowGradient2 = ctx.createRadialGradient(centerX, centerY, radius * 0.8, centerX, centerY, outerGlowRadius * 0.9);
-    glowGradient2.addColorStop(0, config.colors.outer.replace(/[\d.]+\)$/, '0.4)'));
-    glowGradient2.addColorStop(1, 'transparent');
-    ctx.fillStyle = glowGradient2;
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = config.colors.outer;
     ctx.beginPath();
     ctx.arc(centerX, centerY, outerGlowRadius * 0.9, 0, Math.PI * 2);
     ctx.fill();
   }
   
-  // Main orb body with sophisticated gradient
-  const mainGradient = ctx.createRadialGradient(
-    centerX - radius * 0.4, 
-    centerY - radius * 0.4, 
-    0,
-    centerX, 
-    centerY, 
-    radius
-  );
-  mainGradient.addColorStop(0, config.colors.highlight);
-  mainGradient.addColorStop(0.2, config.colors.inner);
-  mainGradient.addColorStop(0.5, config.colors.main);
-  mainGradient.addColorStop(0.8, config.colors.outer.replace(/[\d.]+\)$/, '0.8)'));
-  mainGradient.addColorStop(1, config.colors.outer);
-  
-  ctx.fillStyle = mainGradient;
+  // Main orb body (optimized: use simple fill with highlight instead of gradient)
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = config.colors.main;
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
   
-  // Inner core (brighter center) - skip for distant orbs
+  // Inner highlight (simple fill)
+  ctx.fillStyle = config.colors.inner;
+  ctx.beginPath();
+  ctx.arc(centerX - radius * 0.3, centerY - radius * 0.3, radius * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Inner core (brighter center) - skip for distant orbs (optimized: use simple fill)
   if (isHighQuality) {
-    const coreGradient = ctx.createRadialGradient(
-      centerX - radius * 0.3, 
-      centerY - radius * 0.3, 
-      0,
-      centerX, 
-      centerY, 
-      radius * 0.6
-    );
-    coreGradient.addColorStop(0, config.colors.highlight);
-    coreGradient.addColorStop(0.5, config.colors.inner);
-    coreGradient.addColorStop(1, 'transparent');
-    
-    ctx.fillStyle = coreGradient;
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = config.colors.inner;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius * 0.6, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
     
     // Main highlight (top-left, larger and more prominent) - only for high quality
     const highlightGradient = ctx.createRadialGradient(
@@ -10222,6 +10255,8 @@ export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): 
   ctx.restore();
 }
 
+export const drawOrb = instrumentFunction(drawOrbImpl, 'renderer.drawOrb');
+
 // Animation tracking for walking and idle
 interface PlayerAnimation {
   lastX: number;
@@ -10265,8 +10300,13 @@ export function updatePlayerTrail(playerId: string, x: number, y: number, trailC
     playerTrails.set(playerId, trail);
   }
   
-  // Remove old particles first
-  const validParticles = trail.filter(p => time - p.createdAt < TRAIL_PARTICLE_LIFETIME);
+  // Remove old particles first (reuse array to avoid allocation)
+  const validParticles = particleArrayPool.acquire();
+  for (const p of trail) {
+    if (time - p.createdAt < TRAIL_PARTICLE_LIFETIME) {
+      validParticles.push(p);
+    }
+  }
   
   // Spawn new particle if enough time has passed and under limit
   const lastSpawn = lastTrailSpawn.get(playerId) || 0;
@@ -10287,8 +10327,14 @@ export function updatePlayerTrail(playerId: string, x: number, y: number, trailC
     }
   }
   
-  playerTrails.set(playerId, validParticles);
+  // Update trail with valid particles (copy to trail, then release temp array)
+  trail.length = 0;
+  trail.push(...validParticles);
+  particleArrayPool.release(validParticles);
+  playerTrails.set(playerId, trail);
 }
+
+export const drawSlotMachines = instrumentFunction(drawSlotMachinesImpl, 'renderer.drawSlotMachines');
 
 // Draw all particle trails - simplified rendering with viewport culling
 export function drawParticleTrails(ctx: CanvasRenderingContext2D, time: number, camera?: Camera): void {
@@ -10588,14 +10634,9 @@ function updateAndDrawSlotMachineOrbs(ctx: CanvasRenderingContext2D, deltaTime: 
     const centerX = orb.x;
     const centerY = orb.y;
     
-    // Outer glow
-    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius * 2.5);
-    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.4 * alpha})`);
-    gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${0.2 * alpha})`);
-    gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
-    
-    ctx.globalAlpha = alpha * 0.3;
-    ctx.fillStyle = gradient;
+    // Outer glow (optimized: use simple fill instead of gradient)
+    ctx.globalAlpha = alpha * 0.2;
+    ctx.fillStyle = orb.color;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius * 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -11563,6 +11604,13 @@ function getIdleBobOffset(anim: PlayerAnimation): number {
 }
 
 // Draw sleepy "zzz" when player is idle for a while, or "$ $ $" when at blackjack table
+// Module-level constant to avoid array allocation in drawSleepyZs
+const SYMBOL_POSITIONS = [
+  { delay: 0, size: 1.0 },      // First symbol
+  { delay: 0.33, size: 0.8 },   // Second symbol (smaller, delayed)
+  { delay: 0.66, size: 0.6 },   // Third symbol (smallest, most delayed)
+];
+
 function drawSleepyZs(ctx: CanvasRenderingContext2D, headX: number, headY: number, headW: number, p: number, time: number, idleStartTime: number, isAtBlackjackTable: boolean = false): void {
   const timeSinceIdle = time - idleStartTime;
   
@@ -11576,18 +11624,13 @@ function drawSleepyZs(ctx: CanvasRenderingContext2D, headX: number, headY: numbe
   ctx.font = `bold ${Math.floor(8 * p / 2)}px "Press Start 2P", monospace`;
   ctx.textAlign = 'center';
   
-  // Draw 3 symbols at different phases, floating up and swaying
-  const symbolPositions = [
-    { delay: 0, size: 1.0 },      // First symbol
-    { delay: 0.33, size: 0.8 },   // Second symbol (smaller, delayed)
-    { delay: 0.66, size: 0.6 },   // Third symbol (smallest, most delayed)
-  ];
+  // Draw 3 symbols at different phases, floating up and swaying (use module-level constant)
   
   const symbol = isAtBlackjackTable ? '$' : 'z';
   const symbolColor = isAtBlackjackTable ? '#ffd700' : '#a0d0ff'; // Gold for $, light blue for z
   const shadowColor = isAtBlackjackTable ? '#b8860b' : '#4080b0'; // Dark gold for $, dark blue for z
   
-  for (const symPos of symbolPositions) {
+  for (const symPos of SYMBOL_POSITIONS) {
     // Calculate this symbol's progress (wraps around)
     const symProgress = (cycleProgress + symPos.delay) % 1;
     
@@ -11629,7 +11672,7 @@ function drawSleepyZs(ctx: CanvasRenderingContext2D, headX: number, headY: numbe
   ctx.globalAlpha = 1;
 }
 
-export function drawPlayer(
+function drawPlayerImpl(
   ctx: CanvasRenderingContext2D, 
   player: PlayerWithChat,
   isLocal: boolean = false,
@@ -11822,8 +11865,15 @@ export function drawPlayer(
     drawCape(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, anim.isMoving, time, 'front');
   }
   
-  // Hat
-  if (player.sprite.outfit.some(item => item.startsWith('hat_'))) {
+  // Hat (optimize: manual loop instead of .some() to avoid array iteration overhead)
+  let hasHat = false;
+  for (const item of player.sprite.outfit) {
+    if (item.startsWith('hat_')) {
+      hasHat = true;
+      break;
+    }
+  }
+  if (hasHat) {
     drawHat(ctx, player, headX, headY, headW, p, time);
   }
   
@@ -11836,8 +11886,12 @@ export function drawPlayer(
   // Sleepy Zs when idle (for all players, not NPCs)
   // Exclude game NPCs (merchants) and centurions, but show for real players and background NPCs
   // Show "$ $ $" for players at blackjack tables or blackjack dealers, "z z z" for others
-  const idParts = player.id.split('_');
-  const isGameNPC = player.id.startsWith('npc_') && idParts.length >= 3;
+  // Optimize: Count underscores instead of splitting to avoid array allocation
+  let underscoreCount = 0;
+  for (let j = 0; j < player.id.length; j++) {
+    if (player.id[j] === '_') underscoreCount++;
+  }
+  const isGameNPC = player.id.startsWith('npc_') && underscoreCount >= 2;
   const isCenturion = player.id.startsWith('centurion_');
   const isBlackjackDealer = player.id.startsWith('blackjack_dealer_');
   
@@ -11858,9 +11912,8 @@ export function drawPlayer(
     const zoom = ctx.getTransform().a || 1; // Get scale from transform matrix
     // Check if this is a game NPC (merchant) - they have IDs like 'npc_hats_legendary', 'npc_shirts_epic', etc.
     // Background NPCs have IDs like 'npc_0', 'npc_1', etc. and should show their orb balance
-    // Game NPCs have at least 3 parts when split by '_' (npc, category, rarity)
-    const idParts = player.id.split('_');
-    const isGameNPC = player.id.startsWith('npc_') && idParts.length >= 3;
+    // Game NPCs have at least 3 parts when split by '_' (npc, category, rarity) = at least 2 underscores
+    // Reuse isGameNPC from above (already calculated)
     if (isGameNPC) {
       drawNameTag(ctx, player.name, scaledX + scaledWidth / 2, scaledY - 20 * p, Infinity, zoom, player.id, time);
     } else {
@@ -11894,6 +11947,8 @@ export function drawPlayer(
     ctx.restore();
   }
 }
+
+export const drawPlayer = instrumentFunction(drawPlayerImpl, 'renderer.drawPlayer');
 
 function getShirtColor(outfit: string[]): string {
   if (outfit.includes('shirt_red')) return '#e74c3c';
@@ -13406,12 +13461,16 @@ function drawCape(ctx: CanvasRenderingContext2D, player: PlayerWithChat, scaledX
   const direction = player.direction;
   
   // Find equipped cape - get the LAST one (most recently equipped)
-  // Filter to get all capes, then take the last one
-  const allCapes = outfit.filter(item => item.startsWith('cape_') || item.startsWith('acc_cape_'));
-  if (allCapes.length === 0) return;
-  
-  // Use the last cape (most recently equipped)
-  const capeId = allCapes[allCapes.length - 1];
+  // Optimized: Manual loop instead of filter to avoid array allocation
+  let capeId: string | null = null;
+  for (let i = outfit.length - 1; i >= 0; i--) {
+    const item = outfit[i];
+    if (item.startsWith('cape_') || item.startsWith('acc_cape_')) {
+      capeId = item;
+      break; // Get the last one (most recently equipped)
+    }
+  }
+  if (!capeId) return;
   
   // Get cape colors
   const colors = CAPE_COLORS[capeId] || { main: '#666666', accent: '#888888' };

@@ -3,6 +3,7 @@ import { useGameStore } from '../state/gameStore';
 import { useSocket } from '../hooks/useSocket';
 import { playClickSound, playShopBellSound, playInventoryOpenSound, playCloseSound, playBuyOrbsSound } from '../utils/sounds';
 import { getOrbCountColor } from '../game/renderer';
+import { getFunctionMetrics, isMemoryAvailable, getTotalMemoryUsage, analyzeLeaks, checkAndWarnAboutLeaks, startLeakMonitoring, stopLeakMonitoring } from '../utils/functionProfiler';
 
 // Get color based on orb value (for floating text)
 const getOrbColor = (value: number): string => {
@@ -61,8 +62,40 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   // Render performance metrics
   const [renderMetrics, setRenderMetrics] = useState<Array<{ name: string; avgTime: number; fpsImpact: number; frameBudgetPercent: number }>>([]);
   const [filterText, setFilterText] = useState<string>('');
-  const [showDebugMonitor, setShowDebugMonitor] = useState<boolean>(true);
+  const [showDebugMonitor, setShowDebugMonitor] = useState<boolean>(false); // Collapsed by default
   const [maxItems, setMaxItems] = useState<number>(20);
+  
+  // Function & Memory metrics
+  const [functionMetrics, setFunctionMetrics] = useState<Array<{ 
+    name: string; 
+    callCount: number; 
+    callsPerSecond: number; 
+    totalMemoryDelta: number; 
+    avgMemoryDelta: number; 
+    leakScore: number;
+    operationCounts?: {
+      objectCreations: number;
+      arrayCreations: number;
+      functionCalls: number;
+      canvasOperations: number;
+      mapOperations: number;
+      setOperations: number;
+    };
+    recentMemoryDeltas?: number[];
+  }>>([]);
+  const [showFunctionMonitor, setShowFunctionMonitor] = useState<boolean>(false); // Collapsed by default
+  const [functionFilterText, setFunctionFilterText] = useState<string>('');
+  const [functionMaxItems, setFunctionMaxItems] = useState<number>(100);
+  const [leakReports, setLeakReports] = useState<Array<{
+    functionName: string;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    leakScore: number;
+    totalMemoryLeaked: number;
+    growthRate: number;
+    likelyCauses: string[];
+    recommendations: string[];
+  }>>([]);
+  const [showLeakAnalysis, setShowLeakAnalysis] = useState<boolean>(false);
   
   useEffect(() => {
     const measureFPS = () => {
@@ -152,6 +185,39 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   // Filter metrics based on filter text
   const filteredMetrics = renderMetrics.filter(metric => 
     metric.name.toLowerCase().includes(filterText.toLowerCase())
+  );
+  
+  // Poll function metrics every 500ms
+  useEffect(() => {
+    if (!isMemoryAvailable()) return;
+    
+    const updateFunctionMetrics = () => {
+      const metrics = getFunctionMetrics();
+      setFunctionMetrics(metrics);
+      
+      // Analyze leaks and update reports
+      const reports = analyzeLeaks();
+      setLeakReports(reports);
+    };
+    
+    // Update immediately
+    updateFunctionMetrics();
+    
+    // Then update every 500ms
+    const interval = setInterval(updateFunctionMetrics, 500);
+    
+    // Start leak monitoring
+    startLeakMonitoring(5000); // Check every 5 seconds
+    
+    return () => {
+      clearInterval(interval);
+      stopLeakMonitoring();
+    };
+  }, []);
+  
+  // Filter function metrics based on filter text
+  const filteredFunctionMetrics = functionMetrics.filter(metric => 
+    metric.name.toLowerCase().includes(functionFilterText.toLowerCase())
   );
   
   // Generate first available loot box to open
@@ -520,7 +586,15 @@ export function HUD({ onLeaveRoom }: HUDProps) {
     <>
       {/* FPS Counter & Debug Monitor - Top Left */}
       <div className="fixed top-3 left-3 pointer-events-none z-50 flex flex-col gap-1">
-        <div className="bg-black/70 backdrop-blur-sm rounded px-2 py-1 border border-gray-600/50 pointer-events-auto">
+        <div 
+          className="bg-black/70 backdrop-blur-sm rounded px-2 py-1 border border-gray-600/50 pointer-events-auto cursor-pointer hover:bg-black/80 transition-colors"
+          onClick={() => {
+            const newState = !showDebugMonitor;
+            setShowDebugMonitor(newState);
+            setShowFunctionMonitor(newState); // Toggle both monitors together
+          }}
+          title={showDebugMonitor ? "Click to collapse debug windows" : "Click to expand debug windows"}
+        >
           <div className="flex items-center gap-2">
             <span 
               className="font-pixel text-xs"
@@ -561,21 +635,15 @@ export function HUD({ onLeaveRoom }: HUDProps) {
               }
               return null;
             })()}
-            {renderMetrics.length > 0 && (
-              <button
-                onClick={() => setShowDebugMonitor(!showDebugMonitor)}
-                className="text-xs text-gray-400 hover:text-gray-200 font-pixel"
-                title={showDebugMonitor ? "Hide debug monitor" : "Show debug monitor"}
-              >
-                {showDebugMonitor ? '▼' : '▶'}
-              </button>
-            )}
+            <span className="text-gray-400 text-xs font-pixel ml-1">
+              {showDebugMonitor ? '▼' : '▶'}
+            </span>
           </div>
         </div>
         
         {/* Render Performance Debug Monitor */}
         {showDebugMonitor && renderMetrics.length > 0 && (
-          <div className="bg-black/80 backdrop-blur-sm rounded px-2 py-2 border border-gray-600/50 pointer-events-auto min-w-[280px]">
+          <div className="bg-black/80 backdrop-blur-sm rounded px-2 py-2 border border-gray-600/50 pointer-events-auto w-[500px]">
             <div className="font-pixel text-xs text-gray-400 mb-2 flex items-center justify-between">
               <span>Debug Monitor (Current Map):</span>
               <span className="text-gray-500">{filteredMetrics.length} items</span>
@@ -647,6 +715,218 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                   No matches
                 </div>
               )}
+            </div>
+          </div>
+        )}
+        
+        {/* Function & Memory Monitor */}
+        {showFunctionMonitor && isMemoryAvailable() && functionMetrics.length > 0 && (
+          <div className="bg-black/80 backdrop-blur-sm rounded px-2 py-2 border border-gray-600/50 pointer-events-auto w-[500px] mt-2">
+            <div className="font-pixel text-xs text-gray-400 mb-2 flex items-center justify-between">
+              <span>Function & Memory Monitor:</span>
+              <span className="text-gray-500">{filteredFunctionMetrics.length} items</span>
+            </div>
+            <div className="font-pixel text-[10px] text-gray-500 mb-2">
+              Total Memory: {getTotalMemoryUsage().toFixed(2)} MB
+            </div>
+            
+            {/* Filter Input */}
+            <input
+              type="text"
+              value={functionFilterText}
+              onChange={(e) => setFunctionFilterText(e.target.value)}
+              placeholder="Filter..."
+              className="w-full mb-2 px-1.5 py-0.5 bg-gray-900/50 border border-gray-600/50 rounded text-xs font-pixel text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+            />
+            
+            {/* Controls Row */}
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="font-pixel text-xs text-gray-500">Show:</span>
+                <select
+                  value={functionMaxItems}
+                  onChange={(e) => setFunctionMaxItems(Number(e.target.value))}
+                  className="px-1.5 py-0.5 bg-gray-900/50 border border-gray-600/50 rounded text-xs font-pixel text-gray-200 focus:outline-none focus:border-gray-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                  <option value={999}>All</option>
+                </select>
+              </div>
+              <button
+                onClick={() => {
+                  checkAndWarnAboutLeaks();
+                  setShowLeakAnalysis(!showLeakAnalysis);
+                }}
+                className="px-2 py-1 bg-red-900/50 hover:bg-red-900/70 border border-red-600/50 rounded text-xs font-pixel text-red-200 focus:outline-none focus:border-red-500"
+                title="Analyze and report memory leaks"
+              >
+                {showLeakAnalysis ? 'Hide' : 'Show'} Leak Analysis
+              </button>
+            </div>
+            
+            {/* Leak Analysis Section */}
+            {showLeakAnalysis && leakReports.length > 0 && (
+              <div className="mb-3 p-2 bg-red-950/30 border border-red-600/50 rounded">
+                <div className="font-pixel text-xs font-bold text-red-400 mb-2">
+                  🚨 MEMORY LEAK ANALYSIS ({leakReports.length} function{leakReports.length !== 1 ? 's' : ''})
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-2">
+                  {leakReports.map((report, idx) => {
+                    const severityColor = 
+                      report.severity === 'critical' ? 'text-red-400' :
+                      report.severity === 'high' ? 'text-orange-400' :
+                      report.severity === 'medium' ? 'text-yellow-400' :
+                      'text-gray-400';
+                    const severityBg = 
+                      report.severity === 'critical' ? 'bg-red-900/20' :
+                      report.severity === 'high' ? 'bg-orange-900/20' :
+                      report.severity === 'medium' ? 'bg-yellow-900/20' :
+                      'bg-gray-900/20';
+                    
+                    return (
+                      <div key={idx} className={`p-2 ${severityBg} border border-red-600/30 rounded break-words`}>
+                        <div className={`font-pixel text-xs font-bold ${severityColor} mb-1 break-all`}>
+                          {report.functionName} [{report.severity.toUpperCase()}]
+                        </div>
+                        <div className="text-[10px] text-gray-400 space-y-0.5 break-words">
+                          <div className="break-words">
+                            Leak Score: {report.leakScore.toFixed(1)}/100 • Leaked: {report.totalMemoryLeaked.toFixed(2)}MB • Growth: {report.growthRate.toFixed(2)}MB/min
+                          </div>
+                          {report.likelyCauses.length > 0 && (
+                            <div className="mt-1 break-words">
+                              <span className="text-yellow-400">Causes:</span> {report.likelyCauses.join('; ')}
+                            </div>
+                          )}
+                          {report.recommendations.length > 0 && (
+                            <div className="mt-1 break-words">
+                              <span className="text-green-400">Fix:</span> {report.recommendations[0]}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            {/* Scrollable Metrics List */}
+            <div className="max-h-64 overflow-y-auto overflow-x-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+              {filteredFunctionMetrics.slice(0, functionMaxItems).map((metric, idx) => {
+                // Determine color based on leak score and memory delta
+                const hasLeak = metric.leakScore > 50;
+                const highMemory = Math.abs(metric.totalMemoryDelta) > 10; // > 10 MB
+                const mediumMemory = Math.abs(metric.totalMemoryDelta) > 1; // > 1 MB
+                const color = hasLeak ? '#f00' : highMemory ? '#ff0' : mediumMemory ? '#ffff00' : '#0f0';
+                
+                // Calculate memory trend from recent deltas
+                const recentAvg = metric.recentMemoryDeltas && metric.recentMemoryDeltas.length > 0
+                  ? metric.recentMemoryDeltas.reduce((a, b) => a + b, 0) / metric.recentMemoryDeltas.length
+                  : 0;
+                const trend = recentAvg > 0.001 ? '↑' : recentAvg < -0.001 ? '↓' : '→';
+                
+                // Estimate what's causing memory (heuristic based on patterns)
+                const avgDelta = metric.avgMemoryDelta;
+                let likelyCause = '';
+                if (avgDelta > 0.1) {
+                  likelyCause = 'Large allocations (arrays/objects)';
+                } else if (avgDelta > 0.01) {
+                  likelyCause = 'Object creation';
+                } else if (avgDelta > 0.001) {
+                  likelyCause = 'Small allocations';
+                } else if (avgDelta < -0.001) {
+                  likelyCause = 'Cleanup/release';
+                } else {
+                  likelyCause = 'Minimal allocation';
+                }
+                
+                return (
+                  <div 
+                    key={metric.name} 
+                    className="font-pixel text-xs py-1 hover:bg-gray-800/30 rounded px-1 border-b border-gray-700/30" 
+                    style={{ color }}
+                  >
+                    <div className="flex justify-between items-start gap-2 w-full">
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="truncate font-bold" title={metric.name}>
+                          {metric.name}
+                        </div>
+                        <div className="text-[9px] text-gray-500 mt-0.5 break-words" title={`${likelyCause} • Trend: ${trend} • Calls: ${metric.callCount.toLocaleString()}`}>
+                          {likelyCause} • Trend: {trend} • Calls: {metric.callCount.toLocaleString()}
+                        </div>
+                        {metric.operationCounts && (
+                          <div className="text-[9px] text-gray-600 mt-0.5 flex flex-wrap gap-1">
+                            {metric.operationCounts.objectCreations > 0 && (
+                              <span>Objects: {metric.operationCounts.objectCreations}</span>
+                            )}
+                            {metric.operationCounts.arrayCreations > 0 && (
+                              <span>Arrays: {metric.operationCounts.arrayCreations}</span>
+                            )}
+                            {metric.operationCounts.canvasOperations > 0 && (
+                              <span>Canvas: {metric.operationCounts.canvasOperations}</span>
+                            )}
+                            {metric.operationCounts.functionCalls > 0 && (
+                              <span>Calls: {metric.operationCounts.functionCalls}</span>
+                            )}
+                          </div>
+                        )}
+                        {metric.recentMemoryDeltas && metric.recentMemoryDeltas.length > 0 && (
+                          <div className="text-[9px] text-gray-600 mt-0.5 break-words" title={`Recent deltas: ${metric.recentMemoryDeltas.slice(-5).map(d => d > 0 ? `+${d.toFixed(3)}` : d.toFixed(3)).join(', ')} MB`}>
+                            Recent deltas: {metric.recentMemoryDeltas.slice(-5).map(d => d > 0 ? `+${d.toFixed(3)}` : d.toFixed(3)).join(', ')} MB
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0 text-right text-[10px]">
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-400">
+                            {metric.callsPerSecond.toFixed(1)}/s
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold">
+                            {metric.avgMemoryDelta > 0 ? '+' : ''}{metric.avgMemoryDelta.toFixed(2)}MB
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-400 text-[9px]">
+                            ({metric.totalMemoryDelta > 0 ? '+' : ''}{metric.totalMemoryDelta.toFixed(2)}MB)
+                          </span>
+                        </div>
+                        {metric.leakScore > 10 && (
+                          <span 
+                            className="text-red-400 font-bold" 
+                            title={`Leak score: ${metric.leakScore.toFixed(1)}/100. Higher = more likely memory leak. Growth rate: ${((metric.recentMemoryDeltas && metric.recentMemoryDeltas.length > 0 ? metric.recentMemoryDeltas.reduce((a, b) => a + Math.max(0, b), 0) / metric.recentMemoryDeltas.length : 0) * 60).toFixed(2)} MB/min`}
+                          >
+                            LEAK: {metric.leakScore.toFixed(0)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredFunctionMetrics.length === 0 && (
+                <div className="font-pixel text-xs text-gray-500 py-2 text-center">
+                  No matches
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Browser compatibility message */}
+        {!isMemoryAvailable() && showFunctionMonitor && (
+          <div className="bg-black/80 backdrop-blur-sm rounded px-2 py-2 border border-yellow-600/50 pointer-events-auto w-[500px] mt-2">
+            <div className="font-pixel text-xs text-yellow-400">
+              Function & Memory Monitor requires Chrome/Edge browser
+            </div>
+            <div className="font-pixel text-[10px] text-gray-500 mt-1">
+              performance.memory API is not available in this browser
             </div>
           </div>
         )}

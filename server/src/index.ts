@@ -3157,7 +3157,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
   
   // Slot machine handler
-  socket.on('spin_slot_machine', async ({ slotMachineId, betAmount }) => {
+  socket.on('spin_slot_machine', async ({ slotMachineId, betAmount, forceBonus }) => {
     console.log('[Slots] ===== spin_slot_machine event received =====');
     console.log('[Slots] Slot Machine ID:', slotMachineId);
     console.log('[Slots] Bet Amount:', betAmount);
@@ -3226,30 +3226,125 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     
     try {
       // Import slot machine logic
-      const { spinSlots, calculatePayout } = await import('./slots');
+      const { 
+        spinSlots, 
+        spinSlotsWithBonus, 
+        calculatePayout, 
+        checkBonusTrigger,
+        getBonusGameState,
+        setBonusGameState,
+        clearBonusGameState
+      } = await import('./slots');
       
-      // Deduct bet FIRST (immediately)
-      const balanceAfterBet = currentOrbs - numericBet;
-      console.log('[Slots] Deducting bet. Balance:', currentOrbs, '->', balanceAfterBet);
-      player.orbs = balanceAfterBet;
-      players.updatePlayerOrbs(playerId, balanceAfterBet);
+      // Check if player is in bonus game
+      let bonusState = getBonusGameState(playerId);
+      const isInBonusGame = bonusState?.isInBonus ?? false;
       
-      // Broadcast bet deduction immediately
-      io.to(roomId).emit('player_orbs_updated', {
-        playerId,
-        orbs: balanceAfterBet,
-        rewardAmount: -numericBet,
-        rewardType: 'slots'
-      });
-      console.log('[Slots] Broadcasted bet deduction. New balance:', balanceAfterBet);
+      // Spin the reels FIRST to check if bonus will trigger (before deducting bet)
+      let symbols: string[];
+      let bonusTriggered = false;
       
-      // Spin the reels
-      const symbols = spinSlots();
-      console.log('[Slots] Generated symbols:', symbols.join(', '));
+      if (forceBonus && !isInBonusGame) {
+        // Dev toggle: force 3 bonus symbols on middle reel (only if not already in bonus game)
+        symbols = [
+          'bonus',
+          'bonus',
+          'bonus',  // Middle reel (index 2) - 3 bonus symbols
+          'bonus',
+          'bonus'
+        ];
+        bonusTriggered = true;
+        console.log('[Slots] Dev toggle: Forced bonus trigger');
+      } else if (forceBonus && isInBonusGame) {
+        // If forceBonus is true but already in bonus game, just use bonus weights (don't retrigger)
+        symbols = spinSlotsWithBonus();
+        bonusTriggered = false; // Don't retrigger bonus if already in bonus game
+        console.log('[Slots] Dev toggle: Already in bonus game, using bonus weights without retrigger');
+      } else if (isInBonusGame) {
+        // Use bonus game weights (increased probability)
+        symbols = spinSlotsWithBonus();
+        console.log('[Slots] Bonus game spin - Generated symbols:', symbols.join(', '));
+      } else {
+        // Regular spin
+        symbols = spinSlots();
+        console.log('[Slots] Generated symbols:', symbols.join(', '));
+        
+        // Check for bonus trigger (3 bonus symbols with middle reel being bonus)
+        bonusTriggered = checkBonusTrigger(symbols);
+        if (bonusTriggered) {
+          console.log('[Slots] Bonus trigger activated!');
+        }
+      }
       
-      // Calculate payout
+      // Determine if this spin should be free (bonus game or bonus trigger)
+      const isFreeSpin = isInBonusGame || bonusTriggered;
+      
+      // If in bonus game or bonus triggered, don't deduct bet (free spin)
+      let balanceAfterBet = currentOrbs;
+      if (!isFreeSpin) {
+        // Deduct bet from player's balance
+        balanceAfterBet = currentOrbs - numericBet;
+        console.log('[Slots] Deducting bet. Balance:', currentOrbs, '->', balanceAfterBet);
+        
+        if (balanceAfterBet < 0) {
+          socket.emit('slot_machine_result', {
+            slotMachineId,
+            slotMachineName: SLOT_MACHINE_NAMES[slotMachineId] || 'Slot Machine',
+            symbols: [],
+            payout: 0,
+            newBalance: currentOrbs,
+            error: 'Insufficient balance'
+          });
+          return;
+        }
+        
+        // Update player balance immediately
+        player.orbs = balanceAfterBet;
+        players.updatePlayerOrbs(playerId, balanceAfterBet);
+        
+        // Broadcast bet deduction immediately
+        io.to(roomId).emit('player_orbs_updated', {
+          playerId,
+          orbs: balanceAfterBet,
+          rewardAmount: -numericBet,
+          rewardType: 'slots'
+        });
+        console.log('[Slots] Broadcasted bet deduction. New balance:', balanceAfterBet);
+      } else {
+        console.log('[Slots] Free spin - no bet deducted (bonus game or bonus trigger)');
+      }
+      
+      // Handle bonus game state
+      if (bonusTriggered && !isInBonusGame) {
+        // Start bonus game with 10 free spins
+        bonusState = {
+          freeSpinsRemaining: 10,
+          isInBonus: true
+        };
+        setBonusGameState(playerId, bonusState);
+        console.log('[Slots] Started bonus game with 10 free spins');
+      } else if (bonusTriggered && isInBonusGame) {
+        // Retrigger: add 10 more free spins
+        bonusState!.freeSpinsRemaining += 10;
+        setBonusGameState(playerId, bonusState!);
+        console.log('[Slots] Bonus retriggered! Added 10 more free spins. Total:', bonusState!.freeSpinsRemaining);
+      } else if (isInBonusGame) {
+        // Decrement free spins
+        bonusState!.freeSpinsRemaining--;
+        if (bonusState!.freeSpinsRemaining <= 0) {
+          // Bonus game ended
+          clearBonusGameState(playerId);
+          bonusState = undefined;
+          console.log('[Slots] Bonus game ended');
+        } else {
+          setBonusGameState(playerId, bonusState!);
+          console.log('[Slots] Free spins remaining:', bonusState!.freeSpinsRemaining);
+        }
+      }
+      
+      // Calculate payout (use original bet amount for multiplier, even in bonus game)
       const payout = calculatePayout(symbols, numericBet);
-      const netPayout = payout - numericBet; // Net win (can be negative)
+      const netPayout = isFreeSpin ? payout : (payout - numericBet); // In bonus game or trigger, payout is pure win
       const finalBalance = balanceAfterBet + payout;
       
       console.log('[Slots] Payout calculation:', {
@@ -3284,14 +3379,21 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       }
       
       // Emit result to player
+      const bonusGameStatePayload = bonusState ? {
+        isBonusGame: bonusState.isInBonus,
+        freeSpinsRemaining: bonusState.freeSpinsRemaining,
+        bonusTriggered: bonusTriggered
+      } : undefined;
+      
       socket.emit('slot_machine_result', {
         slotMachineId,
         slotMachineName,
         symbols,
-        payout: netPayout, // Net payout (win - bet, or -bet if loss)
-        newBalance: finalBalance
+        payout: netPayout, // Net payout (win - bet, or -bet if loss, or pure win in bonus)
+        newBalance: finalBalance,
+        bonusGameState: bonusGameStatePayload
       });
-      console.log('[Slots] Emitted slot_machine_result to player. Final balance:', finalBalance);
+      console.log('[Slots] Emitted slot_machine_result to player. Final balance:', finalBalance, 'Bonus game state:', bonusGameStatePayload);
       
       // Broadcast final balance update (with net payout)
       io.to(roomId).emit('player_orbs_updated', {

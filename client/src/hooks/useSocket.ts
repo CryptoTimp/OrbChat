@@ -1805,15 +1805,15 @@ function attachListeners(sock: Socket) {
     state.closeSlotMachine(slotMachineId);
   });
   
-  sock.on('slot_machine_result', ({ slotMachineId, slotMachineName, symbols, payout, newBalance }) => {
-    console.log('[useSocket] Received slot_machine_result:', { slotMachineId, slotMachineName, symbols, payout, newBalance });
+  sock.on('slot_machine_result', ({ slotMachineId, slotMachineName, symbols, payout, newBalance, bonusGameState }) => {
+    console.log('[useSocket] Received slot_machine_result:', { slotMachineId, slotMachineName, symbols, payout, newBalance, bonusGameState });
     
     // DON'T update balance here - let the SlotMachineModal handle it after animation completes
     // This prevents immediate balance updates that reveal win/loss before animation
     
     // Dispatch custom event for SlotMachineModal to listen to
     const event = new CustomEvent('slot_machine_result', {
-      detail: { slotMachineId, slotMachineName, symbols, payout, newBalance }
+      detail: { slotMachineId, slotMachineName, symbols, payout, newBalance, bonusGameState }
     });
     window.dispatchEvent(event);
   });
@@ -2878,14 +2878,14 @@ export function useSocket() {
     sock.emit('leave_slot_machine', { slotMachineId });
   }, []);
   
-  const spinSlotMachine = useCallback((slotMachineId: string, betAmount: number) => {
+  const spinSlotMachine = useCallback((slotMachineId: string, betAmount: number, forceBonus?: boolean) => {
     const sock = getOrCreateSocket();
     if (!sock.connected) {
       console.error('[useSocket] Socket not connected!');
       return;
     }
-    console.log('[useSocket] Emitting spin_slot_machine:', { slotMachineId, betAmount });
-    sock.emit('spin_slot_machine', { slotMachineId, betAmount });
+    console.log('[useSocket] Emitting spin_slot_machine:', { slotMachineId, betAmount, forceBonus });
+    sock.emit('spin_slot_machine', { slotMachineId, betAmount, forceBonus });
   }, []);
   
   // Trade functions

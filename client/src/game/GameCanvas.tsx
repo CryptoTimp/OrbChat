@@ -125,6 +125,12 @@ const { SCALE, PLAYER_WIDTH, PLAYER_HEIGHT } = GAME_CONSTANTS;
 // Track orbs we've already spawned particles for (prevents duplicates)
 const collectedOrbsWithParticles = new Set<string>();
 
+// Module-level constant to avoid array allocation in game loop
+const EMPTY_OUTFIT_ARRAY: string[] = [];
+
+import { instrumentFunction } from '../utils/functionProfiler';
+import { orbArrayPool, playerArrayPool } from '../utils/arrayPool';
+
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1285,8 +1291,8 @@ export function GameCanvas() {
     };
   }, [listRooms]);
   
-  // Game loop
-  const gameLoop = useCallback((deltaTime: number) => {
+  // Game loop - instrumented for memory profiling
+  const gameLoopBase = (deltaTime: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -2392,7 +2398,7 @@ export function GameCanvas() {
       } else {
         setTargetPosition(interpolated, player.x, player.y, player.direction);
         interpolated.chatBubble = player.chatBubble;
-        interpolated.sprite = player.sprite || { body: 'default', outfit: [] };
+        interpolated.sprite = player.sprite || { body: 'default', outfit: EMPTY_OUTFIT_ARRAY };
         interpolated.orbs = player.orbs;
         interpolated.name = player.name;
       }
@@ -2456,7 +2462,7 @@ export function GameCanvas() {
     // Performance: When there are many orbs, prioritize closer ones and skip distant ones
     start = performance.now();
     if (currentMapType !== 'casino') {
-      const visibleOrbs: typeof currentOrbs = [];
+      const visibleOrbs = orbArrayPool.acquire();
       for (const orb of currentOrbs) {
         // Hide orbs that are animating from shrines
         if (isShrineOrbHidden(orb.id)) {
@@ -2490,6 +2496,7 @@ export function GameCanvas() {
         }
       }
       trackRenderTime(renderMetrics, `Orbs (${visibleOrbs.length})`, performance.now() - start);
+      orbArrayPool.release(visibleOrbs);
     } else {
       trackRenderTime(renderMetrics, 'Orbs (0 - skipped on casino)', performance.now() - start);
     }
@@ -2541,7 +2548,7 @@ export function GameCanvas() {
     
     // Collect all players for rendering
     const collectStart = performance.now();
-    const allPlayers: Array<{ player: PlayerWithChat; isLocal: boolean; renderY: number }> = [];
+    const allPlayers = playerArrayPool.acquire();
     
     if (currentLocalPlayer) {
       allPlayers.push({ 
@@ -2557,11 +2564,12 @@ export function GameCanvas() {
         // Only render if visible
         viewportChecks++;
         if (isVisible(camera, interpolated.renderX, interpolated.renderY, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
+          // Optimized: Use module-level empty array constant to avoid allocation
           const playerToRender = { 
             ...interpolated, 
             x: interpolated.renderX, 
             y: interpolated.renderY,
-            sprite: interpolated.sprite || { body: 'default', outfit: [] },
+            sprite: interpolated.sprite || { body: 'default', outfit: EMPTY_OUTFIT_ARRAY },
             direction: interpolated.direction || 'down',
             name: interpolated.name || 'Unknown',
             id: interpolated.id || id,
@@ -2606,9 +2614,9 @@ export function GameCanvas() {
     trackRenderTime(renderMetrics, `Player Collection & Sorting (${allPlayers.length}, ${viewportChecks} checks)`, performance.now() - collectStart);
     
     // Separate NPCs from real players (exclude centurions - they're drawn separately after towers)
-    const npcs: typeof allPlayers = [];
-    const realPlayers: typeof allPlayers = [];
-    const centurions: typeof allPlayers = [];
+    const npcs = playerArrayPool.acquire();
+    const realPlayers = playerArrayPool.acquire();
+    const centurions = playerArrayPool.acquire();
     
     for (const playerData of allPlayers) {
       if (playerData.player.id.startsWith('centurion_')) {
@@ -2649,7 +2657,14 @@ export function GameCanvas() {
     
     // Draw NPC pets first
     for (const { player } of npcs) {
-      const petItemId = player.sprite.outfit.find(itemId => itemId.startsWith('pet_'));
+      // Optimize: Manual loop instead of .find() to avoid array iteration overhead
+      let petItemId: string | undefined;
+      for (const itemId of player.sprite.outfit) {
+        if (itemId.startsWith('pet_')) {
+          petItemId = itemId;
+          break;
+        }
+      }
       if (petItemId) {
         drawPet(ctx, player.id, petItemId, player.x, player.y, player.direction, currentTime, player);
       }
@@ -2658,21 +2673,33 @@ export function GameCanvas() {
     // Draw NPCs first (so they appear below real players)
     // Skip trader NPCs - they're drawn separately in drawNPCStalls
     start = performance.now();
+    let npcsDrawn = 0;
     for (const { player, isLocal } of npcs) {
-      const idParts = player.id.split('_');
-      const isTraderNPC = player.id.startsWith('npc_') && idParts.length >= 3 && 
-                          (idParts[2] === 'legendary' || idParts[2] === 'epic' || idParts[2] === 'rare');
+      // Optimize: Check ID pattern without splitting
+      const isTraderNPC = player.id.startsWith('npc_') && 
+                          (player.id.includes('_legendary') || player.id.includes('_epic') || player.id.includes('_rare'));
       // Skip trader NPCs - they're drawn in drawNPCStalls
       if (!isTraderNPC) {
-        const isHovered = hoveredPlayerRef.current === player.id;
-        drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
+        // Additional viewport culling check (already filtered in allPlayers, but double-check for safety)
+        if (isVisible(camera, player.x, player.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
+          const isHovered = hoveredPlayerRef.current === player.id;
+          drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
+          npcsDrawn++;
+        }
       }
     }
-    trackRenderTime(renderMetrics, `NPCs (${npcs.length})`, performance.now() - start);
+    trackRenderTime(renderMetrics, `NPCs (${npcsDrawn}/${npcs.length})`, performance.now() - start);
     
     // Draw real player pets
     for (const { player } of realPlayers) {
-      const petItemId = player.sprite.outfit.find(itemId => itemId.startsWith('pet_'));
+      // Optimize: Manual loop instead of .find() to avoid array iteration overhead
+      let petItemId: string | undefined;
+      for (const itemId of player.sprite.outfit) {
+        if (itemId.startsWith('pet_')) {
+          petItemId = itemId;
+          break;
+        }
+      }
       if (petItemId) {
         drawPet(ctx, player.id, petItemId, player.x, player.y, player.direction, currentTime, player);
       }
@@ -2756,17 +2783,28 @@ export function GameCanvas() {
       }
       trackRenderTime(renderMetrics, 'Blackjack Seat Detection', performance.now() - blackjackStart);
       
+      let playersDrawn = 0;
       for (const { player, isLocal } of realPlayers) {
-        const isHovered = hoveredPlayerRef.current === player.id;
-        // Mark if player is at blackjack table or slot machine
-        const playerWithSeatFlags = { 
-          ...player, 
-          isAtBlackjackTable: playersAtBlackjack.has(player.id),
-          isAtSlotMachine: playersAtSlotMachine.has(player.id)
-        };
-        drawPlayer(ctx, playerWithSeatFlags, isLocal, currentTime, false, isHovered);
+        // Additional viewport culling check (already filtered in allPlayers, but double-check for safety)
+        if (isVisible(camera, player.x, player.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
+          const isHovered = hoveredPlayerRef.current === player.id;
+          // Mark if player is at blackjack table or slot machine
+          const playerWithSeatFlags = { 
+            ...player, 
+            isAtBlackjackTable: playersAtBlackjack.has(player.id),
+            isAtSlotMachine: playersAtSlotMachine.has(player.id)
+          };
+          drawPlayer(ctx, playerWithSeatFlags, isLocal, currentTime, false, isHovered);
+          playersDrawn++;
+        }
       }
-    trackRenderTime(renderMetrics, `Players (${realPlayers.length})`, performance.now() - start);
+    trackRenderTime(renderMetrics, `Players (${playersDrawn}/${realPlayers.length})`, performance.now() - start);
+    
+    // Release arrays back to pool
+    playerArrayPool.release(allPlayers);
+    playerArrayPool.release(npcs);
+    playerArrayPool.release(realPlayers);
+    playerArrayPool.release(centurions);
     
     // Draw flag bunting BEFORE trader NPCs (so it appears behind them, their nameplates, and speech bubbles)
     // TEMPORARILY DISABLED FOR PERFORMANCE TESTING
@@ -2960,8 +2998,9 @@ export function GameCanvas() {
     ctx.font = `${Math.round(12 * uiScale)}px "Press Start 2P", monospace`;
     ctx.fillText(`${Math.round(camera.zoom * 100)}%`, 20 * uiScale, canvasSize.height - 15 * uiScale);
     ctx.restore();
-    
-  }, [getKeys, move, collectOrb, setLocalPlayerPosition, canvasSize]);
+  };
+  
+  const gameLoop = useCallback(instrumentFunction(gameLoopBase, 'GameCanvas.gameLoop'), [getKeys, move, collectOrb, setLocalPlayerPosition, canvasSize]);
   
   useGameLoop(gameLoop, true);
   
