@@ -9,10 +9,8 @@ import {
   drawPlayer, 
   drawChatBubble, 
   clearCanvas,
-  updatePlayerTrail,
-  drawParticleTrails,
-  clearPlayerTrail,
   clearAllPlayerTrails,
+  clearPlayerAnimationState,
   setShopItems,
   drawForestFoliage,
   drawForestStumps,
@@ -1117,6 +1115,39 @@ export function GameCanvas() {
     
     previousRoomIdRef.current = roomId || null;
   }, [roomId, setClickTarget]);
+  
+  // Reset animation state when local player position changes significantly (server transfer/map change)
+  const localPlayer = useGameStore(state => state.localPlayer);
+  const previousLocalPlayerPosRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (localPlayer && typeof localPlayer.x === 'number' && typeof localPlayer.y === 'number') {
+      const currentPos = { x: localPlayer.x, y: localPlayer.y };
+      const previousPos = previousLocalPlayerPosRef.current;
+      
+      if (previousPos) {
+        const dx = currentPos.x - previousPos.x;
+        const dy = currentPos.y - previousPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // If position changed by more than 50 units, it's likely a server transfer/map change
+        // Reset animation state to prevent laggy movement
+        if (distance > 50) {
+          console.log(`[Position Jump] Local player position changed by ${distance.toFixed(2)} units, resetting animation state`);
+          
+          // Clear animation state for local player specifically
+          if (localPlayer.id) {
+            clearPlayerAnimationState(localPlayer.id);
+            console.log(`[Position Jump] Cleared animation state for player ${localPlayer.id}`);
+          }
+        }
+      }
+      
+      previousLocalPlayerPosRef.current = currentPos;
+    } else if (!localPlayer) {
+      // Player disconnected or not in room - clear previous position
+      previousLocalPlayerPosRef.current = null;
+    }
+  }, [localPlayer?.x, localPlayer?.y, localPlayer?.id]);
   
   // Initialize return portal position when entering casino map
   useEffect(() => {
@@ -2372,45 +2403,7 @@ export function GameCanvas() {
       drawForestStumps(ctx, treeStates, camera);
     }
     
-    // Helper to get trail color from equipped boost items
-    const getTrailColor = (outfit: string[]): string | undefined => {
-      if (!outfit || !Array.isArray(outfit)) return undefined;
-      // Check equipped items for trail colors (only boost items have trail colors)
-      for (const itemId of outfit) {
-        if (!itemId || !itemId.includes('boost')) continue; // Only check boost items
-        const shopItem = shopItems.find(s => s.id === itemId);
-        if (shopItem?.trailColor && typeof shopItem.trailColor === 'string') {
-          return shopItem.trailColor;
-        }
-      }
-      return undefined;
-    };
-    
-    // Update particle trails for all players (only visible ones for performance)
-    if (currentLocalPlayer) {
-      const trailColor = getTrailColor(currentLocalPlayer.sprite?.outfit || []);
-      // Check if local player is pressing movement keys
-      const keys = getKeys();
-      // Don't update trail if player is chopping (to prevent ghost image)
-      const isChopping = cuttingTreeRef.current !== null;
-      const localIsMoving = !isChopping && (keys.up || keys.down || keys.left || keys.right);
-      // Always update local player trail (they're always "visible" to the player)
-      updatePlayerTrail(currentLocalPlayer.id, currentLocalPlayer.x, currentLocalPlayer.y, trailColor, currentTime, localIsMoving);
-    }
-    
-    // Only update trails for visible players to improve performance when zoomed out
-    interpolatedPlayers.forEach((interpolated, id) => {
-      // Check visibility before updating trail
-      if (typeof interpolated.renderX === 'number' && typeof interpolated.renderY === 'number') {
-        if (isVisible(camera, interpolated.renderX, interpolated.renderY, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
-          const trailColor = getTrailColor(interpolated.sprite?.outfit || []);
-          updatePlayerTrail(id, interpolated.renderX, interpolated.renderY, trailColor, currentTime, interpolated.renderX !== interpolated.targetX || interpolated.renderY !== interpolated.targetY);
-        }
-      }
-    });
-    
-    // Draw particle trails (behind players) - with viewport culling for performance
-    drawParticleTrails(ctx, currentTime, camera);
+    // Speed boost particle effects removed - no longer updating or drawing trails
     
     // Draw orb collection particles
     drawOrbCollectionParticles(ctx, deltaTime);

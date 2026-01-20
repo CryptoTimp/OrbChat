@@ -11478,6 +11478,11 @@ interface ExtendedPlayerAnimation extends PlayerAnimation {
 
 const extendedPlayerAnimations: Map<string, ExtendedPlayerAnimation> = new Map();
 
+// Export function to clear animation state for a specific player (for server transfers)
+export function clearPlayerAnimationState(playerId: string): void {
+  extendedPlayerAnimations.delete(playerId);
+}
+
 // Track which players are chopping
 const choppingPlayers: Map<string, { startTime: number }> = new Map();
 

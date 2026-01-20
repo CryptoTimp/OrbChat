@@ -124,6 +124,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const [gameHistory, setGameHistory] = useState<Array<{ won: boolean; amount: number; bet: number }>>([]);
   const [showInfo, setShowInfo] = useState(false);
   const [sessionStartingBalance, setSessionStartingBalance] = useState<number | null>(null);
+  const [lastSpinTime, setLastSpinTime] = useState<number>(0); // Track last spin time for cooldown
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0); // Cooldown remaining in seconds
   const pendingResultRef = useRef<{ symbols: SlotSymbol[]; payout: number; bet: number; newBalance?: number } | null>(null);
   const sessionSlotChangesRef = useRef<number>(0); // Track only slot machine balance changes for session P/L
   
@@ -634,9 +636,38 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
     };
   }, [isSpinning, reels, activeReelIndex]);
   
+  // Cooldown timer effect
+  useEffect(() => {
+    const COOLDOWN_DURATION = 2500; // 2.5 seconds in milliseconds
+    
+    const updateCooldown = () => {
+      const now = Date.now();
+      const timeSinceLastSpin = now - lastSpinTime;
+      const remaining = Math.max(0, COOLDOWN_DURATION - timeSinceLastSpin);
+      setCooldownRemaining(remaining / 1000); // Convert to seconds
+    };
+    
+    // Update immediately
+    updateCooldown();
+    
+    // Update every 100ms for smooth countdown
+    const interval = setInterval(updateCooldown, 100);
+    
+    return () => clearInterval(interval);
+  }, [lastSpinTime]);
+  
   const handleSpin = () => {
     // Always use the current balance from localPlayer.orbs to ensure sync across all modals
     const currentBalance = localPlayer?.orbs || 0;
+    const COOLDOWN_DURATION = 2500; // 2.5 seconds in milliseconds
+    const now = Date.now();
+    const timeSinceLastSpin = now - lastSpinTime;
+    
+    // Check cooldown
+    if (timeSinceLastSpin < COOLDOWN_DURATION) {
+      // Still on cooldown - don't allow spin
+      return;
+    }
     
     if (isSpinning || !slotMachineId || currentBalance < betAmount) return;
     
@@ -685,6 +716,9 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
     
     // Emit spin to server (server will deduct bet, add payout, and send final balance)
            spinSlotMachine(slotMachineId, betAmount);
+    
+    // Set last spin time for cooldown
+    setLastSpinTime(Date.now());
     
     // Don't set isSpinning yet - wait for server result
   };
@@ -1143,31 +1177,37 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
             <div className="text-xs font-pixel text-gray-300 text-center">SPIN</div>
             <button
               onClick={handleSpin}
-              disabled={isSpinning || balance < betAmount}
-              className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold transition-all text-white"
+              disabled={isSpinning || balance < betAmount || cooldownRemaining > 0}
+              className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold transition-all text-white relative"
               style={{
-                backgroundColor: isSpinning || balance < betAmount ? '#4b5563' : currentTheme.secondary,
-                boxShadow: isSpinning || balance < betAmount 
+                backgroundColor: isSpinning || balance < betAmount || cooldownRemaining > 0 ? '#4b5563' : currentTheme.secondary,
+                boxShadow: isSpinning || balance < betAmount || cooldownRemaining > 0
                   ? 'none' 
                   : `0 0 20px ${currentTheme.glow}50, 0 0 40px ${currentTheme.glow}30`,
-                cursor: isSpinning || balance < betAmount ? 'not-allowed' : 'pointer'
+                cursor: isSpinning || balance < betAmount || cooldownRemaining > 0 ? 'not-allowed' : 'pointer'
               }}
               onMouseEnter={(e) => {
-                if (!isSpinning && balance >= betAmount) {
+                if (!isSpinning && balance >= betAmount && cooldownRemaining <= 0) {
                   e.currentTarget.style.backgroundColor = currentTheme.primary;
                   e.currentTarget.style.boxShadow = `0 0 30px ${currentTheme.glow}70, 0 0 60px ${currentTheme.glow}40`;
                 }
               }}
               onMouseLeave={(e) => {
                 const currentBal = pendingBalanceUpdateRef.current !== null ? pendingBalanceUpdateRef.current : (localPlayer?.orbs || 0);
-                if (!isSpinning && currentBal >= betAmount) {
+                if (!isSpinning && currentBal >= betAmount && cooldownRemaining <= 0) {
                   e.currentTarget.style.backgroundColor = currentTheme.secondary;
                   e.currentTarget.style.boxShadow = `0 0 20px ${currentTheme.glow}50, 0 0 40px ${currentTheme.glow}30`;
                 }
               }}
-              title={isSpinning ? 'Spinning...' : 'Spin the reels'}
+              title={
+                isSpinning 
+                  ? 'Spinning...' 
+                  : cooldownRemaining > 0 
+                    ? `Cooldown: ${cooldownRemaining.toFixed(1)}s` 
+                    : 'Spin the reels'
+              }
             >
-              {isSpinning ? '⟳' : '⟳'}
+              {isSpinning ? '⟳' : cooldownRemaining > 0 ? cooldownRemaining.toFixed(1) : '⟳'}
             </button>
           </div>
         </div>
