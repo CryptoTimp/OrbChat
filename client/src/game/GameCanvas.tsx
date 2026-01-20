@@ -125,8 +125,9 @@ const { SCALE, PLAYER_WIDTH, PLAYER_HEIGHT } = GAME_CONSTANTS;
 // Track orbs we've already spawned particles for (prevents duplicates)
 const collectedOrbsWithParticles = new Set<string>();
 
-// Module-level constant to avoid array allocation in game loop
+// Module-level constants to avoid allocations in game loop
 const EMPTY_OUTFIT_ARRAY: string[] = [];
+const DEFAULT_SPRITE = { body: 'default', outfit: EMPTY_OUTFIT_ARRAY };
 
 import { instrumentFunction } from '../utils/functionProfiler';
 import { orbArrayPool, playerArrayPool, numberArrayPool } from '../utils/arrayPool';
@@ -2392,7 +2393,7 @@ export function GameCanvas() {
                              playerWorldY >= viewportTop && playerWorldY <= viewportBottom;
       
       if (!player.sprite) {
-        player.sprite = { body: 'default', outfit: [] };
+        player.sprite = DEFAULT_SPRITE;
       }
       
       let interpolated = interpolatedPlayers.get(id);
@@ -2402,7 +2403,7 @@ export function GameCanvas() {
       } else {
         setTargetPosition(interpolated, player.x, player.y, player.direction);
         interpolated.chatBubble = player.chatBubble;
-        interpolated.sprite = player.sprite || { body: 'default', outfit: EMPTY_OUTFIT_ARRAY };
+        interpolated.sprite = player.sprite || DEFAULT_SPRITE;
         interpolated.orbs = player.orbs;
         interpolated.name = player.name;
       }
@@ -2603,15 +2604,17 @@ export function GameCanvas() {
         // Only render if visible
         viewportChecks++;
         if (isVisible(camera, interpolated.renderX, interpolated.renderY, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
-          // Optimized: Use module-level empty array constant to avoid allocation
-          const playerToRender = { 
-            ...interpolated, 
-            x: interpolated.renderX, 
-            y: interpolated.renderY,
-            sprite: interpolated.sprite || { body: 'default', outfit: EMPTY_OUTFIT_ARRAY },
-            direction: interpolated.direction || 'down',
-            name: interpolated.name || 'Unknown',
+          // Optimized: Avoid object spread and use direct property assignment to reduce allocations
+          const playerToRender: PlayerWithChat = {
             id: interpolated.id || id,
+            name: interpolated.name || 'Unknown',
+            x: interpolated.renderX,
+            y: interpolated.renderY,
+            direction: interpolated.direction || 'down',
+            orbs: interpolated.orbs || 0,
+            roomId: interpolated.roomId || '',
+            sprite: interpolated.sprite || DEFAULT_SPRITE,
+            chatBubble: interpolated.chatBubble,
           };
           allPlayers.push({ 
             player: playerToRender,

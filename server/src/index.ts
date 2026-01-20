@@ -3226,6 +3226,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     
     try {
       // Import slot machine logic
+      const slotModule = await import('./slots');
       const { 
         spinSlots, 
         spinSlotsWithBonus, 
@@ -3234,14 +3235,15 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         getBonusGameState,
         setBonusGameState,
         clearBonusGameState
-      } = await import('./slots');
+      } = slotModule;
+      type SlotSymbol = slotModule.SlotSymbol;
       
       // Check if player is in bonus game
       let bonusState = getBonusGameState(playerId);
       const isInBonusGame = bonusState?.isInBonus ?? false;
       
       // Spin the reels FIRST to check if bonus will trigger (before deducting bet)
-      let symbols: string[];
+      let symbols: SlotSymbol[];
       let bonusTriggered = false;
       
       if (forceBonus && !isInBonusGame) {
@@ -3252,7 +3254,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           'bonus',  // Middle reel (index 2) - 3 bonus symbols
           'bonus',
           'bonus'
-        ];
+        ] as SlotSymbol[];
         bonusTriggered = true;
         console.log('[Slots] Dev toggle: Forced bonus trigger');
       } else if (forceBonus && isInBonusGame) {
@@ -3287,13 +3289,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         console.log('[Slots] Deducting bet. Balance:', currentOrbs, '->', balanceAfterBet);
         
         if (balanceAfterBet < 0) {
-          socket.emit('slot_machine_result', {
+          socket.emit('slot_machine_error', {
             slotMachineId,
-            slotMachineName: SLOT_MACHINE_NAMES[slotMachineId] || 'Slot Machine',
-            symbols: [],
-            payout: 0,
-            newBalance: currentOrbs,
-            error: 'Insufficient balance'
+            message: 'Insufficient balance'
           });
           return;
         }

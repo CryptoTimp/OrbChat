@@ -1,6 +1,6 @@
 // Slot machine game logic
 
-type SlotSymbol = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'godlike' | 'orb' | 'bonus';
+export type SlotSymbol = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'godlike' | 'orb' | 'bonus';
 
 // Slot machine seat management
 export interface SlotMachinePlayer {

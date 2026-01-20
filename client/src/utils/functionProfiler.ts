@@ -1,6 +1,14 @@
 // Function Profiler - Tracks function calls and memory consumption
 // Used for debugging memory leaks and performance issues
 
+interface AllocationLocation {
+  file: string;
+  line: number;
+  column: number;
+  count: number;
+  totalMemory: number; // Total MB allocated at this location
+}
+
 interface FunctionMetric {
   name: string;
   callCount: number;
@@ -20,6 +28,7 @@ interface FunctionMetric {
     setOperations: number;
   };
   recentMemoryDeltas: number[]; // Last 10 memory deltas for trend analysis
+  allocationLocations: Map<string, AllocationLocation>; // Track where allocations occur (key: "file:line:column")
 }
 
 const functionMetrics = new Map<string, FunctionMetric>();
@@ -118,6 +127,36 @@ const updateMemoryHistory = () => {
   });
 };
 
+// Parse stack trace to extract file:line:column information
+function parseStackTrace(stack: string | undefined): Array<{ file: string; line: number; column: number }> | null {
+  if (!stack) return null;
+  
+  const locations: Array<{ file: string; line: number; column: number }> = [];
+  const lines = stack.split('\n');
+  
+  // Skip first line (Error message) and second line (instrumentFunction wrapper)
+  for (let i = 2; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // Match patterns like: "at functionName (file:///path/to/file.ts:123:45)" or "at file:///path/to/file.ts:123:45"
+    const match = line.match(/at\s+(?:[^\s]+\s+\()?([^:]+):(\d+):(\d+)\)?/);
+    if (match) {
+      const file = match[1];
+      const lineNum = parseInt(match[2], 10);
+      const column = parseInt(match[3], 10);
+      
+      // Filter out node_modules, browser internals, and profiler itself
+      if (!file.includes('node_modules') && 
+          !file.includes('functionProfiler') &&
+          !file.includes('chrome-extension') &&
+          file.includes('src/')) {
+        locations.push({ file, line: lineNum, column });
+      }
+    }
+  }
+  
+  return locations.length > 0 ? locations : null;
+}
+
 // Instrument a function to track calls and memory
 export function instrumentFunction<T extends (...args: any[]) => any>(
   fn: T,
@@ -138,6 +177,16 @@ export function instrumentFunction<T extends (...args: any[]) => any>(
     // Get memory after
     const memoryAfter = getCurrentMemory();
     const memoryDelta = memoryAfter - memoryBefore;
+    
+    // Capture stack trace only if we detected a significant allocation (to reduce overhead)
+    let stackTrace: string | undefined;
+    if (memoryDelta > 0.0001) { // Only capture for > 0.1KB allocations
+      try {
+        throw new Error();
+      } catch (e) {
+        stackTrace = (e as Error).stack;
+      }
+    }
     
     // Update metrics
     let metric = functionMetrics.get(name);
@@ -161,6 +210,7 @@ export function instrumentFunction<T extends (...args: any[]) => any>(
           setOperations: 0,
         },
         recentMemoryDeltas: [],
+        allocationLocations: new Map(),
       };
       functionMetrics.set(name, metric);
     }
@@ -177,9 +227,41 @@ export function instrumentFunction<T extends (...args: any[]) => any>(
       metric.recentMemoryDeltas.shift();
     }
     
+    // If memory was allocated, track the location (only for significant allocations to reduce overhead)
+    // Sample: only capture stack trace for 1% of small allocations, 10% of medium, 100% of large
+    const shouldCaptureStack = memoryDelta > 0.01 || // Always capture for > 10KB
+                                (memoryDelta > 0.001 && Math.random() < 0.01) || // 1% sample for 1-10KB
+                                (memoryDelta > 0.0001 && Math.random() < 0.001); // 0.1% sample for 0.1-1KB
+    
+    if (shouldCaptureStack && stackTrace && memoryDelta > 0.0001) {
+      const locations = parseStackTrace(stackTrace);
+      if (locations && locations.length > 0) {
+        // Track the first relevant location (closest to actual allocation)
+        const location = locations[0];
+        const key = `${location.file}:${location.line}:${location.column}`;
+        
+        let allocLoc = metric.allocationLocations.get(key);
+        if (!allocLoc) {
+          allocLoc = {
+            file: location.file,
+            line: location.line,
+            column: location.column,
+            count: 0,
+            totalMemory: 0,
+          };
+          metric.allocationLocations.set(key, allocLoc);
+        }
+        
+        // Scale up count and memory based on sampling rate
+        const sampleRate = memoryDelta > 0.01 ? 1.0 : 
+                          memoryDelta > 0.001 ? 100 : 1000; // Inverse of sample rate
+        allocLoc.count += sampleRate;
+        allocLoc.totalMemory += memoryDelta * sampleRate;
+      }
+    }
+    
     // Analyze memory delta to infer operations (heuristic)
     if (memoryDelta > 0.001) { // > 1KB
-      // Likely object/array creation
       if (memoryDelta < 0.1) {
         metric.operationCounts.objectCreations++;
       } else {
@@ -242,6 +324,8 @@ export function getFunctionMetrics(): FunctionMetric[] {
       },
       // Ensure recentMemoryDeltas exists
       recentMemoryDeltas: metric.recentMemoryDeltas || [],
+      // Ensure allocationLocations exists
+      allocationLocations: metric.allocationLocations || new Map(),
     }))
     .sort((a, b) => {
       // Sort by leak score first, then by total memory delta
@@ -293,6 +377,14 @@ interface LeakReport {
     canvasOperations: number;
     functionCalls: number;
   };
+  topAllocationLocations: Array<{
+    file: string;
+    line: number;
+    column: number;
+    count: number;
+    totalMemory: number;
+    display: string; // Formatted for display
+  }>;
 }
 
 // Analyze and generate leak reports
@@ -378,6 +470,40 @@ export function analyzeLeaks(): LeakReport[] {
       recommendations.push(`Profile ${metric.name} with Chrome DevTools Memory Profiler to identify retained objects`);
     }
     
+    // Extract top allocation locations
+    const topAllocationLocations = Array.from((metric.allocationLocations || new Map()).values())
+      .sort((a, b) => b.totalMemory - a.totalMemory) // Sort by total memory allocated
+      .slice(0, 5) // Top 5 locations
+      .map(loc => {
+        // Format file path for display (show relative path from src/)
+        let displayFile = loc.file;
+        const srcIndex = displayFile.indexOf('src/');
+        if (srcIndex !== -1) {
+          displayFile = displayFile.substring(srcIndex);
+        }
+        // Remove file:// protocol if present
+        displayFile = displayFile.replace(/^file:\/\/\/?/, '');
+        
+        return {
+          file: loc.file,
+          line: loc.line,
+          column: loc.column,
+          count: loc.count,
+          totalMemory: loc.totalMemory,
+          display: `${displayFile}:${loc.line}:${loc.column} (${loc.count} allocations, ${loc.totalMemory.toFixed(2)}MB)`,
+        };
+      });
+    
+    // Add allocation locations to likely causes if available
+    if (topAllocationLocations.length > 0) {
+      const topLocation = topAllocationLocations[0];
+      likelyCauses.push(`Top allocation: ${topLocation.display}`);
+      
+      if (topAllocationLocations.length > 1) {
+        likelyCauses.push(`Other locations: ${topAllocationLocations.slice(1).map(l => l.display).join('; ')}`);
+      }
+    }
+    
     reports.push({
       functionName: metric.name,
       severity,
@@ -394,6 +520,7 @@ export function analyzeLeaks(): LeakReport[] {
         canvasOperations: metric.operationCounts.canvasOperations,
         functionCalls: metric.operationCounts.functionCalls,
       },
+      topAllocationLocations,
     });
   }
   

@@ -94,6 +94,14 @@ export function HUD({ onLeaveRoom }: HUDProps) {
     growthRate: number;
     likelyCauses: string[];
     recommendations: string[];
+    topAllocationLocations?: Array<{
+      file: string;
+      line: number;
+      column: number;
+      count: number;
+      totalMemory: number;
+      display: string;
+    }>;
   }>>([]);
   const [showLeakAnalysis, setShowLeakAnalysis] = useState<boolean>(false);
   
@@ -798,12 +806,24 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                             Leak Score: {report.leakScore.toFixed(1)}/100 • Leaked: {report.totalMemoryLeaked.toFixed(2)}MB • Growth: {report.growthRate.toFixed(2)}MB/min
                           </div>
                           {report.likelyCauses.length > 0 && (
-                            <div className="mt-1 break-words">
+                            <div className="mt-1 break-words break-all">
                               <span className="text-yellow-400">Causes:</span> {report.likelyCauses.join('; ')}
                             </div>
                           )}
+                          {report.topAllocationLocations && report.topAllocationLocations.length > 0 && (
+                            <div className="mt-1 break-words break-all">
+                              <span className="text-orange-400 font-bold">Allocation Locations:</span>
+                              <ul className="list-disc list-inside ml-2 mt-1">
+                                {report.topAllocationLocations.map((loc, idx) => (
+                                  <li key={idx} className="text-xs font-mono">
+                                    {loc.display}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                           {report.recommendations.length > 0 && (
-                            <div className="mt-1 break-words">
+                            <div className="mt-1 break-words break-all">
                               <span className="text-green-400">Fix:</span> {report.recommendations[0]}
                             </div>
                           )}

@@ -1541,7 +1541,7 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
         floorSet = 'chaos';
         floorColors = ['#00ffff', '#0080ff', '#00bfff', '#0066cc'];
         break; // Found chaos, use it (highest priority)
-      } else if (item.includes('godlike_abyss') && floorSet !== 'chaos') {
+      } else if (item.includes('godlike_abyss') && (floorSet === 'void' || floorSet === 'abyss')) {
         floorSet = 'abyss';
         floorColors = ['#1a0033', '#4b0082', '#000000', '#6a0dad'];
         // Don't break, continue to check for chaos (chaos takes priority)
@@ -1608,7 +1608,13 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
     
     // Reconstruct particles array with beams first, then non-beams
     particles.length = 0;
-    particles.push(...beamParticles, ...nonBeamParticles);
+    // Optimized: Manual push instead of spread to avoid array allocation
+    for (let i = 0; i < beamParticles.length; i++) {
+      particles.push(beamParticles[i]);
+    }
+    for (let i = 0; i < nonBeamParticles.length; i++) {
+      particles.push(nonBeamParticles[i]);
+    }
     
     // Release temp arrays
     particleArrayPool.release(beamParticles);
@@ -7869,7 +7875,10 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
     }
     if (activeBubbles.length !== bubbles.length) {
       bubbles.length = 0;
-      bubbles.push(...activeBubbles);
+      // Optimized: Manual push instead of spread to avoid array allocation
+      for (let i = 0; i < activeBubbles.length; i++) {
+        bubbles.push(activeBubbles[i]);
+      }
       blackjackDealerBubbles.set(dealerType.id, bubbles);
     }
     
@@ -7877,7 +7886,10 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
     if (activeBubbles.length > 0) {
       // Sort by creation time (oldest first) - reuse array
       const sortedBubbles = particleArrayPool.acquire();
-      sortedBubbles.push(...activeBubbles);
+      // Optimized: Manual push instead of spread to avoid array allocation
+      for (let i = 0; i < activeBubbles.length; i++) {
+        sortedBubbles.push(activeBubbles[i]);
+      }
       sortedBubbles.sort((a, b) => a.createdAt - b.createdAt);
       
       const bubbleSpacing = 30 / zoom; // Space between bubbles
@@ -7956,15 +7968,15 @@ export function getClickedDealer(worldX: number, worldY: number): string | null 
   
   // Find the closest dealer (in case multiple dealers share the same ID)
   // Prioritize blackjack dealers by checking them first
-  // Reuse arrays from pool to avoid allocations
-  const blackjackDealers = playerArrayPool.acquire();
-  const otherDealers = playerArrayPool.acquire();
+  // Reuse arrays from pool to avoid allocations (use any[] for tuple storage)
+  const blackjackDealers: Array<[string, { x: number; y: number }]> = [];
+  const otherDealers: Array<[string, { x: number; y: number }]> = [];
   
   for (const [dealerKey, position] of dealerPositions.entries()) {
     if (dealerKey.startsWith('blackjack_dealer_')) {
-      blackjackDealers.push([dealerKey, position] as any);
+      blackjackDealers.push([dealerKey, position]);
     } else {
-      otherDealers.push([dealerKey, position] as any);
+      otherDealers.push([dealerKey, position]);
     }
   }
   
@@ -10327,9 +10339,11 @@ export function updatePlayerTrail(playerId: string, x: number, y: number, trailC
     }
   }
   
-  // Update trail with valid particles (copy to trail, then release temp array)
+  // Update trail with valid particles (optimized: manual copy instead of spread to avoid array allocation)
   trail.length = 0;
-  trail.push(...validParticles);
+  for (let i = 0; i < validParticles.length; i++) {
+    trail.push(validParticles[i]);
+  }
   particleArrayPool.release(validParticles);
   playerTrails.set(playerId, trail);
 }
@@ -16603,7 +16617,17 @@ export function drawMiniMePet(
     direction: direction,
     sprite: {
       ...player.sprite,
-      outfit: player.sprite.outfit.filter(itemId => !itemId.startsWith('pet_')) // Remove pet items
+      outfit: (() => {
+        // Optimized: Manual filter instead of .filter() to avoid array allocation
+        const filteredOutfit: string[] = [];
+        for (let i = 0; i < player.sprite.outfit.length; i++) {
+          const itemId = player.sprite.outfit[i];
+          if (!itemId.startsWith('pet_')) {
+            filteredOutfit.push(itemId);
+          }
+        }
+        return filteredOutfit;
+      })() // Remove pet items
     }
   };
   
