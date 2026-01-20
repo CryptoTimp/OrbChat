@@ -10,6 +10,12 @@ export function startOrbSpawner(io: Server, roomId: string): void {
   // Don't start if already running
   if (orbIntervals.has(roomId)) return;
 
+  // Don't spawn orbs on casino or millionaires_lounge maps
+  const room = rooms.getRoom(roomId);
+  if (room && (room.mapType === 'casino' || room.mapType === 'millionaires_lounge')) {
+    return;
+  }
+
   const interval = setInterval(() => {
     const orb = rooms.spawnOrb(roomId);
     if (orb) {

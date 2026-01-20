@@ -41,6 +41,7 @@ import {
   getClickedBlackjackTable,
   getHoveredBlackjackTable,
   drawSlotMachines,
+  buildSlotMachinePositionsCache,
   getClickedSlotMachine,
   getHoveredSlotMachine,
   drawCasinoPlazaPulsingLines,
@@ -515,7 +516,56 @@ export function GameCanvas() {
       // Check if clicking on dealers (forest map and casino map)
       const currentMapType = useGameStore.getState().mapType;
       if (currentMapType === 'forest' || currentMapType === 'casino') {
-        const clickedDealerId = getClickedDealer(worldXScaled, worldYScaled);
+        // Check if clicking on blackjack table FIRST (before dealer checks to avoid conflicts)
+        // This must come before dealer checks because dealers might overlap with table click area
+        if (currentMapType === 'casino') {
+          const clickedTableId = getClickedBlackjackTable(worldXScaled, worldYScaled);
+          if (clickedTableId) {
+            // Return immediately to prevent dealer checks from running
+            // Handle the table interaction asynchronously
+            const localPlayer = useGameStore.getState().localPlayer;
+            if (localPlayer) {
+              playClickSound();
+              // Import blackjackTablePositions dynamically
+              import('./renderer').then(({ blackjackTablePositions }) => {
+                const tablePos = blackjackTablePositions.get(clickedTableId);
+                if (tablePos) {
+                  // Check if player is in range (similar to NPC stall interaction)
+                  const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+                  const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+                  const dx = tablePos.x - playerCenterX;
+                  const dy = tablePos.y - playerCenterY;
+                  const dist = Math.sqrt(dx * dx + dy * dy);
+                  const interactionRange = 80 * SCALE;
+                  
+                  if (dist < interactionRange) {
+                    // Player is in range, open blackjack modal
+                    useGameStore.getState().openBlackjackTable(clickedTableId);
+                  } else {
+                    // Player is far away, walk to table first
+                    setClickTarget(tablePos.x / SCALE, tablePos.y / SCALE);
+                    // Store pending interaction
+                    pendingBlackjackTableInteractionRef.current = clickedTableId;
+                  }
+                }
+              });
+            }
+            return; // Don't move via normal click handling - MUST be outside async callback
+          }
+        }
+        
+        // Check dealers, but exclude orb_dealer and loot_box_dealer if we're near a blackjack table
+        // (they're positioned at the same angles as tables and can cause conflicts)
+        let clickedDealerId = getClickedDealer(worldXScaled, worldYScaled);
+        if (currentMapType === 'casino' && (clickedDealerId === 'orb_dealer' || clickedDealerId === 'loot_box_dealer')) {
+          // Double-check: if we're clicking near a blackjack table, prioritize the table over the dealer
+          const nearbyTableId = getClickedBlackjackTable(worldXScaled, worldYScaled);
+          if (nearbyTableId) {
+            // Ignore dealer click if we're also clicking on a table
+            clickedDealerId = null;
+          }
+        }
+        
         if (clickedDealerId === 'log_dealer') {
           const localPlayer = useGameStore.getState().localPlayer;
           if (localPlayer) {
@@ -774,38 +824,7 @@ export function GameCanvas() {
           return; // Don't move via normal click handling
         }
         
-        // Check if clicking on blackjack table
-        const clickedTableId = getClickedBlackjackTable(worldXScaled, worldYScaled);
-        if (clickedTableId) {
-          const localPlayer = useGameStore.getState().localPlayer;
-          if (localPlayer) {
-            playClickSound();
-            // Import blackjackTablePositions dynamically
-            import('./renderer').then(({ blackjackTablePositions }) => {
-              const tablePos = blackjackTablePositions.get(clickedTableId);
-              if (tablePos) {
-                // Check if player is in range (similar to NPC stall interaction)
-                const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
-                const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
-                const dx = tablePos.x - playerCenterX;
-                const dy = tablePos.y - playerCenterY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const interactionRange = 80 * SCALE;
-                
-                if (dist < interactionRange) {
-                  // Player is in range, open blackjack modal
-                  useGameStore.getState().openBlackjackTable(clickedTableId);
-                } else {
-                  // Player is far away, walk to table first
-                  setClickTarget(tablePos.x / SCALE, tablePos.y / SCALE);
-                  // Store pending interaction
-                  pendingBlackjackTableInteractionRef.current = clickedTableId;
-                }
-              }
-            });
-          }
-          return; // Don't move via normal click handling
-        }
+        // Blackjack table check was moved above (before dealer checks) to avoid conflicts
       }
       
       // Check if clicking on return portal (in millionaire's lounge map)
@@ -1636,11 +1655,14 @@ export function GameCanvas() {
       const direction = newDirection;
       
       // Clear click target if we've reached it (or are very close)
+      // Also clear if we stopped moving while having a click target (prevents oscillation)
       if (currentClickTarget && !anyKeyPressed) {
         const dx = currentClickTarget.x - x;
         const dy = currentClickTarget.y - y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < 3) {
+        
+        // Clear if close enough OR if we're not moving (prevent oscillation loop)
+        if (distance < 3 || !moved) {
           setClickTarget(null, null);
         }
       }
@@ -2637,24 +2659,25 @@ export function GameCanvas() {
     
       // Draw real players (nameplates are drawn inside drawPlayer, so pets will be below them)
       start = performance.now();
-      // Check if players are at blackjack tables by checking their position against table seat positions
+      // Check if players are at blackjack tables or slot machines by checking their position against seat positions
       const blackjackStart = performance.now();
       const playersAtBlackjack = new Set<string>();
+      const playersAtSlotMachine = new Set<string>();
       if (currentMapType === 'casino') {
         // Use cached blackjack table positions from renderer (no recalculation needed)
         buildBlackjackTablePositionsCache();
         const blackjackTablePositionsCache = (window as any).__blackjackTablePositionsCache;
         
-        if (blackjackTablePositionsCache && blackjackTablePositionsCache.length === 4) {
-          const seatTolerance = 100; // pixels tolerance in unscaled coordinates
+        if (blackjackTablePositionsCache && blackjackTablePositionsCache.length === 2) {
+          const seatTolerance = 15; // Strict tolerance - only if directly on seat (reduced from 100)
           
-          // Check all 4 tables using cached positions
-          for (let tableIndex = 0; tableIndex < 4; tableIndex++) {
+          // Check all 2 tables using cached positions
+          for (let tableIndex = 0; tableIndex < 2; tableIndex++) {
             const cached = blackjackTablePositionsCache[tableIndex];
             
             // Check all 4 seats for each table using cached seat positions
             for (const seatPos of cached.seatPositions) {
-              // Check if any player is near this seat position
+              // Check if any player is directly on this seat position
               for (const { player } of realPlayers) {
                 // Player position is already in unscaled coordinates
                 // Seat positions are in scaled coordinates, so divide by SCALE
@@ -2675,14 +2698,52 @@ export function GameCanvas() {
             }
           }
         }
+        
+        // Check slot machine seats
+        buildSlotMachinePositionsCache();
+        const slotMachinePositionsCache = (window as any).__slotMachinePositionsCache;
+        if (slotMachinePositionsCache && slotMachinePositionsCache.length === 4) {
+          const seatTolerance = 15; // Strict tolerance - only if directly on seat (reduced from 100)
+          
+          // Check all 4 slot machines
+          for (let slotIndex = 0; slotIndex < slotMachinePositionsCache.length; slotIndex++) {
+            const cached = slotMachinePositionsCache[slotIndex];
+            
+            // Check all 8 seats for each slot machine
+            for (const seatPos of cached.seatPositions) {
+              // Check if any player is directly on this seat position
+              for (const { player } of realPlayers) {
+                // Player position is already in unscaled coordinates
+                // Seat positions are in scaled coordinates, so divide by SCALE
+                const seatX = seatPos.x / SCALE;
+                const seatY = seatPos.y / SCALE;
+                const playerCenterX = player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+                const playerCenterY = player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+                const distance = Math.sqrt(
+                  Math.pow(playerCenterX - seatX, 2) + 
+                  Math.pow(playerCenterY - seatY, 2)
+                );
+                
+                if (distance < seatTolerance) {
+                  playersAtSlotMachine.add(player.id);
+                  break; // Player found at this machine, no need to check other seats
+                }
+              }
+            }
+          }
+        }
       }
       trackRenderTime(renderMetrics, 'Blackjack Seat Detection', performance.now() - blackjackStart);
       
       for (const { player, isLocal } of realPlayers) {
         const isHovered = hoveredPlayerRef.current === player.id;
-        // Mark if player is at blackjack table
-        const playerWithBlackjackFlag = { ...player, isAtBlackjackTable: playersAtBlackjack.has(player.id) };
-        drawPlayer(ctx, playerWithBlackjackFlag, isLocal, currentTime, false, isHovered);
+        // Mark if player is at blackjack table or slot machine
+        const playerWithSeatFlags = { 
+          ...player, 
+          isAtBlackjackTable: playersAtBlackjack.has(player.id),
+          isAtSlotMachine: playersAtSlotMachine.has(player.id)
+        };
+        drawPlayer(ctx, playerWithSeatFlags, isLocal, currentTime, false, isHovered);
       }
     trackRenderTime(renderMetrics, `Players (${realPlayers.length})`, performance.now() - start);
     

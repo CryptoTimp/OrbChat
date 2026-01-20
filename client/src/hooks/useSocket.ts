@@ -1693,6 +1693,58 @@ function attachListeners(sock: Socket) {
     }
   });
 
+  // Blackjack table joined
+  sock.on('blackjack_joined', ({ tableId, seat }) => {
+    console.log('[useSocket] Blackjack table joined:', tableId, 'seat:', seat);
+    
+    // Calculate seat position and store it for teleportation (similar to slot machines)
+    const SCALE = GAME_CONSTANTS.SCALE;
+    const WORLD_WIDTH_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH * SCALE;
+    const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
+    const centerXScaled = WORLD_WIDTH_SCALED / 2;
+    const centerYScaled = WORLD_HEIGHT_SCALED / 2;
+    const plazaRadiusScaled = 600 * SCALE;
+    
+    // Map table numbers to angles: table 2 = top left (3π/4), table 4 = bottom right (7π/4)
+    const tableNumber = parseInt(tableId.replace('blackjack_table_', ''));
+    const tableAngleMap: Record<number, number> = {
+      2: 3 * Math.PI / 4,  // Top left
+      4: 7 * Math.PI / 4   // Bottom right
+    };
+    const tableAngle = tableAngleMap[tableNumber];
+    
+    if (tableAngle !== undefined) {
+      const tableRadiusScaled = plazaRadiusScaled * 0.6;
+      const tableXScaled = centerXScaled + Math.cos(tableAngle) * tableRadiusScaled;
+      const tableYScaled = centerYScaled + Math.sin(tableAngle) * tableRadiusScaled;
+      const tableRadiusSizeScaled = 60 * SCALE;
+      const tableMinorRadiusScaled = tableRadiusSizeScaled * 0.6;
+      
+      // Calculate seat position (matching server logic)
+      const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // 4 seats evenly spaced on player side (south)
+      const edgeXScaled = tableXScaled + Math.cos(seatAngle) * tableRadiusSizeScaled;
+      const edgeYScaled = tableYScaled + Math.sin(seatAngle) * tableMinorRadiusScaled;
+      const seatOffsetScaled = 12 * SCALE;
+      const seatXScaled = edgeXScaled + Math.cos(seatAngle) * seatOffsetScaled;
+      const seatYScaled = edgeYScaled + Math.sin(seatAngle) * seatOffsetScaled;
+      
+      // Convert to unscaled coordinates and center player sprite on seat
+      const seatX = seatXScaled / SCALE;
+      const seatY = seatYScaled / SCALE;
+      const seatWorldX = seatX - GAME_CONSTANTS.PLAYER_WIDTH / 2;
+      const seatWorldY = seatY - GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+      
+      // Store seat position in window for GameCanvas to access
+      (window as any).currentBlackjackSeat = { tableId, seatX: seatWorldX, seatY: seatWorldY };
+      
+      // Force teleport player to seat position immediately
+      const state = useGameStore.getState();
+      if (state.localPlayer && state.localPlayer.id === state.playerId) {
+        state.setLocalPlayerPosition(seatWorldX, seatWorldY, 'up');
+      }
+    }
+  });
+  
   // Slot machine result
   sock.on('slot_machine_joined', ({ slotMachineId, seat }) => {
     console.log('[useSocket] Slot machine joined:', slotMachineId, 'seat:', seat);

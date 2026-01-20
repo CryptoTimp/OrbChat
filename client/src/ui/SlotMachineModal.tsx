@@ -280,7 +280,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
       return;
     }
     
-    const SPIN_DURATION = 1000; // 1 second - all reels spin together
+    const SPIN_DURATION = 500; // 0.5 seconds - all reels spin together (reduced from 1 second)
     const STOP_DELAY = 200; // 0.2 seconds between each reel stopping
     let animationStartTime: number | null = null;
 
@@ -638,7 +638,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   
   // Cooldown timer effect
   useEffect(() => {
-    const COOLDOWN_DURATION = 3500; // 3.5 seconds in milliseconds
+    const COOLDOWN_DURATION = 2500; // 2.5 seconds in milliseconds (reduced from 3.0 seconds)
     
     const updateCooldown = () => {
       const now = Date.now();
@@ -659,7 +659,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const handleSpin = () => {
     // Always use the current balance from localPlayer.orbs to ensure sync across all modals
     const currentBalance = localPlayer?.orbs || 0;
-    const COOLDOWN_DURATION = 3500; // 3.5 seconds in milliseconds
+    const COOLDOWN_DURATION = 2500; // 2.5 seconds in milliseconds (reduced from 3.0 seconds)
     const now = Date.now();
     const timeSinceLastSpin = now - lastSpinTime;
     

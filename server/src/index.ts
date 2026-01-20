@@ -243,7 +243,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
             socket.emit('room_state', {
               roomId,
               players: allPlayers,
-              orbs: rooms.getOrbsInRoom(roomId),
+              orbs: (room.mapType === 'casino' || room.mapType === 'millionaires_lounge') ? [] : rooms.getOrbsInRoom(roomId), // Don't send orbs for casino/lounge maps
               shrines: rooms.getShrinesInRoom(roomId),
               treasureChests: rooms.getTreasureChestsInRoom(roomId),
               treeStates: rooms.getTreeStatesInRoom(roomId),
@@ -535,7 +535,14 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     // Add/update player in room (this will update if already exists)
     rooms.addPlayerToRoom(roomId, player);
     
-    // Start orb spawner for this room
+    // Clear all orbs from casino/millionaires_lounge maps (they shouldn't have orbs)
+    if (roomMapType === 'casino' || roomMapType === 'millionaires_lounge') {
+      rooms.clearOrbsInRoom(roomId);
+      // Notify all clients to remove orbs
+      io.to(roomId).emit('orbs_cleared');
+    }
+    
+    // Start orb spawner for this room (skips casino and millionaires_lounge maps)
     startOrbSpawner(io, roomId);
     
     // Start fountain orb spawner for forest maps
@@ -581,7 +588,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     socket.emit('room_state', {
       roomId,
       players: allPlayers,
-      orbs: rooms.getOrbsInRoom(roomId),
+      orbs: (roomMapType === 'casino' || roomMapType === 'millionaires_lounge') ? [] : rooms.getOrbsInRoom(roomId), // Don't send orbs for casino/lounge maps
       shrines: rooms.getShrinesInRoom(roomId),
       treasureChests: rooms.getTreasureChestsInRoom(roomId),
       treeStates: rooms.getTreeStatesInRoom(roomId),
@@ -658,7 +665,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     io.to(roomId).emit('room_state', {
       roomId,
       players: allPlayers,
-      orbs: rooms.getOrbsInRoom(roomId),
+      orbs: (roomMapType === 'casino' || roomMapType === 'millionaires_lounge') ? [] : rooms.getOrbsInRoom(roomId), // Don't send orbs for casino/lounge maps
       shrines: rooms.getShrinesInRoom(roomId),
       treasureChests: rooms.getTreasureChestsInRoom(roomId),
       treeStates: rooms.getTreeStatesInRoom(roomId),
@@ -1493,18 +1500,31 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         const centerXScaled = WORLD_WIDTH_SCALED / 2;
         const centerYScaled = WORLD_HEIGHT_SCALED / 2;
         const plazaRadiusScaled = 600 * SCALE; // Doubled from 300 to 600 for more space (same as client)
-        const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+        // Map table numbers to angles: table 2 = top left (3π/4), table 4 = bottom right (7π/4)
+        const tableNumber = parseInt(tableId.replace('blackjack_table_', ''));
+        const tableAngleMap: Record<number, number> = {
+          2: 3 * Math.PI / 4,  // Top left
+          4: 7 * Math.PI / 4   // Bottom right
+        };
+        const tableAngle = tableAngleMap[tableNumber];
+        if (tableAngle === undefined) {
+          console.error(`[Blackjack] Invalid table ID: ${tableId}`);
+          return;
+        }
         const tableRadiusScaled = plazaRadiusScaled * 0.6;
-        const tableIndex = parseInt(tableId.replace('blackjack_table_', '')) - 1;
-        const tableAngle = tableAngles[tableIndex];
         const tableXScaled = centerXScaled + Math.cos(tableAngle) * tableRadiusScaled;
         const tableYScaled = centerYScaled + Math.sin(tableAngle) * tableRadiusScaled;
         const tableRadiusSizeScaled = 60 * SCALE;
-        const seatRadiusScaled = tableRadiusSizeScaled * 0.8;
+        const tableMinorRadiusScaled = tableRadiusSizeScaled * 0.6; // Minor radius for ellipse (matching client)
         // Updated for 4 seats: evenly spaced in semi-circle (matching client renderer.ts)
         const seatAngle = Math.PI + (result.seat - 1.5) * (Math.PI / 3); // Seats on player side - 4 seats evenly spaced
-        const seatXScaled = tableXScaled + Math.cos(seatAngle) * seatRadiusScaled;
-        const seatYScaled = tableYScaled + Math.sin(seatAngle) * seatRadiusScaled;
+        // Calculate edge position first (matching client logic)
+        const edgeXScaled = tableXScaled + Math.cos(seatAngle) * tableRadiusSizeScaled;
+        const edgeYScaled = tableYScaled + Math.sin(seatAngle) * tableMinorRadiusScaled;
+        // Then add seat offset (matching client: 12 * SCALE)
+        const seatOffsetScaled = 12 * SCALE;
+        const seatXScaled = edgeXScaled + Math.cos(seatAngle) * seatOffsetScaled;
+        const seatYScaled = edgeYScaled + Math.sin(seatAngle) * seatOffsetScaled;
         
         // Convert from scaled pixels to unscaled pixels (server coordinates)
         const seatX = seatXScaled / SCALE;
@@ -1518,7 +1538,8 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         
         console.log(`[Blackjack] Seat position calculation for seat ${result.seat}:`, {
           tableId,
-          tableIndex,
+          tableNumber,
+          tableAngle: tableAngle * 180 / Math.PI,
           tableX: tableXScaled / SCALE,
           tableY: tableYScaled / SCALE,
           seatAngle: seatAngle * 180 / Math.PI,
@@ -1557,6 +1578,8 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         }
         
         console.log('[Blackjack] Join successful, broadcasting state to', table.state.players.length, 'players');
+        // Emit blackjack_joined event with seat info (similar to slot_machine_joined)
+        socket.emit('blackjack_joined', { tableId, seat: result.seat });
         // First, send state directly to the joining player
         socket.emit('blackjack_state_update', { tableId, state: table.state });
         console.log('[Blackjack] Sent state update to joining player', playerId);

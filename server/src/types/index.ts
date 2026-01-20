@@ -226,6 +226,7 @@ export interface ServerToClientEvents {
   treasure_chest_interaction_error: (data: { chestId: string; message: string }) => void;
   gold_coins_sold: (data: { playerId: string; coinCount: number; orbsReceived: number; newBalance: number }) => void;
   portal_used: (data: { playerId: string; playerName: string; portalType: 'casino' | 'lounge' | 'return' }) => void;
+  blackjack_joined: (data: { tableId: string; seat: number }) => void;
   blackjack_state_update: (data: { tableId: string; state: BlackjackTableState }) => void;
   blackjack_error: (data: { tableId: string; message: string }) => void;
   slot_machine_joined: (data: { slotMachineId: string; seat: number }) => void;

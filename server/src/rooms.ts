@@ -469,6 +469,11 @@ export function spawnOrb(roomId: string): Orb | null {
   const room = rooms.get(roomId);
   if (!room) return null;
 
+  // Don't spawn orbs on casino or millionaires_lounge maps
+  if (room.mapType === 'casino' || room.mapType === 'millionaires_lounge') {
+    return null;
+  }
+
   if (room.orbs.length >= GAME_CONSTANTS.MAX_ORBS_PER_ROOM) {
     return null;
   }
@@ -498,6 +503,11 @@ export function createOrbAtPosition(roomId: string, x: number, y: number, value:
   const room = rooms.get(roomId);
   if (!room) return null;
 
+  // Don't create orbs on casino or millionaires_lounge maps
+  if (room.mapType === 'casino' || room.mapType === 'millionaires_lounge') {
+    return null;
+  }
+
   if (!bypassMaxOrbs && room.orbs.length >= GAME_CONSTANTS.MAX_ORBS_PER_ROOM) {
     return null;
   }
@@ -517,6 +527,11 @@ export function createOrbAtPosition(roomId: string, x: number, y: number, value:
 export function collectOrb(roomId: string, orbId: string, playerId: string): Orb | null {
   const room = rooms.get(roomId);
   if (!room) return null;
+
+  // Don't allow orb collection on casino or millionaires_lounge maps
+  if (room.mapType === 'casino' || room.mapType === 'millionaires_lounge') {
+    return null;
+  }
 
   const orbIndex = room.orbs.findIndex(o => o.id === orbId);
   if (orbIndex === -1) return null;
@@ -543,6 +558,13 @@ export function getOrbsInRoom(roomId: string): Orb[] {
   const room = rooms.get(roomId);
   if (!room) return [];
   return [...room.orbs];
+}
+
+// Clear all orbs from a room (used when switching to casino/millionaires_lounge maps)
+export function clearOrbsInRoom(roomId: string): void {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  room.orbs = [];
 }
 
 // Get a shrine by ID

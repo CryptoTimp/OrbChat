@@ -109,17 +109,26 @@ export function calculateMovement(
     const dyToTarget = targetY - currentY;
     const distanceToTarget = Math.sqrt(dxToTarget * dxToTarget + dyToTarget * dyToTarget);
     
-    // If we're close enough, stop moving (within 2 pixels)
-    if (distanceToTarget < 2) {
+    // If we're close enough, stop moving (within 3 pixels to prevent oscillation)
+    // Increased from 2 to 3 to match the clearing threshold and prevent overshoot
+    if (distanceToTarget < 3) {
       return { x: currentX, y: currentY, direction: null, moved: false };
     }
     
-    // Normalize direction and apply speed
-    const normalizedDx = dxToTarget / distanceToTarget;
-    const normalizedDy = dyToTarget / distanceToTarget;
-    
-    dx = normalizedDx * adjustedSpeed;
-    dy = normalizedDy * adjustedSpeed;
+    // Prevent overshooting: if we would move past the target, stop at the target
+    // This is especially important with high speed boosts
+    if (distanceToTarget <= adjustedSpeed) {
+      // We're close enough that we'd overshoot - just move to the target exactly
+      dx = dxToTarget;
+      dy = dyToTarget;
+    } else {
+      // Normalize direction and apply speed
+      const normalizedDx = dxToTarget / distanceToTarget;
+      const normalizedDy = dyToTarget / distanceToTarget;
+      
+      dx = normalizedDx * adjustedSpeed;
+      dy = normalizedDy * adjustedSpeed;
+    }
     
     // Determine direction based on movement
     if (Math.abs(dx) > Math.abs(dy)) {
