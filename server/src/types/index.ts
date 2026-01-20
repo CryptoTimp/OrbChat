@@ -187,6 +187,7 @@ export interface ServerToClientEvents {
   }) => void;
   player_joined: (player: PlayerWithChat) => void;
   player_moved: (data: { playerId: string; x: number; y: number; direction: Direction }) => void;
+  player_ping_update: (data: { playerId: string; ping: number }) => void;
   player_left: (data: { playerId: string }) => void;
   chat_message: (data: { playerId: string; text: string; createdAt: number; textColor?: string }) => void;
   orb_spawned: (orb: Orb) => void;

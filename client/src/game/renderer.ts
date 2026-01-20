@@ -11578,12 +11578,12 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
   const dy = y - anim.lastY;
   const distance = Math.sqrt(dx * dx + dy * dy);
   
-  // Reset animation state if position jump is too large (teleportation, map change, etc.)
-  // This prevents animation state corruption that causes laggy movement with speed boosts
-  // Note: Speed boosts can cause 50-100 units per frame, so threshold must be higher
-  const MAX_REASONABLE_DISTANCE = 200; // Max reasonable distance per frame (prevents huge jumps/teleportation)
+  // Reset animation state only for truly unreasonable jumps (teleportation, map change, etc.)
+  // Speed boosts can move very fast (200+ units per frame at high speeds), so use a very high threshold
+  // Only reset for actual teleportation (1000+ units), not fast movement
+  const MAX_REASONABLE_DISTANCE = 1000; // Very high threshold - only for actual teleportation
   if (distance > MAX_REASONABLE_DISTANCE) {
-    // Large jump detected - reset animation state to prevent corruption
+    // Truly large jump detected (teleportation) - reset animation state
     anim.lastX = x;
     anim.lastY = y;
     anim.distanceTraveled = 0;
@@ -11594,6 +11594,10 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
     anim.lastFrameTime = time;
     return anim; // Return reset state (player appears idle)
   }
+  
+  // For fast movement (even 200-1000 units), clamp distance to prevent animation frame skipping
+  // but don't reset the animation state - just limit how much distance counts
+  const clampedDistance = Math.min(distance, 200); // Cap at 200 for animation frame calculation
   
   // Force stationary for dealers (they should never move)
   const isDealer = playerId.startsWith('orb_dealer') || playerId.startsWith('loot_box_dealer') || 
@@ -11608,8 +11612,8 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
     anim.idleTime = time;
     anim.idleBobPhase = 0;
     
-    // Accumulate distance traveled
-    anim.distanceTraveled += distance;
+    // Accumulate distance traveled (use clamped distance to prevent animation frame skipping)
+    anim.distanceTraveled += clampedDistance;
     
     // Advance animation frame based on distance traveled
     // Animation speed scales naturally with movement speed since faster = more distance per frame

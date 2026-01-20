@@ -151,38 +151,9 @@ export function GameCanvas() {
   // Interpolated players for smooth rendering
   const interpolatedPlayersRef = useRef<Map<string, InterpolatedPlayer>>(new Map());
   
-  // Track server position corrections for local player (for smooth reconciliation)
-  const serverCorrectionTargetRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  
   // Last move time for throttling
   const lastMoveTimeRef = useRef(0);
   const moveThrottle = 50;
-  
-  // Track last server position correction to prevent sending moves immediately after correction
-  const lastServerCorrectionRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const SERVER_CORRECTION_COOLDOWN = 200; // Don't send moves for 200ms after server correction (gives time for reconciliation)
-  
-  // Listen for server position corrections
-  useEffect(() => {
-    const handleServerCorrection = (e: CustomEvent<{ x: number; y: number; time: number; isTeleport?: boolean }>) => {
-      const { x, y, time, isTeleport } = e.detail;
-      
-      if (isTeleport) {
-        // For teleports, update immediately and clear reconciliation target
-        serverCorrectionTargetRef.current = null;
-        lastServerCorrectionRef.current = { x, y, time };
-      } else {
-        // For corrections, set as reconciliation target for smooth interpolation
-        serverCorrectionTargetRef.current = { x, y, time };
-        lastServerCorrectionRef.current = { x, y, time };
-      }
-    };
-    
-    window.addEventListener('server_position_correction', handleServerCorrection as EventListener);
-    return () => {
-      window.removeEventListener('server_position_correction', handleServerCorrection as EventListener);
-    };
-  }, []);
   
   // Hovered shrine state (use ref so game loop can always read latest value)
   const hoveredShrineRef = useRef<string | null>(null);
@@ -1593,36 +1564,10 @@ export function GameCanvas() {
         newDirection = freshLocalPlayer.direction;
         // Don't update position
       } else if (!cuttingTreeRef.current) {
-        // Only apply smooth reconciliation if ping is over 80ms (for high latency players)
-        const currentPing = useGameStore.getState().playerPings.get(currentPlayerId) || 0;
-        const correction = serverCorrectionTargetRef.current;
-        let baseX = freshLocalPlayer.x;
-        let baseY = freshLocalPlayer.y;
-        
-        // Only do smooth reconciliation for high ping players (>80ms)
-        if (correction && currentPing > 80) {
-          const timeSinceCorrection = currentTime - correction.time;
-          const RECONCILIATION_TIME = 300; // 300ms to smoothly reconcile
-          
-          if (timeSinceCorrection < RECONCILIATION_TIME) {
-            // Smoothly interpolate towards server position
-            const progress = timeSinceCorrection / RECONCILIATION_TIME;
-            const smoothProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
-            baseX = freshLocalPlayer.x + (correction.x - freshLocalPlayer.x) * smoothProgress;
-            baseY = freshLocalPlayer.y + (correction.y - freshLocalPlayer.y) * smoothProgress;
-          } else {
-            // Reconciliation complete, clear target
-            serverCorrectionTargetRef.current = null;
-          }
-        } else if (correction && currentPing <= 80) {
-          // Low ping - clear reconciliation target immediately (no interpolation needed)
-          serverCorrectionTargetRef.current = null;
-        }
-        
-        // Normal movement - use base position
+        // Normal movement - use current position
         const movement = calculateMovement(
-          baseX,
-          baseY,
+          freshLocalPlayer.x,
+          freshLocalPlayer.y,
           keys,
           deltaTime,
           speedMultiplier,
@@ -1844,6 +1789,18 @@ export function GameCanvas() {
           joinRoom(returnRoomId, currentPlayerName, returnMapType);
           pendingReturnPortalInteractionRef.current = false; // Clear flag
           setPreviousRoomId(null); // Clear previous room after returning
+          
+          // Clear all state when returning to plaza from casino/lounge
+          // This ensures complete cleanup when going back
+          console.log('[Return Portal] Clearing all state when returning to plaza from casino/lounge');
+          const state = useGameStore.getState();
+          state.leaveRoom(); // This will clear all room state
+          // Clear animation state
+          import('./renderer').then((rendererModule) => {
+            if (rendererModule.setCurrentMap && returnMapType) {
+              rendererModule.setCurrentMap(returnMapType);
+            }
+          }).catch(() => {});
         }
       }
       
@@ -1952,6 +1909,18 @@ export function GameCanvas() {
             joinRoom(returnRoomId, currentPlayerName, returnMapType);
             pendingMillionairesLoungeReturnPortalInteractionRef.current = false; // Clear flag
             setPreviousRoomId(null); // Clear previous room after returning
+            
+            // Clear all state when returning to plaza from lounge
+            // This ensures complete cleanup when going back
+            console.log('[Return Portal] Clearing all state when returning to plaza from lounge');
+            const state = useGameStore.getState();
+            state.leaveRoom(); // This will clear all room state
+            // Clear animation state
+            import('./renderer').then((rendererModule) => {
+              if (rendererModule.setCurrentMap && returnMapType) {
+                rendererModule.setCurrentMap(returnMapType);
+              }
+            }).catch(() => {});
           }
         }
       }
@@ -2271,16 +2240,8 @@ export function GameCanvas() {
       if (moved && direction) {
         setLocalPlayerPosition(x, y, direction);
         
-        // Don't send move if we just received a server correction (prevents feedback loop)
-        const lastCorrection = lastServerCorrectionRef.current;
-        const timeSinceCorrection = lastCorrection ? currentTime - lastCorrection.time : Infinity;
-        const canSendMove = timeSinceCorrection > SERVER_CORRECTION_COOLDOWN;
-        
-        // Only apply latency compensation if ping is over 80ms
-        const currentPing = useGameStore.getState().playerPings.get(currentPlayerId) || 0;
-        const adaptiveCooldown = currentPing > 80 ? Math.min(moveThrottle + (currentPing - 80) * 0.5, 150) : moveThrottle;
-        
-        if (canSendMove && currentTime - lastMoveTimeRef.current > adaptiveCooldown) {
+        // Send move with standard throttling
+        if (currentTime - lastMoveTimeRef.current > moveThrottle) {
           move(x, y, direction);
           lastMoveTimeRef.current = currentTime;
         }

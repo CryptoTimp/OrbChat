@@ -733,12 +733,29 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     }
   });
 
+  // Track ping for each player (playerId -> last ping measurement)
+  const playerPings: Map<string, number> = new Map();
+  
   // Handle ping for latency measurement
   // Respond immediately (synchronously) to minimize server processing delay
   // This ensures ping measurements reflect true network latency, not server load
   socket.on('ping', ({ timestamp }: { timestamp: number }) => {
     // Send pong immediately without any async delay
     socket.emit('pong', { timestamp });
+    
+    // Calculate and store ping for this player
+    const mapping = socketToPlayer.get(socket.id);
+    if (mapping) {
+      const ping = Date.now() - timestamp;
+      playerPings.set(mapping.playerId, ping);
+      
+      // Broadcast ping to all players in the same room
+      const roomId = mapping.roomId;
+      io.to(roomId).emit('player_ping_update', { 
+        playerId: mapping.playerId, 
+        ping 
+      });
+    }
   });
 
   // Handle movement

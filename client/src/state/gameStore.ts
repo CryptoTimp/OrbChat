@@ -894,8 +894,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       players: new Map(),
       orbs: [],
       shrines: [],
+      treasureChests: [],
+      treeStates: new Map(),
       chatMessages: [],
       clickTarget: null,
+      // Clear game-specific state
+      blackjackTableOpen: false,
+      selectedTableId: null,
+      blackjackGameState: null,
+      openSlotMachines: new Set(),
+      treasureChestModalOpen: false,
+      selectedTreasureChest: null,
+      // Clear player pings (they'll be re-measured in new room)
+      playerPings: new Map(),
     });
   },
 }));

@@ -21,6 +21,14 @@ let hasAttemptedRejoin = false;  // Track if we've attempted rejoin in this sess
 let isJoiningRoom = false;  // Prevent concurrent join attempts
 let isPurchasingLootBox = false;  // Prevent concurrent loot box purchases
 
+// Ping measurement state (shared across socket recreations)
+let pingInterval: NodeJS.Timeout | null = null;
+const pendingPings = new Map<number, number>(); // timestamp -> startTime
+
+// Track last processed player_moved events to prevent duplicate processing
+// This prevents race conditions when socket is recreated during room changes
+const lastProcessedMove = new Map<string, { x: number; y: number; timestamp: number }>();
+
   // Track previous blackjack states per table to detect changes (for dealer announcements)
 const previousBlackjackStates = new Map<string, BlackjackTableState | null>();
 // Track round numbers to detect new rounds
@@ -75,11 +83,6 @@ function getOrCreateSocket(): Socket {
       timeout: 10000,
     });
     
-    // Track ping for local player using timestamp-based approach
-    // Use a Map to track multiple in-flight pings (handles out-of-order responses)
-    let pingInterval: NodeJS.Timeout | null = null;
-    const pendingPings = new Map<number, number>(); // timestamp -> startTime
-    
     // Measure ping using timestamp echo
     const measurePing = () => {
       const timestamp = Date.now();
@@ -96,10 +99,19 @@ function getOrCreateSocket(): Socket {
       }
     };
     
+    // Clear any existing ping interval before creating a new one
+    if (pingInterval) {
+      clearInterval(pingInterval);
+      pingInterval = null;
+    }
+    
     socket.on('connect', () => {
-      // Measure ping every 2 seconds
-      pingInterval = setInterval(measurePing, 2000);
-      measurePing(); // Initial measurement
+      // Only start ping measurement if not already running (prevents multiple intervals)
+      if (!pingInterval) {
+        // Measure ping every 2 seconds
+        pingInterval = setInterval(measurePing, 2000);
+        measurePing(); // Initial measurement
+      }
     });
     
     socket.on('pong', (data: { timestamp?: number }) => {
@@ -121,6 +133,8 @@ function getOrCreateSocket(): Socket {
         clearInterval(pingInterval);
         pingInterval = null;
       }
+      // Clear pending pings on disconnect to prevent stale measurements
+      pendingPings.clear();
     });
   }
   return socket;
@@ -128,19 +142,42 @@ function getOrCreateSocket(): Socket {
 
 // Force recreate socket with new auth (e.g., after login)
 function recreateSocket(): Socket {
+  // Clear ping interval before disconnecting to prevent multiple intervals
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+  // Clear pending pings to prevent stale measurements
+  pendingPings.clear();
+  // Clear last processed moves to prevent stale duplicate detection
+  lastProcessedMove.clear();
+  
   if (socket) {
+    // Remove all listeners BEFORE disconnecting to prevent handlers from firing during disconnect
     socket.removeAllListeners();
+    // Disconnect and wait a brief moment to ensure all pending events are cleared
     socket.disconnect();
     socket = null;
   }
+  
+  // Small delay to ensure old socket events are fully cleared before creating new socket
+  // This prevents race conditions where old handlers process events from the new socket
   listenersAttached = false;
   pendingRejoin = false;
+  
   return getOrCreateSocket();
 }
+
+// Track current room ID for each socket to prevent processing events from wrong rooms
+// This prevents movement jitters from stale listeners processing events after room change
+const socketRoomIds = new WeakMap<Socket, string | null>();
 
 function attachListeners(sock: Socket) {
   if (listenersAttached) return;
   listenersAttached = true;
+  
+  // Initialize room ID tracking for this socket
+  socketRoomIds.set(sock, null);
   
   // Connection events
   sock.on('connect', () => {
@@ -195,6 +232,9 @@ function attachListeners(sock: Socket) {
     console.log('Tree states received:', treeStates?.length || 0);
     console.log('Player list:', players?.map((p: any) => `${p.name} (${p.id})`) || 'NO PLAYERS');
     
+    // Update current socket room ID to prevent processing events from wrong rooms
+    socketRoomIds.set(sock, roomId);
+    
     // Ensure players is an array
     if (!Array.isArray(players)) {
       console.error('Invalid players array received:', players);
@@ -240,9 +280,18 @@ function attachListeners(sock: Socket) {
     }
     
     // Set map type if provided by server (server is source of truth)
+    // This will trigger setCurrentMap which clears all animation state
     if (mapType) {
       console.log(`Setting mapType from server: ${mapType} (was: ${store.mapType})`);
       store.setMapType(mapType);
+      // Ensure animation state is cleared when map changes
+      import('../game/renderer').then((rendererModule) => {
+        if (rendererModule.setCurrentMap) {
+          rendererModule.setCurrentMap(mapType);
+        }
+      }).catch(() => {
+        // Silently fail if renderer module isn't loaded yet
+      });
     } else {
       console.warn('No mapType received from server, keeping current:', store.mapType);
     }
@@ -381,6 +430,16 @@ function attachListeners(sock: Socket) {
   
   sock.on('player_moved', ({ playerId, x, y, direction }) => {
     const state = useGameStore.getState();
+    
+    // CRITICAL: Only process movement events if we're still in the same room
+    // This prevents stale listeners from previous room causing jitters
+    const socketRoomId = socketRoomIds.get(sock);
+    if (socketRoomId !== null && socketRoomId !== undefined && state.roomId !== socketRoomId) {
+      // Room changed - ignore this event (it's from the old room)
+      // This prevents movement jitters when changing rooms
+      return;
+    }
+    
     if (playerId === state.playerId) {
       // Only update local player position if it's a significant change (e.g., blackjack table teleport)
       // This prevents feedback loops from normal movement while still handling special positioning
@@ -389,35 +448,50 @@ function attachListeners(sock: Socket) {
         const dx = Math.abs(x - localPlayer.x);
         const dy = Math.abs(y - localPlayer.y);
         const distance = Math.sqrt(dx * dx + dy * dy);
-        // If position change is significant (>50 pixels), it's likely a special teleport (e.g., blackjack table)
-        // OR if the distance is moderate (20-50 pixels), it might be a server correction due to desync
-        // Update animation state to prevent jump detection in both cases
-        if (distance > 20) {
-          // For large changes (>50), update position immediately (teleportation)
-          if (distance > 50) {
-            state.setLocalPlayerPosition(x, y, direction);
-            // Clear any pending reconciliation for teleports
-            window.dispatchEvent(new CustomEvent('server_position_correction', { 
-              detail: { x, y, time: Date.now(), isTeleport: true } 
-            }));
-          } else if (distance > 20 && distance <= 200) {
-            // Server correction - set as reconciliation target for smooth interpolation
-            // Don't immediately update position, let the game loop smoothly interpolate to it
-            window.dispatchEvent(new CustomEvent('server_position_correction', { 
-              detail: { x, y, time: Date.now(), isTeleport: false } 
-            }));
+        
+        // Prevent duplicate processing of the same position update
+        // This can happen when socket is recreated during room changes
+        const lastMove = lastProcessedMove.get(playerId);
+        const now = Date.now();
+        if (lastMove && lastMove.x === x && lastMove.y === y && (now - lastMove.timestamp) < 100) {
+          // Same position update within 100ms - likely duplicate, skip it
+          return;
+        }
+        lastProcessedMove.set(playerId, { x, y, timestamp: now });
+        
+        // Clean up old entries (older than 1 second)
+        for (const [pid, move] of lastProcessedMove) {
+          if (now - move.timestamp > 1000) {
+            lastProcessedMove.delete(pid);
           }
-          // Always update animation state position to match server position without resetting
-          // This prevents jump detection and back-and-forth teleportation with speed boosts
-          // This is especially important for players with network latency or frame rate issues
-          import('../game/renderer').then(({ updatePlayerAnimationPosition }) => {
-            updatePlayerAnimationPosition(playerId, x, y);
-          });
+        }
+        
+        // Always update animation state position to match server position without resetting
+        // This prevents jump detection and back-and-forth teleportation with speed boosts
+        // No distance threshold - speed boosts can move fast, we should always sync to server
+        import('../game/renderer').then(({ updatePlayerAnimationPosition }) => {
+          updatePlayerAnimationPosition(playerId, x, y);
+        }).catch(() => {
+          // Silently fail if renderer module isn't loaded yet
+        });
+        
+        // Update position immediately for very large changes (teleportation to seats, map changes, etc.)
+        // Seat teleportations (blackjack/slot machines) are typically 500+ pixels, so 200 is safe
+        // Speed boosts can cause large movements, but typically not >200 pixels per server update
+        // This ensures seat teleportations always work while allowing fast normal movement
+        if (distance > 200) {
+          state.setLocalPlayerPosition(x, y, direction);
         }
       }
     } else {
       state.updatePlayerPosition(playerId, x, y, direction);
     }
+  });
+  
+  // Handle player ping updates from server
+  sock.on('player_ping_update', ({ playerId, ping }) => {
+    const state = useGameStore.getState();
+    state.setPlayerPing(playerId, ping);
   });
   
   // Chat events
@@ -1737,6 +1811,51 @@ export function useSocket() {
     if (isJoiningRoom) {
       console.log('Join already in progress, skipping duplicate join request');
       return;
+    }
+    
+    // FULL CLEANUP: Clear all state from previous room before joining new room
+    // This prevents stale data, event handlers, or state from affecting the new room
+    console.log('[joinRoom] Cleaning up previous room state before joining:', roomId);
+    const previousRoomId = state.roomId;
+    
+    // Clear game store state (but preserve previousRoomId if joining casino/lounge)
+    const preservePreviousRoomId = roomId.startsWith('casino-') || roomId.startsWith('millionaires_lounge-');
+    const savedPreviousRoomId = preservePreviousRoomId ? state.previousRoomId : null;
+    
+    // Clear all room-specific state
+    state.leaveRoom(); // This clears: roomId, localPlayer, players, orbs, shrines, chatMessages, clickTarget
+    
+    // Clear additional state that leaveRoom doesn't clear
+    state.setRoomId(null); // Ensure roomId is null
+    state.setClickTarget(null, null); // Ensure click target is cleared
+    
+    // Clear animation state for all players (prevents stale animation data)
+    // This is critical to prevent movement lag when changing rooms
+    import('../game/renderer').then((rendererModule) => {
+      // Clear animation state on map change (this clears all animations)
+      // This must be done BEFORE setting the new map type to ensure clean state
+      if (rendererModule.setCurrentMap && mapType) {
+        rendererModule.setCurrentMap(mapType as any);
+      }
+    }).catch(() => {
+      // Silently fail if renderer module isn't loaded yet
+      // Animation state will be cleared when map type is set in room_state handler
+    });
+    
+    // Clear pending interactions
+    if ((window as any).__chestInteractionInProgress) {
+      (window as any).__chestInteractionInProgress.clear();
+    }
+    
+    // Clear last processed moves to prevent stale duplicate detection
+    lastProcessedMove.clear();
+    
+    // Restore previousRoomId if needed (for casino/lounge)
+    if (preservePreviousRoomId && savedPreviousRoomId) {
+      state.setPreviousRoomId(savedPreviousRoomId);
+    } else if (previousRoomId && !preservePreviousRoomId) {
+      // Set previousRoomId when leaving a regular room to join casino/lounge
+      state.setPreviousRoomId(previousRoomId);
     }
     
     // Prevent auto-rejoin from firing during manual join
