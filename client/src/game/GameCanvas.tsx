@@ -2359,14 +2359,27 @@ export function GameCanvas() {
       updateCamera(camera, currentLocalPlayer.x, currentLocalPlayer.y, deltaTime);
     }
     
-    // Update interpolated players
+    // Update interpolated players (only those in or near viewport for performance)
     const interpStart = performance.now();
     const interpolatedPlayers = interpolatedPlayersRef.current;
+    
+    // Calculate viewport bounds with margin for nearby players
+    const viewportMargin = 200 * SCALE; // Update players slightly outside viewport too
+    const viewportLeft = camera.x - viewportMargin;
+    const viewportRight = camera.x + (CANVAS_WIDTH / camera.zoom) + viewportMargin;
+    const viewportTop = camera.y - viewportMargin;
+    const viewportBottom = camera.y + (CANVAS_HEIGHT / camera.zoom) + viewportMargin;
     
     currentPlayers.forEach((player, id) => {
       if (id === currentPlayerId) return;
       
       if (typeof player.x !== 'number' || typeof player.y !== 'number') return;
+      
+      // Performance optimization: only interpolate players in or near viewport
+      const playerWorldX = player.x * SCALE;
+      const playerWorldY = player.y * SCALE;
+      const isNearViewport = playerWorldX >= viewportLeft && playerWorldX <= viewportRight &&
+                             playerWorldY >= viewportTop && playerWorldY <= viewportBottom;
       
       if (!player.sprite) {
         player.sprite = { body: 'default', outfit: [] };
@@ -2383,7 +2396,15 @@ export function GameCanvas() {
         interpolated.orbs = player.orbs;
         interpolated.name = player.name;
       }
-      updateInterpolation(interpolated, deltaTime);
+      
+      // Only update interpolation for players near viewport (saves CPU)
+      if (isNearViewport) {
+        updateInterpolation(interpolated, deltaTime);
+      } else {
+        // For far players, snap to target position immediately (no smooth interpolation)
+        interpolated.renderX = interpolated.targetX;
+        interpolated.renderY = interpolated.targetY;
+      }
     });
     
     // Remove disconnected players

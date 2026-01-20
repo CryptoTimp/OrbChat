@@ -9121,11 +9121,86 @@ function buildCasinoPathsCache(): void {
     { angle: 3 * Math.PI / 2, id: 'slot_machine_west' } // West
   ];
   
+  const pathWidth = 48 * p; // Width of the path
+  const pathStartRadius = portalCircleRadius; // Start path at the edge of the central circle
+  
   for (const dir of directions) {
     const slotX = offsetX + Math.cos(dir.angle) * slotMachineDistance;
     const slotY = offsetY + Math.sin(dir.angle) * slotMachineDistance;
     
-    // === PATHS REMOVED - only plazas remain ===
+    // Calculate path length
+    const pathLength = slotMachineDistance - pathStartRadius;
+    const pathDepthOffset = 6 * p; // Depth for 3D effect
+    
+    cacheCtx.save();
+    cacheCtx.translate(offsetX, offsetY);
+    cacheCtx.rotate(dir.angle);
+    
+    // === PATH WITH 3D PERSPECTIVE ===
+    // Path base shadow (ellipse, offset down and right)
+    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    cacheCtx.beginPath();
+    cacheCtx.ellipse(pathStartRadius + pathLength / 2, pathDepthOffset + 2 * p, pathLength / 2, pathWidth * 0.3, 0, 0, Math.PI * 2);
+    cacheCtx.fill();
+    
+    // Path base layer (darker, at bottom)
+    const pathBaseGradient = cacheCtx.createLinearGradient(pathStartRadius, pathDepthOffset, pathStartRadius + pathLength, pathDepthOffset);
+    pathBaseGradient.addColorStop(0, '#b0b0b0');
+    pathBaseGradient.addColorStop(0.5, '#a0a0a0');
+    pathBaseGradient.addColorStop(1, '#b0b0b0');
+    cacheCtx.fillStyle = pathBaseGradient;
+    cacheCtx.fillRect(pathStartRadius, pathDepthOffset - pathWidth / 2, pathLength, pathWidth);
+    
+    // Path side segments (left and right sides for 3D depth)
+    // Left side
+    const leftSideGradient = cacheCtx.createLinearGradient(pathStartRadius, -pathWidth / 2, pathStartRadius, pathDepthOffset - pathWidth / 2);
+    leftSideGradient.addColorStop(0, '#c0c0c0');
+    leftSideGradient.addColorStop(1, '#a0a0a0');
+    cacheCtx.fillStyle = leftSideGradient;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pathStartRadius, -pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, -pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, pathDepthOffset - pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius, pathDepthOffset - pathWidth / 2);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+    
+    // Right side
+    const rightSideGradient = cacheCtx.createLinearGradient(pathStartRadius, pathWidth / 2, pathStartRadius, pathDepthOffset + pathWidth / 2);
+    rightSideGradient.addColorStop(0, '#c0c0c0');
+    rightSideGradient.addColorStop(1, '#a0a0a0');
+    cacheCtx.fillStyle = rightSideGradient;
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pathStartRadius, pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, pathDepthOffset + pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius, pathDepthOffset + pathWidth / 2);
+    cacheCtx.closePath();
+    cacheCtx.fill();
+    
+    // Path top layer (lighter, elevated)
+    const pathTopGradient = cacheCtx.createLinearGradient(pathStartRadius, -pathWidth / 2, pathStartRadius + pathLength, -pathWidth / 2);
+    pathTopGradient.addColorStop(0, '#e0e0e0');
+    pathTopGradient.addColorStop(0.5, '#d0d0d0');
+    pathTopGradient.addColorStop(1, '#e0e0e0');
+    cacheCtx.fillStyle = pathTopGradient;
+    cacheCtx.fillRect(pathStartRadius, -pathWidth / 2, pathLength, pathWidth);
+    
+    // Top edge highlights
+    cacheCtx.strokeStyle = '#d0d0d0';
+    cacheCtx.lineWidth = 2 * p;
+    // Top edge
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pathStartRadius, -pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, -pathWidth / 2);
+    cacheCtx.stroke();
+    // Bottom edge
+    cacheCtx.beginPath();
+    cacheCtx.moveTo(pathStartRadius, pathWidth / 2);
+    cacheCtx.lineTo(pathStartRadius + pathLength, pathWidth / 2);
+    cacheCtx.stroke();
+    
+    cacheCtx.restore();
     
     // === SMALL PLAZA AROUND EACH SLOT MACHINE (with 3D perspective) ===
     const smallPlazaRadius = 120 * p; // Radius of small plaza around slot machine
