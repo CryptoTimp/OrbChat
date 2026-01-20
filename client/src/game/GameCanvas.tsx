@@ -837,9 +837,7 @@ export function GameCanvas() {
               cuttingTreeRef.current = { treeId, startTime, duration, startX, startY };
               // Set progress bar state immediately
               setCuttingTree({ treeId, progress: 0 });
-              // Clear player trail to prevent ghost image during chopping
               if (playerId) {
-                clearPlayerTrail(playerId);
                 setPlayerChopping(playerId, true);
               }
               // Start cutting on server FIRST
@@ -1959,9 +1957,7 @@ export function GameCanvas() {
             cuttingTreeRef.current = { treeId, startTime, duration, startX, startY };
             // Set progress bar state immediately
             setCuttingTree({ treeId, progress: 0 });
-            // Clear player trail to prevent ghost image during chopping
             if (currentPlayerId) {
-              clearPlayerTrail(currentPlayerId);
               setPlayerChopping(currentPlayerId, true);
             }
             startCuttingTree(treeId);
