@@ -9127,19 +9127,72 @@ function buildCasinoPathsCache(): void {
     
     // === PATHS REMOVED - only plazas remain ===
     
-    // === SMALL PLAZA AROUND EACH SLOT MACHINE (2D only - no 3D effects) ===
+    // === SMALL PLAZA AROUND EACH SLOT MACHINE (with 3D perspective) ===
     const smallPlazaRadius = 120 * p; // Radius of small plaza around slot machine
     const smallPlazaCenterX = slotX;
     const smallPlazaCenterY = slotY;
+    const depthOffset = 8 * p; // Depth for 3D effect
     
-    // === FLAT SMALL PLAZA (no shadows, base, or sides) ===
-    // Simple flat circle - no 3D effects
-    cacheCtx.fillStyle = '#e0e0e0'; // Simple light grey fill
+    // === PLAZA BASE LAYER (shadow/base) ===
+    // Base shadow (ellipse, offset down and right)
+    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    cacheCtx.beginPath();
+    cacheCtx.ellipse(smallPlazaCenterX + 2 * p, smallPlazaCenterY + depthOffset + 2 * p, smallPlazaRadius * 1.1, smallPlazaRadius * 0.5, 0, 0, Math.PI * 2);
+    cacheCtx.fill();
+    
+    // Base layer (darker, at bottom)
+    const baseGradient = cacheCtx.createRadialGradient(smallPlazaCenterX, smallPlazaCenterY + depthOffset, 0, smallPlazaCenterX, smallPlazaCenterY + depthOffset, smallPlazaRadius);
+    baseGradient.addColorStop(0, '#c0c0c0');
+    baseGradient.addColorStop(1, '#a0a0a0');
+    cacheCtx.fillStyle = baseGradient;
+    cacheCtx.beginPath();
+    cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY + depthOffset, smallPlazaRadius, 0, Math.PI * 2);
+    cacheCtx.fill();
+    
+    // === PLAZA SIDE SEGMENTS (3D depth) ===
+    // Draw side segments to create depth effect
+    const sideSegmentCount = 16;
+    const sideSegmentAngle = (Math.PI * 2) / sideSegmentCount;
+    for (let i = 0; i < sideSegmentCount; i++) {
+      const angle1 = i * sideSegmentAngle;
+      const angle2 = (i + 1) * sideSegmentAngle;
+      
+      const x1 = smallPlazaCenterX + Math.cos(angle1) * smallPlazaRadius;
+      const y1 = smallPlazaCenterY + Math.sin(angle1) * smallPlazaRadius;
+      const x2 = smallPlazaCenterX + Math.cos(angle2) * smallPlazaRadius;
+      const y2 = smallPlazaCenterY + Math.sin(angle2) * smallPlazaRadius;
+      
+      const x1Bottom = smallPlazaCenterX + Math.cos(angle1) * smallPlazaRadius;
+      const y1Bottom = smallPlazaCenterY + depthOffset + Math.sin(angle1) * smallPlazaRadius;
+      const x2Bottom = smallPlazaCenterX + Math.cos(angle2) * smallPlazaRadius;
+      const y2Bottom = smallPlazaCenterY + depthOffset + Math.sin(angle2) * smallPlazaRadius;
+      
+      // Side segment gradient (darker on edges)
+      const sideGradient = cacheCtx.createLinearGradient(x1, y1, x1Bottom, y1Bottom);
+      sideGradient.addColorStop(0, '#b0b0b0');
+      sideGradient.addColorStop(1, '#909090');
+      cacheCtx.fillStyle = sideGradient;
+      
+      cacheCtx.beginPath();
+      cacheCtx.moveTo(x1, y1);
+      cacheCtx.lineTo(x2, y2);
+      cacheCtx.lineTo(x2Bottom, y2Bottom);
+      cacheCtx.lineTo(x1Bottom, y1Bottom);
+      cacheCtx.closePath();
+      cacheCtx.fill();
+    }
+    
+    // === PLAZA TOP LAYER ===
+    // Top platform (lighter, elevated)
+    const topGradient = cacheCtx.createRadialGradient(smallPlazaCenterX, smallPlazaCenterY, 0, smallPlazaCenterX, smallPlazaCenterY, smallPlazaRadius);
+    topGradient.addColorStop(0, '#e0e0e0');
+    topGradient.addColorStop(1, '#c0c0c0');
+    cacheCtx.fillStyle = topGradient;
     cacheCtx.beginPath();
     cacheCtx.arc(smallPlazaCenterX, smallPlazaCenterY, smallPlazaRadius, 0, Math.PI * 2);
     cacheCtx.fill();
     
-    // Simple edge ring
+    // Top edge highlight
     cacheCtx.strokeStyle = '#d0d0d0';
     cacheCtx.lineWidth = 3 * p;
     cacheCtx.beginPath();
