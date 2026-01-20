@@ -100,6 +100,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
       column: number;
       count: number;
       totalMemory: number;
+      stackTrace?: string;
       display: string;
     }>;
   }>>([]);
@@ -812,11 +813,26 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                           )}
                           {report.topAllocationLocations && report.topAllocationLocations.length > 0 && (
                             <div className="mt-1 break-words break-all">
-                              <span className="text-orange-400 font-bold">Allocation Locations:</span>
-                              <ul className="list-disc list-inside ml-2 mt-1">
+                              <span className="text-orange-400 font-bold">Stack Trace (Allocation Locations):</span>
+                              <ul className="list-none ml-2 mt-1 space-y-2">
                                 {report.topAllocationLocations.map((loc, idx) => (
-                                  <li key={idx} className="text-xs font-mono">
-                                    {loc.display}
+                                  <li key={idx} className="text-xs font-mono bg-gray-800/50 p-1.5 rounded border border-gray-700">
+                                    <div className="text-yellow-300 font-semibold mb-1">
+                                      {loc.file.replace(/^.*src\//, 'src/').replace(/^file:\/\/\/?/, '')}:{loc.line}:{loc.column}
+                                    </div>
+                                    <div className="text-gray-300 text-[10px] mb-1">
+                                      {loc.count} allocations • {loc.totalMemory.toFixed(2)}MB total
+                                    </div>
+                                    {loc.stackTrace && (
+                                      <details className="mt-1">
+                                        <summary className="text-cyan-400 cursor-pointer hover:text-cyan-300 text-[10px]">
+                                          Show full stack trace
+                                        </summary>
+                                        <pre className="text-[9px] text-gray-400 mt-1 ml-2 whitespace-pre-wrap break-all font-mono bg-black/30 p-1 rounded overflow-auto max-h-32">
+                                          {loc.stackTrace}
+                                        </pre>
+                                      </details>
+                                    )}
                                   </li>
                                 ))}
                               </ul>

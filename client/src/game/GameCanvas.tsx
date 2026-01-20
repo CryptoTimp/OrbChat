@@ -2490,10 +2490,12 @@ export function GameCanvas() {
         const closestOrbs = orbArrayPool.acquire();
         const distances = numberArrayPool.acquire();
         
-        // Calculate all distances
+        // Calculate all distances (optimized: avoid Math.pow to reduce allocations)
         for (let i = 0; i < visibleOrbs.length; i++) {
           const orb = visibleOrbs[i];
-          const dist = Math.sqrt(Math.pow(orb.x - cameraCenterX, 2) + Math.pow(orb.y - cameraCenterY, 2));
+          const dx = orb.x - cameraCenterX;
+          const dy = orb.y - cameraCenterY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
           distances.push(dist);
         }
         

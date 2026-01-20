@@ -7,6 +7,7 @@ interface AllocationLocation {
   column: number;
   count: number;
   totalMemory: number; // Total MB allocated at this location
+  stackTrace?: string; // Full stack trace for this allocation
 }
 
 interface FunctionMetric {
@@ -137,18 +138,32 @@ function parseStackTrace(stack: string | undefined): Array<{ file: string; line:
   // Skip first line (Error message) and second line (instrumentFunction wrapper)
   for (let i = 2; i < lines.length; i++) {
     const line = lines[i].trim();
-    // Match patterns like: "at functionName (file:///path/to/file.ts:123:45)" or "at file:///path/to/file.ts:123:45"
-    const match = line.match(/at\s+(?:[^\s]+\s+\()?([^:]+):(\d+):(\d+)\)?/);
+    
+    // Try multiple regex patterns to match different stack trace formats
+    // Pattern 1: "at functionName (file:///path/to/file.ts:123:45)"
+    // Pattern 2: "at file:///path/to/file.ts:123:45"
+    // Pattern 3: "at http://localhost:3000/src/file.ts:123:45"
+    let match = line.match(/at\s+(?:[^\s]+\s+\()?([^:)]+):(\d+):(\d+)\)?/);
+    if (!match) {
+      // Try pattern with http:// or file://
+      match = line.match(/at\s+(?:[^\s]+\s+\()?(?:file:\/\/\/?|https?:\/\/[^\s]+\/)([^:)]+):(\d+):(\d+)\)?/);
+    }
+    if (!match) {
+      // Try pattern without protocol
+      match = line.match(/at\s+(?:[^\s]+\s+\()?([\/\\][^:)]+):(\d+):(\d+)\)?/);
+    }
+    
     if (match) {
       const file = match[1];
       const lineNum = parseInt(match[2], 10);
       const column = parseInt(match[3], 10);
       
       // Filter out node_modules, browser internals, and profiler itself
+      // But be more lenient with file path matching
       if (!file.includes('node_modules') && 
           !file.includes('functionProfiler') &&
           !file.includes('chrome-extension') &&
-          file.includes('src/')) {
+          (file.includes('src/') || file.includes('src\\') || file.includes('.ts') || file.includes('.tsx') || file.includes('.js'))) {
         locations.push({ file, line: lineNum, column });
       }
     }
@@ -178,14 +193,13 @@ export function instrumentFunction<T extends (...args: any[]) => any>(
     const memoryAfter = getCurrentMemory();
     const memoryDelta = memoryAfter - memoryBefore;
     
-    // Capture stack trace only if we detected a significant allocation (to reduce overhead)
+    // Always capture stack trace to identify leak sources (even for small allocations)
+    // This helps identify where leaks occur even if individual allocations are small
     let stackTrace: string | undefined;
-    if (memoryDelta > 0.0001) { // Only capture for > 0.1KB allocations
-      try {
-        throw new Error();
-      } catch (e) {
-        stackTrace = (e as Error).stack;
-      }
+    try {
+      throw new Error();
+    } catch (e) {
+      stackTrace = (e as Error).stack;
     }
     
     // Update metrics
@@ -227,20 +241,20 @@ export function instrumentFunction<T extends (...args: any[]) => any>(
       metric.recentMemoryDeltas.shift();
     }
     
-    // If memory was allocated, track the location (only for significant allocations to reduce overhead)
-    // Sample: only capture stack trace for 1% of small allocations, 10% of medium, 100% of large
-    const shouldCaptureStack = memoryDelta > 0.01 || // Always capture for > 10KB
-                                (memoryDelta > 0.001 && Math.random() < 0.01) || // 1% sample for 1-10KB
-                                (memoryDelta > 0.0001 && Math.random() < 0.001); // 0.1% sample for 0.1-1KB
-    
-    if (shouldCaptureStack && stackTrace && memoryDelta > 0.0001) {
+    // If memory was allocated, track the location
+    // Track all allocations (even small ones) to identify leak sources
+    if (memoryDelta > 0 && stackTrace) {
       const locations = parseStackTrace(stackTrace);
+      
+      // If parsing succeeded, use the parsed location
       if (locations && locations.length > 0) {
         // Track the first relevant location (closest to actual allocation)
         const location = locations[0];
         const key = `${location.file}:${location.line}:${location.column}`;
         
         let allocLoc = metric.allocationLocations.get(key);
+        const isNewLocation = !allocLoc;
+        
         if (!allocLoc) {
           allocLoc = {
             file: location.file,
@@ -248,15 +262,44 @@ export function instrumentFunction<T extends (...args: any[]) => any>(
             column: location.column,
             count: 0,
             totalMemory: 0,
+            stackTrace: stackTrace, // Always store stack trace for new locations
           };
           metric.allocationLocations.set(key, allocLoc);
         }
         
-        // Scale up count and memory based on sampling rate
-        const sampleRate = memoryDelta > 0.01 ? 1.0 : 
-                          memoryDelta > 0.001 ? 100 : 1000; // Inverse of sample rate
-        allocLoc.count += sampleRate;
-        allocLoc.totalMemory += memoryDelta * sampleRate;
+        // Increment count and memory (no sampling - track all allocations)
+        allocLoc.count++;
+        allocLoc.totalMemory += memoryDelta;
+        
+        // Always update stack trace for new locations, or if we don't have one yet
+        if (isNewLocation || !allocLoc.stackTrace) {
+          allocLoc.stackTrace = stackTrace;
+        }
+      } else {
+        // If parsing failed, create a fallback entry with the raw stack trace
+        // Use a generic key based on the first few lines of the stack
+        const stackLines = stackTrace.split('\n').slice(0, 3).join('|');
+        const key = `unknown:${stackLines.substring(0, 50)}`;
+        
+        let allocLoc = metric.allocationLocations.get(key);
+        if (!allocLoc) {
+          allocLoc = {
+            file: 'unknown (stack trace parsing failed)',
+            line: 0,
+            column: 0,
+            count: 0,
+            totalMemory: 0,
+            stackTrace: stackTrace, // Store full stack trace
+          };
+          metric.allocationLocations.set(key, allocLoc);
+        }
+        
+        allocLoc.count++;
+        allocLoc.totalMemory += memoryDelta;
+        
+        if (!allocLoc.stackTrace) {
+          allocLoc.stackTrace = stackTrace;
+        }
       }
     }
     
@@ -383,7 +426,8 @@ interface LeakReport {
     column: number;
     count: number;
     totalMemory: number;
-    display: string; // Formatted for display
+    stackTrace?: string;
+    display: string; // Formatted for display (includes stack trace)
   }>;
 }
 
@@ -490,6 +534,7 @@ export function analyzeLeaks(): LeakReport[] {
           column: loc.column,
           count: loc.count,
           totalMemory: loc.totalMemory,
+          stackTrace: loc.stackTrace, // Include full stack trace
           display: `${displayFile}:${loc.line}:${loc.column} (${loc.count} allocations, ${loc.totalMemory.toFixed(2)}MB)`,
         };
       });
@@ -562,6 +607,25 @@ export function checkAndWarnAboutLeaks(): void {
         console.error(`Calls/sec: ${report.callsPerSecond.toFixed(1)}`);
         console.warn('Likely Causes:', report.likelyCauses);
         console.info('Recommendations:', report.recommendations);
+        
+        // Display stack traces for top allocation locations
+        if (report.topAllocationLocations && report.topAllocationLocations.length > 0) {
+          console.group('%c📍 Allocation Locations (Stack Traces)', 'color: orange; font-weight: bold;');
+          report.topAllocationLocations.forEach((loc, idx) => {
+            console.group(`%c${idx + 1}. ${loc.file.replace(/^.*src\//, 'src/').replace(/^file:\/\/\/?/, '')}:${loc.line}:${loc.column}`, 'color: yellow;');
+            console.log(`Allocations: ${loc.count} • Total Memory: ${loc.totalMemory.toFixed(2)}MB`);
+            if (loc.stackTrace) {
+              console.group('%cFull Stack Trace:', 'color: cyan;');
+              console.log(loc.stackTrace);
+              console.groupEnd();
+            } else {
+              console.warn('Stack trace not available (may be sampled allocation)');
+            }
+            console.groupEnd();
+          });
+          console.groupEnd();
+        }
+        
         console.groupEnd();
       });
     }
@@ -575,6 +639,25 @@ export function checkAndWarnAboutLeaks(): void {
         console.warn(`Growth Rate: ${report.growthRate.toFixed(2)} MB/min`);
         console.info('Likely Causes:', report.likelyCauses);
         console.info('Recommendations:', report.recommendations);
+        
+        // Display stack traces for top allocation locations
+        if (report.topAllocationLocations && report.topAllocationLocations.length > 0) {
+          console.group('%c📍 Allocation Locations (Stack Traces)', 'color: orange; font-weight: bold;');
+          report.topAllocationLocations.forEach((loc, idx) => {
+            console.group(`%c${idx + 1}. ${loc.file.replace(/^.*src\//, 'src/').replace(/^file:\/\/\/?/, '')}:${loc.line}:${loc.column}`, 'color: yellow;');
+            console.log(`Allocations: ${loc.count} • Total Memory: ${loc.totalMemory.toFixed(2)}MB`);
+            if (loc.stackTrace) {
+              console.group('%cFull Stack Trace:', 'color: cyan;');
+              console.log(loc.stackTrace);
+              console.groupEnd();
+            } else {
+              console.warn('Stack trace not available (may be sampled allocation)');
+            }
+            console.groupEnd();
+          });
+          console.groupEnd();
+        }
+        
         console.groupEnd();
       });
     }

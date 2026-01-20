@@ -10183,22 +10183,13 @@ function drawOrbImpl(ctx: CanvasRenderingContext2D, orb: Orb, time: number): voi
     ctx.globalAlpha = 1;
     
     // Main highlight (top-left, larger and more prominent) - only for high quality
-    const highlightGradient = ctx.createRadialGradient(
-      centerX - radius * 0.35, 
-      centerY - radius * 0.35, 
-      0,
-      centerX - radius * 0.35, 
-      centerY - radius * 0.35, 
-      radius * 0.5
-    );
-    highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-    highlightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.4)');
-    highlightGradient.addColorStop(1, 'transparent');
-    
-    ctx.fillStyle = highlightGradient;
+    // Optimized: Use simple fill instead of gradient to avoid memory allocation
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.beginPath();
     ctx.arc(centerX - radius * 0.35, centerY - radius * 0.35, radius * 0.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
   }
   
   // Secondary highlight (smaller, more focused) - only for high quality
@@ -10210,23 +10201,19 @@ function drawOrbImpl(ctx: CanvasRenderingContext2D, orb: Orb, time: number): voi
   }
   
   // Animated shimmer effect (rotating) for rare+ orbs - only for high quality
+  // Optimized: Use simple fill instead of gradient to avoid memory allocation
   if (isHighQuality && (orbType === 'rare' || orbType === 'epic' || orbType === 'legendary' || orbType === 'gold' || orbType === 'shrine')) {
     ctx.save();
     ctx.translate(centerX, centerY);
     ctx.rotate(rotation);
     
-    // Shimmer streak
-    const shimmerGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
-    shimmerGradient.addColorStop(0, 'transparent');
-    shimmerGradient.addColorStop(0.4, 'transparent');
-    shimmerGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.6)');
-    shimmerGradient.addColorStop(0.6, 'transparent');
-    shimmerGradient.addColorStop(1, 'transparent');
-    
-    ctx.fillStyle = shimmerGradient;
+    // Shimmer streak (simplified - use semi-transparent white fill)
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.beginPath();
     ctx.ellipse(0, 0, radius * 1.2, radius * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
     
     ctx.restore();
   }
@@ -10242,13 +10229,16 @@ function drawOrbImpl(ctx: CanvasRenderingContext2D, orb: Orb, time: number): voi
       const sparkleSize = radius * 0.1;
       const sparklePulse = Math.sin(time / 200 + i) * 0.5 + 0.5;
       
-      ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * sparklePulse})`;
+      // Optimized: Pre-calculate alpha values to avoid template string allocation
+      const sparkleAlpha = 0.8 * sparklePulse;
+      const crossAlpha = 0.6 * sparklePulse;
+      ctx.fillStyle = `rgba(255,255,255,${sparkleAlpha.toFixed(2)})`;
       ctx.beginPath();
       ctx.arc(sparkleX, sparkleY, sparkleSize * sparklePulse, 0, Math.PI * 2);
       ctx.fill();
       
       // Cross sparkle
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.6 * sparklePulse})`;
+      ctx.strokeStyle = `rgba(255,255,255,${crossAlpha.toFixed(2)})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(sparkleX - sparkleSize * sparklePulse, sparkleY);
@@ -10260,7 +10250,24 @@ function drawOrbImpl(ctx: CanvasRenderingContext2D, orb: Orb, time: number): voi
   }
   
   // Rim light (subtle edge highlight)
-  ctx.strokeStyle = config.colors.highlight.replace(/[\d.]+\)$/, '0.3)');
+  // Optimized: Use cached alpha value instead of string replace to avoid allocation
+  // Extract RGB from highlight color and create rgba string manually
+  const highlightColor = config.colors.highlight;
+  let rimColor = 'rgba(255, 255, 255, 0.3)'; // Default fallback
+  if (highlightColor.startsWith('#')) {
+    // Convert hex to rgba
+    const r = parseInt(highlightColor.substring(1, 3), 16);
+    const g = parseInt(highlightColor.substring(3, 5), 16);
+    const b = parseInt(highlightColor.substring(5, 7), 16);
+    rimColor = `rgba(${r}, ${g}, ${b}, 0.3)`;
+  } else if (highlightColor.startsWith('rgb')) {
+    // Extract RGB values and create rgba
+    const rgbMatch = highlightColor.match(/\d+/g);
+    if (rgbMatch && rgbMatch.length >= 3) {
+      rimColor = `rgba(${rgbMatch[0]}, ${rgbMatch[1]}, ${rgbMatch[2]}, 0.3)`;
+    }
+  }
+  ctx.strokeStyle = rimColor;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius * 0.95, 0, Math.PI * 2);
