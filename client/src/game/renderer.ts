@@ -1541,7 +1541,7 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
         floorSet = 'chaos';
         floorColors = ['#00ffff', '#0080ff', '#00bfff', '#0066cc'];
         break; // Found chaos, use it (highest priority)
-      } else if (item.includes('godlike_abyss') && (floorSet === 'void' || floorSet === 'abyss')) {
+      } else if (item.includes('godlike_abyss') && floorSet !== 'chaos') {
         floorSet = 'abyss';
         floorColors = ['#1a0033', '#4b0082', '#000000', '#6a0dad'];
         // Don't break, continue to check for chaos (chaos takes priority)
