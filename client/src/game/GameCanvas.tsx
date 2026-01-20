@@ -151,6 +151,9 @@ export function GameCanvas() {
   // Interpolated players for smooth rendering
   const interpolatedPlayersRef = useRef<Map<string, InterpolatedPlayer>>(new Map());
   
+  // Track server position corrections for local player (for smooth reconciliation)
+  const serverCorrectionTargetRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  
   // Last move time for throttling
   const lastMoveTimeRef = useRef(0);
   const moveThrottle = 50;
@@ -161,8 +164,18 @@ export function GameCanvas() {
   
   // Listen for server position corrections
   useEffect(() => {
-    const handleServerCorrection = (e: CustomEvent<{ x: number; y: number; time: number }>) => {
-      lastServerCorrectionRef.current = e.detail;
+    const handleServerCorrection = (e: CustomEvent<{ x: number; y: number; time: number; isTeleport?: boolean }>) => {
+      const { x, y, time, isTeleport } = e.detail;
+      
+      if (isTeleport) {
+        // For teleports, update immediately and clear reconciliation target
+        serverCorrectionTargetRef.current = null;
+        lastServerCorrectionRef.current = { x, y, time };
+      } else {
+        // For corrections, set as reconciliation target for smooth interpolation
+        serverCorrectionTargetRef.current = { x, y, time };
+        lastServerCorrectionRef.current = { x, y, time };
+      }
     };
     
     window.addEventListener('server_position_correction', handleServerCorrection as EventListener);
@@ -1580,10 +1593,31 @@ export function GameCanvas() {
         newDirection = freshLocalPlayer.direction;
         // Don't update position
       } else if (!cuttingTreeRef.current) {
-        // Normal movement - use freshLocalPlayer to get latest position and equipped items
+        // Check if we have a pending server correction to smoothly reconcile
+        const correction = serverCorrectionTargetRef.current;
+        let baseX = freshLocalPlayer.x;
+        let baseY = freshLocalPlayer.y;
+        
+        if (correction) {
+          const timeSinceCorrection = currentTime - correction.time;
+          const RECONCILIATION_TIME = 300; // 300ms to smoothly reconcile
+          
+          if (timeSinceCorrection < RECONCILIATION_TIME) {
+            // Smoothly interpolate towards server position
+            const progress = timeSinceCorrection / RECONCILIATION_TIME;
+            const smoothProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+            baseX = freshLocalPlayer.x + (correction.x - freshLocalPlayer.x) * smoothProgress;
+            baseY = freshLocalPlayer.y + (correction.y - freshLocalPlayer.y) * smoothProgress;
+          } else {
+            // Reconciliation complete, clear target
+            serverCorrectionTargetRef.current = null;
+          }
+        }
+        
+        // Normal movement - use reconciled position as base
         const movement = calculateMovement(
-          freshLocalPlayer.x,
-          freshLocalPlayer.y,
+          baseX,
+          baseY,
           keys,
           deltaTime,
           speedMultiplier,
@@ -2237,7 +2271,12 @@ export function GameCanvas() {
         const timeSinceCorrection = lastCorrection ? currentTime - lastCorrection.time : Infinity;
         const canSendMove = timeSinceCorrection > SERVER_CORRECTION_COOLDOWN;
         
-        if (canSendMove && currentTime - lastMoveTimeRef.current > moveThrottle) {
+        // Get current ping for latency compensation
+        const currentPing = useGameStore.getState().playerPings.get(currentPlayerId) || 0;
+        // Increase cooldown when ping is high to reduce desync (100ms+ ping = longer cooldown)
+        const adaptiveCooldown = currentPing > 100 ? Math.min(moveThrottle + (currentPing - 100) * 0.5, 150) : moveThrottle;
+        
+        if (canSendMove && currentTime - lastMoveTimeRef.current > adaptiveCooldown) {
           move(x, y, direction);
           lastMoveTimeRef.current = currentTime;
         }

@@ -380,14 +380,19 @@ function attachListeners(sock: Socket) {
         // OR if the distance is moderate (20-50 pixels), it might be a server correction due to desync
         // Update animation state to prevent jump detection in both cases
         if (distance > 20) {
-          // For large changes (>50), update position (teleportation)
-          // For moderate changes (20-200), it's a server correction - smoothly reconcile
+          // For large changes (>50), update position immediately (teleportation)
           if (distance > 50) {
             state.setLocalPlayerPosition(x, y, direction);
+            // Clear any pending reconciliation for teleports
+            window.dispatchEvent(new CustomEvent('server_position_correction', { 
+              detail: { x, y, time: Date.now(), isTeleport: true } 
+            }));
           } else if (distance > 20 && distance <= 200) {
-            // Server correction - update position smoothly to reconcile
-            // This prevents the client from continuing to move from the wrong position
-            state.setLocalPlayerPosition(x, y, direction);
+            // Server correction - set as reconciliation target for smooth interpolation
+            // Don't immediately update position, let the game loop smoothly interpolate to it
+            window.dispatchEvent(new CustomEvent('server_position_correction', { 
+              detail: { x, y, time: Date.now(), isTeleport: false } 
+            }));
           }
           // Always update animation state position to match server position without resetting
           // This prevents jump detection and back-and-forth teleportation with speed boosts
@@ -395,14 +400,6 @@ function attachListeners(sock: Socket) {
           import('../game/renderer').then(({ updatePlayerAnimationPosition }) => {
             updatePlayerAnimationPosition(playerId, x, y);
           });
-          
-          // Track server correction to prevent sending moves immediately after (prevents feedback loop)
-          if (distance > 20 && distance <= 200) {
-            // This is a server correction (not a teleport), mark it so client doesn't send conflicting moves
-            window.dispatchEvent(new CustomEvent('server_position_correction', { 
-              detail: { x, y, time: Date.now() } 
-            }));
-          }
         }
       }
     } else {
