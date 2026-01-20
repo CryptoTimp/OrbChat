@@ -740,22 +740,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   // Respond immediately (synchronously) to minimize server processing delay
   // This ensures ping measurements reflect true network latency, not server load
   socket.on('ping', ({ timestamp }: { timestamp: number }) => {
-    // Send pong immediately without any async delay
+    // Send pong immediately without any async delay, echo the timestamp
     socket.emit('pong', { timestamp });
     
-    // Calculate and store ping for this player
-    const mapping = socketToPlayer.get(socket.id);
-    if (mapping) {
-      const ping = Date.now() - timestamp;
-      playerPings.set(mapping.playerId, ping);
-      
-      // Broadcast ping to all players in the same room
-      const roomId = mapping.roomId;
-      io.to(roomId).emit('player_ping_update', { 
-        playerId: mapping.playerId, 
-        ping 
-      });
-    }
+    // Note: Server does NOT calculate ping - client calculates it from round-trip time
+    // This prevents clock skew issues and ensures accurate ping measurement
   });
 
   // Handle movement

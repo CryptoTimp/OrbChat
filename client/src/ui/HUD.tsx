@@ -47,6 +47,87 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   const lastOrbValue = useGameStore(state => state.lastOrbValue);
   const { leaveRoom: socketLeaveRoom } = useSocket();
   
+  // FPS tracking
+  const [fps, setFps] = useState<number>(60);
+  const fpsFrameCountRef = useRef<number>(0);
+  const fpsUpdateTimeRef = useRef<number>(Date.now());
+  const fpsAnimationFrameRef = useRef<number | null>(null);
+  
+  // Render performance metrics
+  const [renderMetrics, setRenderMetrics] = useState<Array<{ name: string; avgTime: number; fpsImpact: number; frameBudgetPercent: number }>>([]);
+  const [filterText, setFilterText] = useState<string>('');
+  const [showDebugMonitor, setShowDebugMonitor] = useState<boolean>(true);
+  const [maxItems, setMaxItems] = useState<number>(20);
+  
+  useEffect(() => {
+    const measureFPS = () => {
+      fpsFrameCountRef.current++;
+      const now = Date.now();
+      
+      if (now - fpsUpdateTimeRef.current >= 1000) {
+        const currentFps = fpsFrameCountRef.current; // Get FPS before resetting
+        setFps(currentFps);
+        fpsFrameCountRef.current = 0;
+        fpsUpdateTimeRef.current = now;
+        
+        // Update render metrics
+        const metrics = (window as any).__renderMetrics;
+        if (metrics && metrics.timings) {
+          const metricsArray: Array<{ name: string; avgTime: number; fpsImpact: number; frameBudgetPercent: number }> = [];
+          const now = Date.now();
+          
+          // Only include metrics that have been updated in the last 2 seconds
+          // This filters out stale metrics from previous maps
+          for (const [name, timings] of metrics.timings.entries()) {
+            if (timings.length > 0) {
+              // Check if this metric was updated recently (within last 2 seconds)
+              const lastUpdate = metrics.lastMetricUpdate?.[name] || 0;
+              if (now - lastUpdate < 2000) {
+                const avgTime = timings.reduce((a, b) => a + b, 0) / timings.length;
+                
+                // Calculate FPS impact: what FPS would we get if we removed this process?
+                // This shows which processes are "chugging" the FPS
+                let fpsImpact = 0;
+                let frameBudgetPercent = 0;
+                if (currentFps > 0 && avgTime > 0) {
+                  const frameBudget = 1000 / currentFps; // ms per frame at current FPS
+                  frameBudgetPercent = (avgTime / frameBudget) * 100; // % of frame budget consumed
+                  
+                  // Calculate potential FPS if this process was removed
+                  const newFrameTime = frameBudget - avgTime;
+                  if (newFrameTime > 0) {
+                    const potentialFps = 1000 / newFrameTime;
+                    fpsImpact = Math.max(0, potentialFps - currentFps);
+                  }
+                }
+                
+                metricsArray.push({ name, avgTime, fpsImpact, frameBudgetPercent });
+              }
+            }
+          }
+          // Sort by average time (most intensive first)
+          metricsArray.sort((a, b) => b.avgTime - a.avgTime);
+          setRenderMetrics(metricsArray);
+        }
+      }
+      
+      fpsAnimationFrameRef.current = requestAnimationFrame(measureFPS);
+    };
+    
+    fpsAnimationFrameRef.current = requestAnimationFrame(measureFPS);
+    
+    return () => {
+      if (fpsAnimationFrameRef.current) {
+        cancelAnimationFrame(fpsAnimationFrameRef.current);
+      }
+    };
+  }, []);
+  
+  // Filter metrics based on filter text
+  const filteredMetrics = renderMetrics.filter(metric => 
+    metric.name.toLowerCase().includes(filterText.toLowerCase())
+  );
+  
   // Generate first available loot box to open
   const getFirstLootBox = useMemo(() => {
     const categories: Array<'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'> = [
@@ -411,6 +492,109 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   
   return (
     <>
+      {/* FPS Counter & Debug Monitor - Top Left */}
+      <div className="fixed top-3 left-3 pointer-events-none z-50 flex flex-col gap-1">
+        <div className="bg-black/70 backdrop-blur-sm rounded px-2 py-1 border border-gray-600/50 pointer-events-auto">
+          <div className="flex items-center gap-2">
+            <span 
+              className="font-pixel text-xs"
+              style={{
+                color: fps >= 55 ? '#0f0' : fps >= 30 ? '#ff0' : '#f00',
+              }}
+            >
+              {fps} FPS
+            </span>
+            {renderMetrics.length > 0 && (
+              <button
+                onClick={() => setShowDebugMonitor(!showDebugMonitor)}
+                className="text-xs text-gray-400 hover:text-gray-200 font-pixel"
+                title={showDebugMonitor ? "Hide debug monitor" : "Show debug monitor"}
+              >
+                {showDebugMonitor ? '▼' : '▶'}
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Render Performance Debug Monitor */}
+        {showDebugMonitor && renderMetrics.length > 0 && (
+          <div className="bg-black/80 backdrop-blur-sm rounded px-2 py-2 border border-gray-600/50 pointer-events-auto min-w-[280px]">
+            <div className="font-pixel text-xs text-gray-400 mb-2 flex items-center justify-between">
+              <span>Debug Monitor (Current Map):</span>
+              <span className="text-gray-500">{filteredMetrics.length} items</span>
+            </div>
+            <div className="font-pixel text-[10px] text-gray-500 mb-2">
+              
+            </div>
+            
+            {/* Filter Input */}
+            <input
+              type="text"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Filter..."
+              className="w-full mb-2 px-1.5 py-0.5 bg-gray-900/50 border border-gray-600/50 rounded text-xs font-pixel text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-500"
+            />
+            
+            {/* Max Items Selector */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-pixel text-xs text-gray-500">Show:</span>
+              <select
+                value={maxItems}
+                onChange={(e) => setMaxItems(Number(e.target.value))}
+                className="px-1.5 py-0.5 bg-gray-900/50 border border-gray-600/50 rounded text-xs font-pixel text-gray-200 focus:outline-none focus:border-gray-500"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={999}>All</option>
+              </select>
+            </div>
+            
+            {/* Scrollable Metrics List */}
+            <div className="max-h-64 overflow-y-auto overflow-x-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+              {filteredMetrics.slice(0, maxItems).map((metric, idx) => {
+                // Determine color based on frame budget percentage (how much it's chugging)
+                const isHighImpact = metric.frameBudgetPercent > 5; // >5% of frame budget
+                const isMediumImpact = metric.frameBudgetPercent > 2; // >2% of frame budget
+                const color = isHighImpact ? '#f00' : isMediumImpact ? '#ff0' : '#0f0';
+                
+                return (
+                  <div 
+                    key={metric.name} 
+                    className="font-pixel text-xs py-0.5 hover:bg-gray-800/30 rounded px-1" 
+                    style={{ color }}
+                  >
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="truncate max-w-[180px]" title={metric.name}>
+                        {metric.name}
+                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0 text-right">
+                        <span className="font-bold">{metric.avgTime.toFixed(1)}ms</span>
+                        <span className="text-gray-400 text-[10px]">
+                          ({metric.frameBudgetPercent.toFixed(1)}%)
+                        </span>
+                        {metric.fpsImpact > 0.5 && (
+                          <span className="text-red-400 text-[10px] font-bold" title="FPS you would gain if this process was removed">
+                            -{metric.fpsImpact.toFixed(1)} FPS
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredMetrics.length === 0 && (
+                <div className="font-pixel text-xs text-gray-500 py-2 text-center">
+                  No matches
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      
       {/* Top center bar with info */}
       <div className="fixed top-0 left-0 right-0 p-3 pointer-events-none z-40">
         <div className="flex justify-center">

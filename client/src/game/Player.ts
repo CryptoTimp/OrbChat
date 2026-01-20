@@ -57,14 +57,18 @@ export function calculateMovement(
   let dy = 0;
   let direction: Direction | null = null;
   
-  // Convert deltaTime from milliseconds to seconds for frame-rate independent movement
-  const deltaSeconds = deltaTime / 1000;
+  // Use fixed timestep for consistent movement regardless of frame rate
+  // This ensures smooth movement even when frame rate drops in busy areas
+  // Target 60 FPS = 16.67ms per frame
+  const FIXED_DELTA_TIME = 16.67; // ms
+  const deltaSeconds = FIXED_DELTA_TIME / 1000;
   
   // Base movement speed in pixels per second - reduced by 75% for slower base movement
   // At 2.5x multiplier (Phantom Velocity), this gives 300 pixels/second = fast running speed
   const BASE_SPEED_PPS = 120; // pixels per second (75% reduction from 480, keeping 25%)
   
-  // Apply speed multiplier (from boost items) and make frame-rate independent
+  // Apply speed multiplier with fixed timestep for consistent movement
+  // Movement is now completely independent of actual frame rate
   const adjustedSpeed = BASE_SPEED_PPS * speedMultiplier * deltaSeconds;
   
   // Check if any key is pressed (keyboard takes priority)

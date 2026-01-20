@@ -622,11 +622,12 @@ export function updateCenturionPlayers(time: number, deltaTime: number = 16, cam
         continue;
       }
       
-      // For off-screen but nearby NPCs, throttle updates to every 500ms
+      // For off-screen but nearby NPCs, throttle updates to every 1000ms (1 second)
+      // This significantly reduces CPU usage when many NPCs are nearby but off-screen
       if (!isVisibleNPC) {
         const lastUpdate = centurionLastUpdateTime.get(centurion.id) || 0;
         const timeSinceLastUpdate = time - lastUpdate;
-        if (timeSinceLastUpdate < 500) {
+        if (timeSinceLastUpdate < 1000) {
           // Skip update this frame
           const centurionPlayer: PlayerWithChat = {
             id: centurion.id,
@@ -2213,6 +2214,30 @@ let fountainStaticCacheInitialized = false;
 // Cache for entire static plaza (walls, podiums, flag bunting, fountain structure, etc.)
 let plazaStaticCache: HTMLCanvasElement | null = null;
 let plazaStaticCacheInitialized = false;
+
+// Cache for casino table and slot machine positions (calculated once, reused every frame)
+interface CachedTablePosition {
+  tableX: number;
+  tableY: number;
+  dealerX: number;
+  dealerY: number;
+  dealerAngle: number;
+  seatPositions: Array<{ x: number; y: number; angle: number }>;
+}
+
+interface CachedSlotPosition {
+  slotX: number;
+  slotY: number;
+  seatPositions: Array<{ x: number; y: number; angle: number }>;
+}
+
+let blackjackTablePositionsCache: CachedTablePosition[] | null = null;
+let slotMachinePositionsCache: CachedSlotPosition[] | null = null;
+
+// Expose cache to window for GameCanvas access
+if (typeof window !== 'undefined') {
+  (window as any).__blackjackTablePositionsCache = blackjackTablePositionsCache;
+}
 
 // Cache for plaza wall top (battlements, top surface, etc.)
 let plazaWallTopCache: HTMLCanvasElement | null = null;
@@ -4467,7 +4492,15 @@ function getNPCSpeechMessages(tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings
 }
 
 // Update NPC speech bubbles (randomly generate new ones with staggered timing)
+// Performance: Throttle updates to every 500ms to reduce CPU usage in busy areas
+let lastNPCSpeechUpdate = 0;
 function updateNPCSpeechBubbles(stalls: Array<{ tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity; name: string }>, time: number): void {
+  // Throttle speech bubble updates to every 500ms (instead of every frame)
+  if (time - lastNPCSpeechUpdate < 500) {
+    return; // Skip update this frame
+  }
+  lastNPCSpeechUpdate = time;
+  
   for (const stall of stalls) {
     const npcId = `npc_${stall.tab}_${stall.rarity}`;
     
@@ -4504,7 +4537,7 @@ function updateNPCSpeechBubbles(stalls: Array<{ tab: 'hats' | 'shirts' | 'legs' 
 }
 
 // Draw NPCs in plaza (called from drawForestFountain)
-function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, plazaRadius: number, time: number, deltaTime: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null): void {
+function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, plazaRadius: number, time: number, deltaTime: number, hoveredStall?: { tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets'; rarity: ItemRarity } | null, camera?: Camera): void {
   const p = SCALE;
   const npcRadius = plazaRadius * 0.7;
   const npcPodiumRadius = 35 * p; // Radius of each NPC podium
@@ -4609,90 +4642,95 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
     
     const speechBubble = npcSpeechBubbles.get(npcId);
     
-    // Draw animated lightbeam above trader's head (BEFORE NPC so it's behind nameplate)
-    const headY = npcTopY - (PLAYER_HEIGHT * SCALE) / 2; // Top of NPC head (on top platform)
-    const traderBeamHeight = 80 * p;
-    const traderBeamWidth = 6 * p;
-    const traderBeamX = npcX - traderBeamWidth / 2;
-    const traderBeamStartY = headY - 5 * p; // Slightly above head
-    
-    // Animate trader beam (pulsing and intensity)
-    const traderPulse = Math.sin(time * 0.003 + stall.angle) * 0.2 + 1; // Each trader pulses at different phase
-    const traderIntensity = Math.sin(time * 0.002 + stall.angle) * 0.25 + 0.75;
-    const animatedTraderBeamWidth = traderBeamWidth * traderPulse;
-    const animatedTraderBeamX = npcX - animatedTraderBeamWidth / 2;
-    
-    // Trader lightbeam gradient
-    const traderBeamGradient = ctx.createLinearGradient(
-      animatedTraderBeamX, 
-      traderBeamStartY, 
-      animatedTraderBeamX, 
-      traderBeamStartY - traderBeamHeight
-    );
-    traderBeamGradient.addColorStop(0, `rgba(255, 255, 255, ${traderIntensity})`);
-    traderBeamGradient.addColorStop(0.3, `rgba(200, 230, 255, ${traderIntensity * 0.7})`);
-    traderBeamGradient.addColorStop(0.6, `rgba(150, 200, 255, ${traderIntensity * 0.4})`);
-    traderBeamGradient.addColorStop(1, 'rgba(100, 180, 255, 0)');
-    
-    // Draw trader beam
-    ctx.fillStyle = traderBeamGradient;
-    ctx.fillRect(
-      animatedTraderBeamX, 
-      traderBeamStartY - traderBeamHeight, 
-      animatedTraderBeamWidth, 
-      traderBeamHeight
-    );
-    
-    // Batch shadow operations for trader beam
-    ctx.shadowBlur = 15 * p * traderPulse;
-    ctx.shadowColor = `rgba(100, 200, 255, ${traderIntensity * 0.5})`;
-    
-    // Trader beam outer glow
-    ctx.fillRect(
-      animatedTraderBeamX - 2 * p, 
-      traderBeamStartY - traderBeamHeight, 
-      animatedTraderBeamWidth + 4 * p, 
-      traderBeamHeight
-    );
-    
-    // Trader beam inner core (reuse shadow)
-    const traderCoreGradient = ctx.createLinearGradient(
-      animatedTraderBeamX, 
-      traderBeamStartY, 
-      animatedTraderBeamX, 
-      traderBeamStartY - traderBeamHeight * 0.6
-    );
-    traderCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${traderIntensity * 0.6})`);
-    traderCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = traderCoreGradient;
-    ctx.fillRect(
-      animatedTraderBeamX + 1 * p, 
-      traderBeamStartY - traderBeamHeight * 0.6, 
-      animatedTraderBeamWidth - 2 * p, 
-      traderBeamHeight * 0.6
-    );
-    
-    // Reset shadow after trader beam operations
-    ctx.shadowBlur = 0;
-    
-    // Trader beam shimmer effect
-    const traderShimmerOffset = ((time * 0.0015 + stall.angle) % (traderBeamHeight * 0.4));
-    const traderShimmerGradient = ctx.createLinearGradient(
-      animatedTraderBeamX, 
-      traderBeamStartY - traderShimmerOffset, 
-      animatedTraderBeamX, 
-      traderBeamStartY - traderShimmerOffset - traderBeamHeight * 0.25
-    );
-    traderShimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    traderShimmerGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
-    traderShimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = traderShimmerGradient;
-    ctx.fillRect(
-      animatedTraderBeamX, 
-      traderBeamStartY - traderBeamHeight, 
-      animatedTraderBeamWidth, 
-      traderBeamHeight
-    );
+    // Always draw lightbeam (render every frame to prevent flashing)
+    {
+      // Draw animated lightbeam above trader's head (BEFORE NPC so it's behind nameplate)
+      const headY = npcTopY - (PLAYER_HEIGHT * SCALE) / 2; // Top of NPC head (on top platform)
+      const traderBeamHeight = 80 * p;
+      const traderBeamWidth = 6 * p;
+      const traderBeamX = npcX - traderBeamWidth / 2;
+      const traderBeamStartY = headY - 5 * p; // Slightly above head
+      
+      // Animate trader beam (pulsing and intensity)
+      const traderPulse = Math.sin(time * 0.003 + stall.angle) * 0.2 + 1; // Each trader pulses at different phase
+      const traderIntensity = Math.sin(time * 0.002 + stall.angle) * 0.25 + 0.75;
+      const animatedTraderBeamWidth = traderBeamWidth * traderPulse;
+      const animatedTraderBeamX = npcX - animatedTraderBeamWidth / 2;
+      
+      // Trader lightbeam gradient
+      const traderBeamGradient = ctx.createLinearGradient(
+        animatedTraderBeamX, 
+        traderBeamStartY, 
+        animatedTraderBeamX, 
+        traderBeamStartY - traderBeamHeight
+      );
+      traderBeamGradient.addColorStop(0, `rgba(255, 255, 255, ${traderIntensity})`);
+      traderBeamGradient.addColorStop(0.3, `rgba(200, 230, 255, ${traderIntensity * 0.7})`);
+      traderBeamGradient.addColorStop(0.6, `rgba(150, 200, 255, ${traderIntensity * 0.4})`);
+      traderBeamGradient.addColorStop(1, 'rgba(100, 180, 255, 0)');
+      
+      // Draw trader beam
+      ctx.fillStyle = traderBeamGradient;
+      ctx.fillRect(
+        animatedTraderBeamX, 
+        traderBeamStartY - traderBeamHeight, 
+        animatedTraderBeamWidth, 
+        traderBeamHeight
+      );
+      
+      // Batch shadow operations for trader beam
+      ctx.shadowBlur = 15 * p * traderPulse;
+      ctx.shadowColor = `rgba(100, 200, 255, ${traderIntensity * 0.5})`;
+      
+      // Trader beam outer glow
+      ctx.fillRect(
+        animatedTraderBeamX - 2 * p, 
+        traderBeamStartY - traderBeamHeight, 
+        animatedTraderBeamWidth + 4 * p, 
+        traderBeamHeight
+      );
+      
+      // Trader beam inner core (reuse shadow)
+      const traderCoreGradient = ctx.createLinearGradient(
+        animatedTraderBeamX, 
+        traderBeamStartY, 
+        animatedTraderBeamX, 
+        traderBeamStartY - traderBeamHeight * 0.6
+      );
+      traderCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${traderIntensity * 0.6})`);
+      traderCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = traderCoreGradient;
+      ctx.fillRect(
+        animatedTraderBeamX + 1 * p, 
+        traderBeamStartY - traderBeamHeight * 0.6, 
+        animatedTraderBeamWidth - 2 * p, 
+        traderBeamHeight * 0.6
+      );
+      
+      // Reset shadow after trader beam operations
+      ctx.shadowBlur = 0;
+      
+      // Trader beam shimmer effect (only for hovered to save performance)
+      if (isHovered) {
+        const traderShimmerOffset = ((time * 0.0015 + stall.angle) % (traderBeamHeight * 0.4));
+        const traderShimmerGradient = ctx.createLinearGradient(
+          animatedTraderBeamX, 
+          traderBeamStartY - traderShimmerOffset, 
+          animatedTraderBeamX, 
+          traderBeamStartY - traderShimmerOffset - traderBeamHeight * 0.25
+        );
+        traderShimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        traderShimmerGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+        traderShimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = traderShimmerGradient;
+        ctx.fillRect(
+          animatedTraderBeamX, 
+          traderBeamStartY - traderBeamHeight, 
+          animatedTraderBeamWidth, 
+          traderBeamHeight
+        );
+      }
+    }
     
     const npcPlayer: PlayerWithChat = {
       id: npcId,
@@ -5965,8 +6003,8 @@ export function drawForestFountain(ctx: CanvasRenderingContext2D, time: number, 
     ctx.fill();
   });
   
-  // Draw NPC stalls
-  drawNPCStalls(ctx, centerX, centerY, plazaRadius, time, deltaTime || 16, hoveredStall);
+  // Draw NPC stalls (with viewport culling for performance)
+  drawNPCStalls(ctx, centerX, centerY, plazaRadius, time, deltaTime || 16, hoveredStall, camera);
   
   // Draw dealers around the plaza (between flags)
   drawDealers(ctx, centerX, centerY, plazaRadius, time, hoveredDealerId);
@@ -6237,7 +6275,14 @@ const DEALER_TYPES: DealerType[] = [
 ];
 
 // Update dealer speech bubbles (similar to NPC stalls)
+// Performance: Throttle updates to every 500ms to reduce CPU usage in busy areas
+let lastDealerSpeechUpdate = 0;
 function updateDealerSpeechBubbles(time: number): void {
+  // Throttle speech bubble updates to every 500ms (instead of every frame)
+  if (time - lastDealerSpeechUpdate < 500) {
+    return; // Skip update this frame
+  }
+  lastDealerSpeechUpdate = time;
   // Update log dealer
   const logDealerId = 'log_dealer';
   
@@ -7866,7 +7911,7 @@ function buildBlackjackTableStaticCache(): void {
   const p = SCALE;
   const tableRadiusSize = 60 * p; // Table size (major radius)
   const tableMinorRadius = tableRadiusSize * 0.6; // Minor radius for ellipse
-  const tableHeight = 12 * p; // 3D height of table
+  // tableHeight removed - no 3D effect
   
   // Create cache canvas (large enough for table + shadow)
   const cacheSize = (tableRadiusSize + 4 * p) * 2.5;
@@ -7885,46 +7930,7 @@ function buildBlackjackTableStaticCache(): void {
   const offsetX = cacheSize / 2;
   const offsetY = cacheSize / 2;
   
-  // === 3D TABLE BASE (bottom layer) ===
-  const baseGradient = cacheCtx.createLinearGradient(offsetX - tableRadiusSize, offsetY, offsetX + tableRadiusSize, offsetY);
-  baseGradient.addColorStop(0, '#2a1a0a');
-  baseGradient.addColorStop(0.5, '#3a2a1a');
-  baseGradient.addColorStop(1, '#2a1a0a');
-  cacheCtx.fillStyle = baseGradient;
-  cacheCtx.beginPath();
-  cacheCtx.ellipse(offsetX, offsetY + tableHeight, tableRadiusSize + 4 * p, tableMinorRadius + 4 * p, 0, 0, Math.PI * 2);
-  cacheCtx.fill();
-  
-  // Table base edge highlight
-  cacheCtx.strokeStyle = '#5a4a3a';
-  cacheCtx.lineWidth = 3 * p;
-  cacheCtx.beginPath();
-  cacheCtx.ellipse(offsetX, offsetY + tableHeight, tableRadiusSize + 4 * p, tableMinorRadius + 4 * p, 0, 0, Math.PI * 2);
-  cacheCtx.stroke();
-  
-  // === 3D TABLE SIDES (vertical depth) ===
-  const sideGradient = cacheCtx.createLinearGradient(offsetX, offsetY, offsetX, offsetY + tableHeight);
-  sideGradient.addColorStop(0, '#4a3a2a');
-  sideGradient.addColorStop(1, '#2a1a0a');
-  cacheCtx.fillStyle = sideGradient;
-  
-  // Draw side segments (approximate 3D sides for ellipse)
-  for (let i = 0; i < 16; i++) {
-    const sideAngle = (i / 16) * Math.PI * 2;
-    const nextAngle = ((i + 1) / 16) * Math.PI * 2;
-    const x1 = offsetX + Math.cos(sideAngle) * (tableRadiusSize + 4 * p);
-    const y1 = offsetY + Math.sin(sideAngle) * (tableMinorRadius + 4 * p);
-    const x2 = offsetX + Math.cos(nextAngle) * (tableRadiusSize + 4 * p);
-    const y2 = offsetY + Math.sin(nextAngle) * (tableMinorRadius + 4 * p);
-    
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(x1, y1);
-    cacheCtx.lineTo(x1, y1 + tableHeight);
-    cacheCtx.lineTo(x2, y2 + tableHeight);
-    cacheCtx.lineTo(x2, y2);
-    cacheCtx.closePath();
-    cacheCtx.fill();
-  }
+  // 3D base and sides removed for performance - flat table only
   
   // === TABLE TOP (green felt surface) ===
   const topGradient = cacheCtx.createRadialGradient(offsetX, offsetY, 0, offsetX, offsetY, tableRadiusSize);
@@ -7949,25 +7955,11 @@ function buildBlackjackTableStaticCache(): void {
     }
   }
   
-  // Table border (white, with inner inset for 3D)
+  // Table border (simplified - no 3D effects)
   cacheCtx.strokeStyle = '#ffffff';
   cacheCtx.lineWidth = 2 * p;
   cacheCtx.beginPath();
   cacheCtx.ellipse(offsetX, offsetY, tableRadiusSize, tableMinorRadius, 0, 0, Math.PI * 2);
-  cacheCtx.stroke();
-  
-  // Inner border (darker for depth)
-  cacheCtx.strokeStyle = '#0a3a0a';
-  cacheCtx.lineWidth = 1 * p;
-  cacheCtx.beginPath();
-  cacheCtx.ellipse(offsetX, offsetY, tableRadiusSize - 2 * p, tableMinorRadius - 2 * p, 0, 0, Math.PI * 2);
-  cacheCtx.stroke();
-  
-  // Top edge highlight (3D effect)
-  cacheCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-  cacheCtx.lineWidth = 1 * p;
-  cacheCtx.beginPath();
-  cacheCtx.ellipse(offsetX, offsetY - 1 * p, tableRadiusSize - 1 * p, tableMinorRadius - 1 * p, 0, 0, Math.PI * 2);
   cacheCtx.stroke();
   
   blackjackTableStaticCacheInitialized = true;
@@ -8179,6 +8171,61 @@ function buildPathLightMountCache(): void {
 // Store blackjack table positions for click detection
 export const blackjackTablePositions: Map<string, { x: number; y: number; radius: number }> = new Map();
 
+// Build cached positions for blackjack tables (calculated once)
+export function buildBlackjackTablePositionsCache(): void {
+  if (blackjackTablePositionsCache) return;
+  
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 600 * p;
+  const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+  const tableRadius = plazaRadius * 0.6;
+  const tableRadiusSize = 60 * p;
+  const tableMinorRadius = tableRadiusSize * 0.6;
+  const numSeats = 4;
+  
+  blackjackTablePositionsCache = [];
+  
+  for (let i = 0; i < 4; i++) {
+    const angle = tableAngles[i];
+    const tableX = centerX + Math.cos(angle) * tableRadius;
+    const tableY = centerY + Math.sin(angle) * tableRadius;
+    
+    // Calculate dealer position (opposite side from seats)
+    const dealerAngle = angle + Math.PI; // Opposite direction
+    const dealerDistance = tableRadiusSize * 0.9;
+    const dealerX = tableX + Math.cos(dealerAngle) * dealerDistance;
+    const dealerY = tableY + Math.sin(dealerAngle) * dealerDistance;
+    
+    // Calculate seat positions
+    const seatPositions: Array<{ x: number; y: number; angle: number }> = [];
+    for (let seat = 0; seat < numSeats; seat++) {
+      const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // 4 seats evenly spaced on player side
+      const edgeX = tableX + Math.cos(seatAngle) * tableRadiusSize;
+      const edgeY = tableY + Math.sin(seatAngle) * tableMinorRadius;
+      const seatOffset = 12 * p;
+      const seatX = edgeX + Math.cos(seatAngle) * seatOffset;
+      const seatY = edgeY + Math.sin(seatAngle) * seatOffset;
+      seatPositions.push({ x: seatX, y: seatY, angle: seatAngle });
+    }
+    
+    blackjackTablePositionsCache.push({
+      tableX,
+      tableY,
+      dealerX,
+      dealerY,
+      dealerAngle: angle + Math.PI,
+      seatPositions
+    });
+  }
+  
+  // Expose cache to window for GameCanvas access
+  if (typeof window !== 'undefined') {
+    (window as any).__blackjackTablePositionsCache = blackjackTablePositionsCache;
+  }
+}
+
 // Draw blackjack tables on casino map
 export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number, hoveredTableId?: string | null, hoveredDealerId?: string | null): void {
   const p = SCALE;
@@ -8197,27 +8244,29 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
   // Build static cache if needed
   buildBlackjackTableStaticCache();
   
+  // Build cached positions if needed
+  buildBlackjackTablePositionsCache();
+  
   // Update dealer speech bubbles (including blackjack dealers)
   updateDealerSpeechBubbles(time);
-  
-  // Position 4 tables around the casino plaza
-  // Tables are positioned at angles: π/4, 3π/4, 5π/4, 7π/4 (45° intervals)
-  const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
-  const tableRadius = plazaRadius * 0.6; // Position tables closer to center than dealers
   
   // Clear previous positions
   blackjackTablePositions.clear();
   
+  const tableRadiusSize = 60 * p; // Table size (major radius)
+  const tableMinorRadius = tableRadiusSize * 0.6; // Minor radius for ellipse
+  
   for (let i = 0; i < 4; i++) {
     const tableId = `blackjack_table_${i + 1}`;
     const dealerId = `blackjack_dealer_${i + 1}`;
-    const angle = tableAngles[i];
     
-    const tableX = centerX + Math.cos(angle) * tableRadius;
-    const tableY = centerY + Math.sin(angle) * tableRadius;
-    const tableRadiusSize = 60 * p; // Table size (major radius)
-    const tableMinorRadius = tableRadiusSize * 0.6; // Minor radius for ellipse
-    const tableHeight = 12 * p; // 3D height of table
+    // Use cached positions instead of recalculating
+    const cached = blackjackTablePositionsCache![i];
+    const tableX = cached.tableX;
+    const tableY = cached.tableY;
+    const dealerX = cached.dealerX;
+    const dealerY = cached.dealerY;
+    const dealerAngle = cached.dealerAngle;
     
     // Store position for click detection
     blackjackTablePositions.set(tableId, { x: tableX, y: tableY, radius: tableRadiusSize });
@@ -8226,45 +8275,25 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     
     ctx.save();
     
-    // === PULSING PARTICLE EFFECTS (emanating downward) - dynamic, not cached ===
+    // === PULSING PARTICLE EFFECTS - HEAVILY OPTIMIZED: minimal particles ===
     const pulsePhase = Math.sin(time * 0.003) * 0.5 + 0.5; // 0 to 1
-    const particleCount = 12;
+    const particleCount = 3; // Further reduced from 6 to 3 for performance
     for (let i = 0; i < particleCount; i++) {
       const particleAngle = (i / particleCount) * Math.PI * 2;
-      const particleDist = 8 * p + pulsePhase * 20 * p; // Particles move downward
+      const particleDist = 8 * p + pulsePhase * 20 * p;
       const particleX = tableX + Math.cos(particleAngle) * (tableRadiusSize * 0.7);
-      const particleY = tableY + Math.sin(particleAngle) * (tableMinorRadius * 0.7) + tableHeight + particleDist;
+      const particleY = tableY + Math.sin(particleAngle) * (tableMinorRadius * 0.7) + particleDist;
       
-      // Particle size and opacity fade with distance
-      const particleSize = (1 - pulsePhase) * 3 * p + 1 * p;
-      const particleAlpha = (1 - pulsePhase) * 0.6;
-      
-      // Blue/cyan particle glow
-      const particleGradient = ctx.createRadialGradient(particleX, particleY, 0, particleX, particleY, particleSize * 2);
-      particleGradient.addColorStop(0, `rgba(100, 200, 255, ${particleAlpha})`);
-      particleGradient.addColorStop(0.5, `rgba(50, 150, 255, ${particleAlpha * 0.5})`);
-      particleGradient.addColorStop(1, `rgba(50, 150, 255, 0)`);
-      ctx.fillStyle = particleGradient;
-      ctx.beginPath();
-      ctx.arc(particleX, particleY, particleSize * 2, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Core particle
-      ctx.fillStyle = `rgba(150, 220, 255, ${particleAlpha})`;
+      // Simplified particle - single draw, no gradient
+      const particleSize = (1 - pulsePhase) * 2 * p + 1 * p;
+      const particleAlpha = (1 - pulsePhase) * 0.4;
+      ctx.fillStyle = `rgba(100, 200, 255, ${particleAlpha})`;
       ctx.beginPath();
       ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
       ctx.fill();
     }
     
-    // Shadow beneath table (for floating effect) - dynamic
-    const shadowGradient = ctx.createRadialGradient(tableX, tableY + tableHeight + 4 * p, 0, tableX, tableY + tableHeight + 4 * p, tableRadiusSize * 1.2);
-    shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
-    shadowGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.2)');
-    shadowGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = shadowGradient;
-    ctx.beginPath();
-    ctx.ellipse(tableX, tableY + tableHeight + 4 * p, tableRadiusSize * 1.2, tableMinorRadius * 1.2, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // Shadow removed for performance
     
     // Hover glow effect - dynamic
     if (isHovered) {
@@ -8289,35 +8318,24 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     }
     
     // === DRAW SEATS AROUND TABLE EDGE (styled like slot seats) ===
-    // Position seats at the edge of the table (not overlapping)
-    // Calculate seat positions on the ellipse edge
-    const numSeats = 4;
-    for (let seat = 0; seat < numSeats; seat++) {
-      // Seats on player side (semi-circle facing dealer, opposite from dealer at angle 0)
-      const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // 4 seats evenly spaced on player side
-      
-      // Calculate position on ellipse edge
-      // For ellipse: x = a*cos(θ), y = b*sin(θ) where a=major, b=minor
-      const edgeX = tableX + Math.cos(seatAngle) * tableRadiusSize;
-      const edgeY = tableY + Math.sin(seatAngle) * tableMinorRadius;
-      
-      // Position seat slightly outside the edge (not overlapping)
-      const seatOffset = 12 * p; // Distance from table edge
-      const seatX = edgeX + Math.cos(seatAngle) * seatOffset;
-      const seatY = edgeY + Math.sin(seatAngle) * seatOffset;
+    // Use cached seat positions instead of recalculating
+    for (let seat = 0; seat < cached.seatPositions.length; seat++) {
+      // Use cached position
+      const seatPos = cached.seatPositions[seat];
+      const seatX = seatPos.x;
+      const seatY = seatPos.y;
+      const seatAngle = seatPos.angle;
       
       ctx.save();
       
-      // Animated glow intensity (subtle pulsing)
-      const glowPulse = 0.6 + Math.sin(time * 0.002 + seat * 0.5) * 0.2;
+      // OPTIMIZED: Simplified glow - use cached time to reduce calculations
+      const cachedTime = Math.floor(time / 16) * 16; // Update every ~16ms instead of every frame
+      const glowPulse = 0.6 + Math.sin(cachedTime * 0.002 + seat * 0.5) * 0.2;
       
       // Draw glow/flow effect beneath podium (blue/cyan theme for blackjack)
+      // OPTIMIZED: Use simple fill instead of gradient for better performance
       const glowRadius = 12 * p;
-      const glowGradient = ctx.createRadialGradient(seatX, seatY, 0, seatX, seatY, glowRadius);
-      glowGradient.addColorStop(0, `rgba(100, 200, 255, ${0.4 * glowPulse})`);
-      glowGradient.addColorStop(0.5, `rgba(50, 150, 255, ${0.2 * glowPulse})`);
-      glowGradient.addColorStop(1, `rgba(50, 150, 255, 0)`);
-      ctx.fillStyle = glowGradient;
+      ctx.fillStyle = `rgba(100, 200, 255, ${0.3 * glowPulse})`;
       ctx.beginPath();
       ctx.arc(seatX, seatY, glowRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -8338,48 +8356,30 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
       const podiumTopRadius = 7 * p;
       const topY = seatY;
       
+      // OPTIMIZED: Simplified tints - use simple fills instead of gradients
       // Blue tint on base
-      const baseTint = ctx.createRadialGradient(seatX, seatY + 8 * p, 0, seatX, seatY + 8 * p, podiumBaseRadius);
-      baseTint.addColorStop(0, 'rgba(120, 180, 220, 0.3)');
-      baseTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = baseTint;
+      ctx.fillStyle = 'rgba(120, 180, 220, 0.2)';
       ctx.beginPath();
       ctx.arc(seatX, seatY + 8 * p, podiumBaseRadius, 0, Math.PI * 2);
       ctx.fill();
       
       // Blue tint on top
-      const topTint = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
-      topTint.addColorStop(0, 'rgba(140, 200, 240, 0.4)');
-      topTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = topTint;
+      ctx.fillStyle = 'rgba(140, 200, 240, 0.25)';
       ctx.beginPath();
       ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      // Top highlight (blue accent)
-      ctx.strokeStyle = `rgba(100, 200, 255, ${0.6 * glowPulse})`;
+      // Top highlight (blue accent) - simplified
+      ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 * glowPulse})`;
       ctx.lineWidth = 1.5 * p;
       ctx.beginPath();
       ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
       ctx.stroke();
       
-      // Subtle blue glow on top surface
-      const topGlow = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
-      topGlow.addColorStop(0, `rgba(100, 200, 255, ${0.2 * glowPulse})`);
-      topGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = topGlow;
-      ctx.beginPath();
-      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
-      ctx.fill();
-      
       ctx.restore();
     }
     
-    // Draw dealer position (opposite side from seats)
-    const dealerAngle = 0; // Dealer at top
-    const dealerX = tableX + Math.cos(dealerAngle) * (tableRadiusSize * 0.7);
-    const dealerY = tableY + Math.sin(dealerAngle) * (tableMinorRadius * 0.7);
-    
+    // Use cached dealer position (already calculated)
     // Store blackjack dealer position for click detection (must be stored before other dealers)
     dealerPositions.set(dealerId, { x: dealerX, y: dealerY });
     
@@ -8395,75 +8395,21 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     ctx.arc(dealerX, dealerY, 10 * p, 0, Math.PI * 2);
     ctx.stroke();
     
-    // === ANIMATED GREEN LIGHTBEAM ABOVE BLACKJACK DEALER ===
-    // Draw lightbeam from top of dealer's head (BEFORE dealer so it's behind nameplate)
-    const dealerHeadY = dealerY - (PLAYER_HEIGHT * SCALE) / 2; // Top of dealer's head
-    const beamHeight = 100 * p;
-    const baseBeamWidth = 8 * p;
-    const beamStartY = dealerHeadY - 5 * p; // Slightly above head
+    // === ANIMATED GREEN LIGHTBEAM ABOVE BLACKJACK DEALER - HEAVILY OPTIMIZED ===
+    // OPTIMIZED: Simplified lightbeam - single simple rectangle instead of multiple gradients
+    const dealerHeadY = dealerY - (PLAYER_HEIGHT * SCALE) / 2;
+    const beamHeight = 80 * p; // Reduced height
+    const baseBeamWidth = 6 * p; // Reduced width
+    const beamStartY = dealerHeadY - 5 * p;
     
-    // Animate beam (pulsing width and intensity) - each dealer pulses at different phase
-    const beamPulse = Math.sin(time * 0.003 + i * Math.PI / 2) * 0.2 + 1; // Each dealer pulses at different phase
-    const beamIntensity = Math.sin(time * 0.002 + i * Math.PI / 2) * 0.25 + 0.75; // Intensity between 0.5 and 1.0
-    const animatedBeamWidth = baseBeamWidth * beamPulse;
+    // Simplified animation - cached time
+    const cachedTime = Math.floor(time / 32) * 32; // Update every ~32ms
+    const beamIntensity = Math.sin(cachedTime * 0.002 + i * Math.PI / 2) * 0.2 + 0.6; // Reduced intensity range
+    const animatedBeamWidth = baseBeamWidth;
     const animatedBeamX = dealerX - animatedBeamWidth / 2;
     
-    // Green color for blackjack dealers
-    const greenRgb = { r: 34, g: 197, b: 94 }; // Green-500 equivalent
-    const greenSecondaryRgb = { r: 22, g: 163, b: 74 }; // Green-600 equivalent
-    
-    // Blackjack dealer lightbeam gradient (green colors)
-    const dealerBeamGradient = ctx.createLinearGradient(
-      animatedBeamX, 
-      beamStartY, 
-      animatedBeamX, 
-      beamStartY - beamHeight
-    );
-    dealerBeamGradient.addColorStop(0, `rgba(255, 255, 255, ${beamIntensity})`);
-    dealerBeamGradient.addColorStop(0.2, `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, ${beamIntensity * 0.9})`);
-    dealerBeamGradient.addColorStop(0.5, `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, ${beamIntensity * 0.6})`);
-    dealerBeamGradient.addColorStop(0.8, `rgba(${greenSecondaryRgb.r}, ${greenSecondaryRgb.g}, ${greenSecondaryRgb.b}, ${beamIntensity * 0.3})`);
-    dealerBeamGradient.addColorStop(1, `rgba(${greenSecondaryRgb.r}, ${greenSecondaryRgb.g}, ${greenSecondaryRgb.b}, 0)`);
-    
-    // Draw main beam
-    ctx.fillStyle = dealerBeamGradient;
-    ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
-    
-    // Batch shadow operations for dealer beam
-    const dealerGlowIntensity = beamIntensity * 0.6;
-    ctx.shadowBlur = 20 * p * beamPulse;
-    ctx.shadowColor = `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, ${dealerGlowIntensity})`;
-    
-    // Dealer beam outer glow (pulsing)
-    ctx.fillRect(animatedBeamX - 2 * p, beamStartY - beamHeight, animatedBeamWidth + 4 * p, beamHeight);
-    
-    // Dealer beam inner core (bright center)
-    const dealerCoreGradient = ctx.createLinearGradient(
-      animatedBeamX, 
-      beamStartY, 
-      animatedBeamX, 
-      beamStartY - beamHeight * 0.7
-    );
-    dealerCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${beamIntensity * 0.9})`);
-    dealerCoreGradient.addColorStop(1, `rgba(${greenRgb.r}, ${greenRgb.g}, ${greenRgb.b}, 0)`);
-    ctx.fillStyle = dealerCoreGradient;
-    ctx.fillRect(animatedBeamX + 1 * p, beamStartY - beamHeight * 0.7, animatedBeamWidth - 2 * p, beamHeight * 0.7);
-    
-    // Reset shadow after dealer beam operations
-    ctx.shadowBlur = 0;
-    
-    // Dealer beam shimmer effect (moving highlight)
-    const dealerShimmerOffset = ((time * 0.0015 + i * Math.PI / 2) % (beamHeight * 0.4));
-    const dealerShimmerGradient = ctx.createLinearGradient(
-      animatedBeamX, 
-      beamStartY - dealerShimmerOffset, 
-      animatedBeamX, 
-      beamStartY - dealerShimmerOffset - beamHeight * 0.25
-    );
-    dealerShimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    dealerShimmerGradient.addColorStop(0.5, `rgba(255, 255, 255, ${beamIntensity * 0.5})`);
-    dealerShimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = dealerShimmerGradient;
+    // OPTIMIZED: Single simple fill instead of multiple gradients
+    ctx.fillStyle = `rgba(34, 197, 94, ${beamIntensity * 0.4})`; // Simple green fill
     ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
     
     // Draw dealer NPC
@@ -8866,142 +8812,45 @@ function buildSlotMachineCache(): void {
     const slotY = offsetY + Math.sin(dir.angle) * slotMachineDistance;
     const theme = SLOT_MACHINE_THEMES[dir.id];
     
-    // Calculate 3D perspective points
-    const topWidth = slotMachineWidth * 0.85;
-    const bottomWidth = slotMachineWidth;
-    const machineTopY = slotY - slotMachineHeight / 2;
-    const machineBottomY = slotY + slotMachineHeight / 2;
-    
+    // 3D perspective removed - flat rectangle only
     cacheCtx.save();
     
-    // Draw drop shadow
-    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    cacheCtx.beginPath();
-    cacheCtx.ellipse(slotX + depthOffset, slotY + slotMachineHeight / 2 + depthOffset, slotMachineWidth * 0.5, depthOffset * 0.5, 0, 0, Math.PI * 2);
-    cacheCtx.fill();
+    // Draw main front face (flat rectangle - no 3D perspective, shadows, or side faces)
+    cacheCtx.fillStyle = '#1f1f1f';
+    cacheCtx.fillRect(slotX - slotMachineWidth / 2, slotY - slotMachineHeight / 2, slotMachineWidth, slotMachineHeight);
     
-    // Draw back face
-    const backOffsetX = depthOffset * 0.5;
-    const backOffsetY = depthOffset * 0.3;
-    cacheCtx.fillStyle = '#0a0a0a';
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(slotX - bottomWidth / 2 + backOffsetX, machineBottomY + backOffsetY);
-    cacheCtx.lineTo(slotX + bottomWidth / 2 + backOffsetX, machineBottomY + backOffsetY);
-    cacheCtx.lineTo(slotX + topWidth / 2 + backOffsetX, machineTopY + backOffsetY);
-    cacheCtx.lineTo(slotX - topWidth / 2 + backOffsetX, machineTopY + backOffsetY);
-    cacheCtx.closePath();
-    cacheCtx.fill();
-    
-    // Draw right side face
-    cacheCtx.fillStyle = '#151515';
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(slotX + bottomWidth / 2, machineBottomY);
-    cacheCtx.lineTo(slotX + bottomWidth / 2 + backOffsetX, machineBottomY + backOffsetY);
-    cacheCtx.lineTo(slotX + topWidth / 2 + backOffsetX, machineTopY + backOffsetY);
-    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
-    cacheCtx.closePath();
-    cacheCtx.fill();
-    
-    // Draw main front face with lighting gradient
-    const frontGradient = cacheCtx.createLinearGradient(
-      slotX - slotMachineWidth / 2, slotY,
-      slotX + slotMachineWidth / 2, slotY
-    );
-    frontGradient.addColorStop(0, '#2a2a2a');
-    frontGradient.addColorStop(0.5, '#1f1f1f');
-    frontGradient.addColorStop(1, '#151515');
-    cacheCtx.fillStyle = frontGradient;
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(slotX - bottomWidth / 2, machineBottomY);
-    cacheCtx.lineTo(slotX + bottomWidth / 2, machineBottomY);
-    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
-    cacheCtx.lineTo(slotX - topWidth / 2, machineTopY);
-    cacheCtx.closePath();
-    cacheCtx.fill();
-    
-    // Top highlight
-    cacheCtx.strokeStyle = '#3a3a3a';
-    cacheCtx.lineWidth = 2 * p;
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(slotX - topWidth / 2, machineTopY);
-    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
-    cacheCtx.stroke();
-    
-    // Themed frame
+    // Themed frame (simplified - no shadow)
     cacheCtx.strokeStyle = theme.primary;
     cacheCtx.lineWidth = 3 * p;
-    cacheCtx.shadowBlur = 8 * p;
-    cacheCtx.shadowColor = theme.glow;
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(slotX - bottomWidth / 2, machineBottomY);
-    cacheCtx.lineTo(slotX + bottomWidth / 2, machineBottomY);
-    cacheCtx.lineTo(slotX + topWidth / 2, machineTopY);
-    cacheCtx.lineTo(slotX - topWidth / 2, machineTopY);
-    cacheCtx.closePath();
-    cacheCtx.stroke();
-    cacheCtx.shadowBlur = 0;
+    cacheCtx.strokeRect(slotX - slotMachineWidth / 2, slotY - slotMachineHeight / 2, slotMachineWidth, slotMachineHeight);
     
-    // Corner accents
+    // Corner accents (simplified)
     const cornerSize = 6 * p;
     cacheCtx.fillStyle = theme.secondary;
-    cacheCtx.fillRect(slotX - topWidth / 2, machineTopY, cornerSize, cornerSize);
-    cacheCtx.fillRect(slotX + topWidth / 2 - cornerSize, machineTopY, cornerSize, cornerSize);
-    cacheCtx.fillRect(slotX - bottomWidth / 2, machineBottomY - cornerSize, cornerSize, cornerSize);
-    cacheCtx.fillRect(slotX + bottomWidth / 2 - cornerSize, machineBottomY - cornerSize, cornerSize, cornerSize);
+    cacheCtx.fillRect(slotX - slotMachineWidth / 2, slotY - slotMachineHeight / 2, cornerSize, cornerSize);
+    cacheCtx.fillRect(slotX + slotMachineWidth / 2 - cornerSize, slotY - slotMachineHeight / 2, cornerSize, cornerSize);
+    cacheCtx.fillRect(slotX - slotMachineWidth / 2, slotY + slotMachineHeight / 2 - cornerSize, cornerSize, cornerSize);
+    cacheCtx.fillRect(slotX + slotMachineWidth / 2 - cornerSize, slotY + slotMachineHeight / 2 - cornerSize, cornerSize, cornerSize);
     
     // Screen area (static parts)
     const screenWidth = slotMachineWidth * 0.65;
     const screenHeight = slotMachineHeight * 0.4;
     const screenX = slotX - screenWidth / 2;
-    const screenY = machineTopY + 15 * p;
-    const screenDepth = 3 * p;
+    const screenY = slotY - slotMachineHeight / 2 + 15 * p; // Calculate from slotY directly
     
-    // Screen inset shadows
-    cacheCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(screenX, screenY);
-    cacheCtx.lineTo(screenX + screenWidth, screenY);
-    cacheCtx.lineTo(screenX + screenWidth - screenDepth, screenY + screenDepth);
-    cacheCtx.lineTo(screenX + screenDepth, screenY + screenDepth);
-    cacheCtx.closePath();
-    cacheCtx.fill();
+    // Screen area (simplified - no 3D inset shadows)
+    cacheCtx.fillStyle = '#000000';
+    cacheCtx.fillRect(screenX, screenY, screenWidth, screenHeight);
     
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(screenX, screenY);
-    cacheCtx.lineTo(screenX + screenDepth, screenY + screenDepth);
-    cacheCtx.lineTo(screenX + screenDepth, screenY + screenHeight - screenDepth);
-    cacheCtx.lineTo(screenX, screenY + screenHeight);
-    cacheCtx.closePath();
-    cacheCtx.fill();
-    
-    // Screen background
-    const screenGradient = cacheCtx.createLinearGradient(screenX + screenDepth, screenY + screenDepth, screenX + screenWidth - screenDepth, screenY + screenHeight - screenDepth);
-    screenGradient.addColorStop(0, '#000000');
-    screenGradient.addColorStop(0.5, `${theme.primary}08`);
-    screenGradient.addColorStop(1, '#000000');
-    cacheCtx.fillStyle = screenGradient;
-    cacheCtx.fillRect(screenX + screenDepth, screenY + screenDepth, screenWidth - screenDepth * 2, screenHeight - screenDepth * 2);
-    
-    // Screen border
+    // Screen border (simplified)
     cacheCtx.strokeStyle = theme.primary;
     cacheCtx.lineWidth = 2 * p;
-    cacheCtx.shadowBlur = 6 * p;
-    cacheCtx.shadowColor = theme.glow;
-    cacheCtx.strokeRect(screenX + screenDepth, screenY + screenDepth, screenWidth - screenDepth * 2, screenHeight - screenDepth * 2);
-    cacheCtx.strokeStyle = `${theme.primary}66`;
-    cacheCtx.lineWidth = 1 * p;
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(screenX, screenY);
-    cacheCtx.lineTo(screenX + screenWidth, screenY);
-    cacheCtx.moveTo(screenX, screenY);
-    cacheCtx.lineTo(screenX, screenY + screenHeight);
-    cacheCtx.stroke();
-    cacheCtx.shadowBlur = 0;
+    cacheCtx.strokeRect(screenX, screenY, screenWidth, screenHeight);
     
     // Decorative lights (base positions, no pulsing in cache)
     for (let i = 0; i < 5; i++) {
       const lightX = screenX + (i + 1) * (screenWidth / 6);
-      const lightY = machineTopY + 8 * p;
+      const lightY = slotY - slotMachineHeight / 2 + 8 * p; // Calculate from slotY directly
       cacheCtx.fillStyle = `${theme.primary}80`;
       cacheCtx.shadowBlur = 4 * p;
       cacheCtx.shadowColor = theme.glow;
@@ -9371,6 +9220,47 @@ function buildCasinoPathsCache(): void {
   casinoPathsCacheInitialized = true;
 }
 
+// Build cached positions for slot machines (calculated once)
+function buildSlotMachinePositionsCache(): void {
+  if (slotMachinePositionsCache) return;
+  
+  const p = SCALE;
+  const centerX = WORLD_WIDTH / 2;
+  const centerY = WORLD_HEIGHT / 2;
+  const plazaRadius = 600 * p;
+  const slotMachineDistance = plazaRadius * 0.85;
+  const seatRadius = 38 * p;
+  
+  const directions = [
+    { angle: 0, id: 'slot_machine_north', name: 'Orb Fortune' },
+    { angle: Math.PI / 2, id: 'slot_machine_east', name: 'Orb Destiny' },
+    { angle: Math.PI, id: 'slot_machine_south', name: 'Orb Glory' },
+    { angle: 3 * Math.PI / 2, id: 'slot_machine_west', name: 'Orb Victory' }
+  ];
+  
+  slotMachinePositionsCache = [];
+  
+  for (const dir of directions) {
+    const slotX = centerX + Math.cos(dir.angle) * slotMachineDistance;
+    const slotY = centerY + Math.sin(dir.angle) * slotMachineDistance;
+    
+    // Calculate seat positions (8 seats around each machine)
+    const seatPositions: Array<{ x: number; y: number; angle: number }> = [];
+    for (let seat = 0; seat < 8; seat++) {
+      const seatAngle = (seat / 8) * Math.PI * 2;
+      const seatX = slotX + Math.cos(seatAngle) * seatRadius;
+      const seatY = slotY + Math.sin(seatAngle) * seatRadius;
+      seatPositions.push({ x: seatX, y: seatY, angle: seatAngle });
+    }
+    
+    slotMachinePositionsCache.push({
+      slotX,
+      slotY,
+      seatPositions
+    });
+  }
+}
+
 // Draw slot machines on casino map (N/S/E/W near plaza edge)
 export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, hoveredSlotMachineId?: string | null): void {
   const p = SCALE;
@@ -9384,7 +9274,6 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
   // Scale slot machines to match NPC size (slightly larger for visibility)
   const slotMachineWidth = PLAYER_WIDTH * SCALE * 1.2; // 20% larger than player width
   const slotMachineHeight = PLAYER_HEIGHT * SCALE * 1.5; // 50% taller than player height
-  const depthOffset = 8 * p; // Depth offset for 3D effect
   
   // Directions: North (0), East (π/2), South (π), West (3π/2)
   const directions = [
@@ -9397,6 +9286,9 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
   // Build static caches if needed
   buildSlotMachineCache();
   buildCasinoPathsCache();
+  
+  // Build cached positions if needed
+  buildSlotMachinePositionsCache();
   
   // Clear previous positions
   slotMachinePositions.clear();
@@ -9545,49 +9437,39 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     // Use already parsed theme color (themeRgb was parsed above in the lights loop)
     
     // Draw pulsing line segments with trail effect (optimized - batch calculations)
+    // OPTIMIZED: Heavily reduce segment rendering for performance
     ctx.lineCap = 'round';
+    const cachedTime = Math.floor(time / 32) * 32; // Update every ~32ms instead of every frame
+    let segmentsDrawn = 0;
+    const maxSegmentsPerPath = 10; // Further reduced from 20 to 10 for performance
+    
     for (const seg of segmentPositions) {
+      // Skip segments to reduce rendering load
+      if (segmentsDrawn >= maxSegmentsPerPath) break;
+      
       // Pulse animation - wave moving OUTWARD from center (towards slot machine)
-      const pulsePhase = (time * lineSpeed - seg.progress * 2) % (Math.PI * 2);
+      const pulsePhase = (cachedTime * lineSpeed - seg.progress * 2) % (Math.PI * 2);
       const sinPulse = Math.sin(pulsePhase);
       const pulse = sinPulse * 0.4 + 0.6; // Pulse between 0.2 and 1.0
       
       // Only draw if pulse is visible (optimization - skip very dim segments)
-      if (pulse < 0.25) continue;
+      if (pulse < 0.3) continue; // Increased threshold from 0.25 to 0.3
       
       // Fade trail effect - segments further from pulse have lower alpha
       const distanceFromPulse = Math.abs(sinPulse);
       const alpha = pulse * (1 - distanceFromPulse * 0.5);
       
-      // Draw line segment (optimized - combine glow and main stroke)
-      const shouldGlow = pulse > 0.7;
+      // OPTIMIZED: Simplified rendering - remove shadow effects for better performance
       ctx.strokeStyle = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${alpha})`;
       ctx.lineWidth = lineWidth * pulse;
-      
-      if (shouldGlow) {
-        ctx.shadowBlur = 6 * p * pulse;
-        ctx.shadowColor = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${alpha * 0.6})`;
-      } else {
-        ctx.shadowBlur = 0;
-      }
+      ctx.shadowBlur = 0; // Disable shadow for performance
       
       ctx.beginPath();
       ctx.moveTo(seg.startX, seg.startY);
       ctx.lineTo(seg.endX, seg.endY);
       ctx.stroke();
       
-      // Bright highlight for leading edge of pulse (only when very bright)
-      if (pulse > 0.95) {
-        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
-        ctx.lineWidth = lineWidth * 0.5;
-        ctx.shadowBlur = 8 * p;
-        ctx.beginPath();
-        ctx.moveTo(seg.startX, seg.startY);
-        ctx.lineTo(seg.endX, seg.endY);
-        ctx.stroke();
-      }
-      
-      ctx.shadowBlur = 0;
+      segmentsDrawn++;
     }
     
     ctx.shadowBlur = 0;
@@ -9603,11 +9485,14 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
   }
   
   // Draw 8 podiums around each slot machine
-  for (const dir of directions) {
-    const slotX = centerX + Math.cos(dir.angle) * slotMachineDistance;
-    const slotY = centerY + Math.sin(dir.angle) * slotMachineDistance;
-    const seatRadius = 38 * p; // Distance from machine center (immediately around machine)
+  for (let dirIndex = 0; dirIndex < directions.length; dirIndex++) {
+    const dir = directions[dirIndex];
     const theme = SLOT_MACHINE_THEMES[dir.id];
+    
+    // Use cached positions instead of recalculating
+    const cached = slotMachinePositionsCache![dirIndex];
+    const slotX = cached.slotX;
+    const slotY = cached.slotY;
     
     // Parse theme colors to RGB for glow effect
     const parseColor = (color: string) => {
@@ -9621,23 +9506,21 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     const themeRgb = parseColor(theme.primary);
     const themeSecondaryRgb = parseColor(theme.secondary);
     
-    for (let seat = 0; seat < 8; seat++) {
-      const seatAngle = (seat / 8) * Math.PI * 2; // Evenly spaced around circle
-      const seatX = slotX + Math.cos(seatAngle) * seatRadius;
-      const seatY = slotY + Math.sin(seatAngle) * seatRadius;
+    // Use cached seat positions
+    for (let seat = 0; seat < cached.seatPositions.length; seat++) {
+      const seatPos = cached.seatPositions[seat];
+      const seatX = seatPos.x;
+      const seatY = seatPos.y;
       
       ctx.save();
       
-      // Animated glow intensity (subtle pulsing)
-      const glowPulse = 0.6 + Math.sin(time * 0.002 + seat * 0.5) * 0.2;
+      // OPTIMIZED: Simplified glow - cached time and simple fill
+      const cachedTime = Math.floor(time / 32) * 32;
+      const glowPulse = 0.6 + Math.sin(cachedTime * 0.002 + seat * 0.5) * 0.2;
       
-      // Draw glow/flow effect beneath podium (themed color)
+      // OPTIMIZED: Simple fill instead of gradient
       const glowRadius = 12 * p;
-      const glowGradient = ctx.createRadialGradient(seatX, seatY, 0, seatX, seatY, glowRadius);
-      glowGradient.addColorStop(0, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.4 * glowPulse})`);
-      glowGradient.addColorStop(0.5, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.2 * glowPulse})`);
-      glowGradient.addColorStop(1, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, 0)`);
-      ctx.fillStyle = glowGradient;
+      ctx.fillStyle = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.25 * glowPulse})`;
       ctx.beginPath();
       ctx.arc(seatX, seatY, glowRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -9658,49 +9541,39 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
       const podiumTopRadius = 7 * p;
       const topY = seatY;
       
+      // OPTIMIZED: Simplified tints - simple fills instead of gradients
       // Theme tint on base
-      const baseTint = ctx.createRadialGradient(seatX, seatY + 8 * p, 0, seatX, seatY + 8 * p, podiumBaseRadius);
-      baseTint.addColorStop(0, `rgba(${Math.min(255, themeRgb.r + 20)}, ${Math.min(255, themeRgb.g + 20)}, ${Math.min(255, themeRgb.b + 20)}, 0.3)`);
-      baseTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = baseTint;
+      ctx.fillStyle = `rgba(${Math.min(255, themeRgb.r + 20)}, ${Math.min(255, themeRgb.g + 20)}, ${Math.min(255, themeRgb.b + 20)}, 0.15)`;
       ctx.beginPath();
       ctx.arc(seatX, seatY + 8 * p, podiumBaseRadius, 0, Math.PI * 2);
       ctx.fill();
       
       // Theme tint on top
-      const topTint = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
-      topTint.addColorStop(0, `rgba(${Math.min(255, themeRgb.r + 40)}, ${Math.min(255, themeRgb.g + 40)}, ${Math.min(255, themeRgb.b + 40)}, 0.4)`);
-      topTint.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = topTint;
+      ctx.fillStyle = `rgba(${Math.min(255, themeRgb.r + 40)}, ${Math.min(255, themeRgb.g + 40)}, ${Math.min(255, themeRgb.b + 40)}, 0.2)`;
       ctx.beginPath();
       ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      // Top highlight (themed accent)
-      ctx.strokeStyle = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.6 * glowPulse})`;
+      // Top highlight (simplified)
+      ctx.strokeStyle = `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.4 * glowPulse})`;
       ctx.lineWidth = 1.5 * p;
       ctx.beginPath();
       ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
       ctx.stroke();
-      
-      // Subtle theme glow on top surface
-      const topGlow = ctx.createRadialGradient(seatX, topY, 0, seatX, topY, podiumTopRadius);
-      topGlow.addColorStop(0, `rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, ${0.2 * glowPulse})`);
-      topGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = topGlow;
-      ctx.beginPath();
-      ctx.arc(seatX, topY, podiumTopRadius, 0, Math.PI * 2);
-      ctx.fill();
       
       ctx.restore();
     }
   }
   
   // Now draw animated parts on top (light beams, hover effects, pulsing lights)
-  for (const dir of directions) {
-    const slotX = centerX + Math.cos(dir.angle) * slotMachineDistance;
-    const slotY = centerY + Math.sin(dir.angle) * slotMachineDistance;
+  for (let dirIndex = 0; dirIndex < directions.length; dirIndex++) {
+    const dir = directions[dirIndex];
     const theme = SLOT_MACHINE_THEMES[dir.id];
+    
+    // Use cached positions instead of recalculating
+    const cached = slotMachinePositionsCache![dirIndex];
+    const slotX = cached.slotX;
+    const slotY = cached.slotY;
     
     // Store position for click detection
     slotMachinePositions.set(dir.id, { 
@@ -10363,6 +10236,10 @@ const ORB_RARITY_CONFIG: Record<string, {
   },
 };
 
+// Track how many orbs are being rendered to optimize rendering quality
+let orbRenderCount = 0;
+let lastOrbRenderReset = 0;
+
 export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): void {
   const scaledX = orb.x * SCALE;
   const scaledY = orb.y * SCALE;
@@ -10379,6 +10256,15 @@ export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): 
   const centerX = scaledX + (ORB_SIZE * SCALE) / 2;
   const centerY = scaledY + (ORB_SIZE * SCALE) / 2 + floatY;
   const radius = currentSize / 2;
+  
+  // Performance: Reduce render quality when rendering many orbs
+  // Reset counter every second
+  if (time - lastOrbRenderReset > 1000) {
+    orbRenderCount = 0;
+    lastOrbRenderReset = time;
+  }
+  orbRenderCount++;
+  const isHighQuality = orbRenderCount <= 30; // Only first 30 orbs get full quality
   
   ctx.save();
   
@@ -10397,14 +10283,16 @@ export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): 
   ctx.arc(centerX, centerY, outerGlowRadius, 0, Math.PI * 2);
   ctx.fill();
   
-  // Secondary outer glow (softer)
-  const glowGradient2 = ctx.createRadialGradient(centerX, centerY, radius * 0.8, centerX, centerY, outerGlowRadius * 0.9);
-  glowGradient2.addColorStop(0, config.colors.outer.replace(/[\d.]+\)$/, '0.4)'));
-  glowGradient2.addColorStop(1, 'transparent');
-  ctx.fillStyle = glowGradient2;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, outerGlowRadius * 0.9, 0, Math.PI * 2);
-  ctx.fill();
+  // Secondary outer glow (softer) - skip for distant orbs to improve performance
+  if (isHighQuality) {
+    const glowGradient2 = ctx.createRadialGradient(centerX, centerY, radius * 0.8, centerX, centerY, outerGlowRadius * 0.9);
+    glowGradient2.addColorStop(0, config.colors.outer.replace(/[\d.]+\)$/, '0.4)'));
+    glowGradient2.addColorStop(1, 'transparent');
+    ctx.fillStyle = glowGradient2;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerGlowRadius * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
   
   // Main orb body with sophisticated gradient
   const mainGradient = ctx.createRadialGradient(
@@ -10426,50 +10314,54 @@ export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): 
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.fill();
   
-  // Inner core (brighter center)
-  const coreGradient = ctx.createRadialGradient(
-    centerX - radius * 0.3, 
-    centerY - radius * 0.3, 
-    0,
-    centerX, 
-    centerY, 
-    radius * 0.6
-  );
-  coreGradient.addColorStop(0, config.colors.highlight);
-  coreGradient.addColorStop(0.5, config.colors.inner);
-  coreGradient.addColorStop(1, 'transparent');
+  // Inner core (brighter center) - skip for distant orbs
+  if (isHighQuality) {
+    const coreGradient = ctx.createRadialGradient(
+      centerX - radius * 0.3, 
+      centerY - radius * 0.3, 
+      0,
+      centerX, 
+      centerY, 
+      radius * 0.6
+    );
+    coreGradient.addColorStop(0, config.colors.highlight);
+    coreGradient.addColorStop(0.5, config.colors.inner);
+    coreGradient.addColorStop(1, 'transparent');
+    
+    ctx.fillStyle = coreGradient;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Main highlight (top-left, larger and more prominent) - only for high quality
+    const highlightGradient = ctx.createRadialGradient(
+      centerX - radius * 0.35, 
+      centerY - radius * 0.35, 
+      0,
+      centerX - radius * 0.35, 
+      centerY - radius * 0.35, 
+      radius * 0.5
+    );
+    highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+    highlightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.4)');
+    highlightGradient.addColorStop(1, 'transparent');
+    
+    ctx.fillStyle = highlightGradient;
+    ctx.beginPath();
+    ctx.arc(centerX - radius * 0.35, centerY - radius * 0.35, radius * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   
-  ctx.fillStyle = coreGradient;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius * 0.6, 0, Math.PI * 2);
-  ctx.fill();
+  // Secondary highlight (smaller, more focused) - only for high quality
+  if (isHighQuality) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.beginPath();
+    ctx.arc(centerX - radius * 0.3, centerY - radius * 0.3, radius * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
   
-  // Main highlight (top-left, larger and more prominent)
-  const highlightGradient = ctx.createRadialGradient(
-    centerX - radius * 0.35, 
-    centerY - radius * 0.35, 
-    0,
-    centerX - radius * 0.35, 
-    centerY - radius * 0.35, 
-    radius * 0.5
-  );
-  highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-  highlightGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.4)');
-  highlightGradient.addColorStop(1, 'transparent');
-  
-  ctx.fillStyle = highlightGradient;
-  ctx.beginPath();
-  ctx.arc(centerX - radius * 0.35, centerY - radius * 0.35, radius * 0.5, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Secondary highlight (smaller, more focused)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.beginPath();
-  ctx.arc(centerX - radius * 0.3, centerY - radius * 0.3, radius * 0.2, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Animated shimmer effect (rotating) for rare+ orbs
-  if (orbType === 'rare' || orbType === 'epic' || orbType === 'legendary' || orbType === 'gold' || orbType === 'shrine') {
+  // Animated shimmer effect (rotating) for rare+ orbs - only for high quality
+  if (isHighQuality && (orbType === 'rare' || orbType === 'epic' || orbType === 'legendary' || orbType === 'gold' || orbType === 'shrine')) {
     ctx.save();
     ctx.translate(centerX, centerY);
     ctx.rotate(rotation);
@@ -10490,8 +10382,8 @@ export function drawOrb(ctx: CanvasRenderingContext2D, orb: Orb, time: number): 
     ctx.restore();
   }
   
-  // Sparkles for rare+ orbs
-  if (orbType === 'rare' || orbType === 'epic' || orbType === 'legendary' || orbType === 'gold' || orbType === 'shrine') {
+  // Sparkles for rare+ orbs - only for high quality (very expensive)
+  if (isHighQuality && (orbType === 'rare' || orbType === 'epic' || orbType === 'legendary' || orbType === 'gold' || orbType === 'shrine')) {
     const sparkleCount = orbType === 'legendary' || orbType === 'shrine' ? 4 : 2;
     for (let i = 0; i < sparkleCount; i++) {
       const sparkleAngle = (rotation * 2 + (i / sparkleCount) * Math.PI * 2) % (Math.PI * 2);
@@ -11469,6 +11361,7 @@ export function drawFloatingTexts(ctx: CanvasRenderingContext2D): void {
 
 const WALK_FRAMES = 4; // number of walk cycle frames
 const BASE_DISTANCE_PER_FRAME = 20.0; // distance units traveled per animation frame at 1x speed
+const MAX_ANIMATION_SPEED = 1.5; // Maximum animation speed multiplier (prevents super fast leg animation even with speed boosts)
 const IDLE_BOB_INTERVAL = 3000; // ms between idle bobs
 const IDLE_BOB_DURATION = 500; // ms for one bob cycle
 
@@ -11485,15 +11378,33 @@ export function clearPlayerAnimationState(playerId: string): void {
 }
 
 // Export function to update animation state position without resetting (for server position corrections)
+// Performance: Smooth position updates to reduce jitter in busy areas
 export function updatePlayerAnimationPosition(playerId: string, x: number, y: number): void {
   const anim = extendedPlayerAnimations.get(playerId);
   if (anim) {
-    // Update position tracking to match server position
-    // This prevents jump detection when server corrects position
-    // Also reset distanceTraveled to prevent animation frame skipping after position correction
-    anim.lastX = x;
-    anim.lastY = y;
-    anim.distanceTraveled = 0; // Reset to prevent animation glitches after position sync
+    // Smoothly interpolate to server position instead of snapping
+    // This reduces jitter when server updates are frequent in busy areas
+    const dx = x - anim.lastX;
+    const dy = y - anim.lastY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // For small corrections (< 50 units), interpolate smoothly
+    // For larger corrections, snap immediately (likely a real correction)
+    if (distance < 50 && distance > 0.1) {
+      // Smooth interpolation: move 30% towards target per update
+      anim.lastX += dx * 0.3;
+      anim.lastY += dy * 0.3;
+    } else {
+      // Large correction or very small - snap immediately
+      anim.lastX = x;
+      anim.lastY = y;
+    }
+    
+    // Don't reset distanceTraveled for small corrections to maintain smooth animation
+    // Only reset for large corrections (teleportation)
+    if (distance > 50) {
+      anim.distanceTraveled = 0;
+    }
   }
 }
 
@@ -11612,14 +11523,37 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
     anim.idleTime = time;
     anim.idleBobPhase = 0;
     
+    // Cap animation speed to prevent super fast leg cycling with speed boosts
+    // Animation should look like normal walking speed even when moving very fast
+    // Use distance-based animation but cap the maximum speed
+    const timeSinceLastFrame = time - anim.lastFrameTime;
+    
     // Accumulate distance traveled (use clamped distance to prevent animation frame skipping)
     anim.distanceTraveled += clampedDistance;
     
-    // Advance animation frame based on distance traveled
-    // Animation speed scales naturally with movement speed since faster = more distance per frame
-    if (anim.distanceTraveled >= BASE_DISTANCE_PER_FRAME) {
+    // Calculate how many frames should advance based on distance (normal walking works fine)
+    let framesToAdvance = Math.floor(anim.distanceTraveled / BASE_DISTANCE_PER_FRAME);
+    
+    // Cap animation speed: maximum 1 frame per 150ms (normal walking speed)
+    // This prevents super fast leg animation even with speed boosts
+    const MAX_ANIMATION_SPEED_MS = 150; // ms per frame (normal walking speed)
+    
+    // If we would advance multiple frames (very fast movement), cap to 1 and require time delay
+    // For normal walking (1 frame), allow it to advance immediately based on distance
+    if (framesToAdvance > 1) {
+      // Very fast movement - cap to 1 frame and only advance if enough time has passed
+      framesToAdvance = 1;
+      if (timeSinceLastFrame >= MAX_ANIMATION_SPEED_MS) {
+        anim.frame = (anim.frame + framesToAdvance) % WALK_FRAMES;
+        anim.distanceTraveled = anim.distanceTraveled % BASE_DISTANCE_PER_FRAME;
+        anim.lastFrameTime = time;
+      }
+    } else if (framesToAdvance === 1) {
+      // Normal walking - advance immediately when enough distance is traveled
+      // This allows normal walking animation to work smoothly
       anim.frame = (anim.frame + 1) % WALK_FRAMES;
       anim.distanceTraveled = anim.distanceTraveled % BASE_DISTANCE_PER_FRAME;
+      anim.lastFrameTime = time;
     }
   } else {
     // Player is idle
@@ -12440,6 +12374,10 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
   const legStyle = getLegStyle(player.sprite.outfit);
   const legColor = getLegColor(player.sprite.outfit);
   
+  // Performance: Throttle expensive time-based animations for leg cosmetics
+  // Use cached time rounded to reduce expensive Math.sin/cos calculations
+  const cachedTime = Math.floor(time / 16) * 16; // Round to ~60fps intervals
+  
   // Apply rarity glow for leg cosmetics
   if (legStyle !== 'default') {
     applyRarityGlow(ctx, legStyle);
@@ -12576,9 +12514,9 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
       
     // === LEGENDARY LEGS (with animations) ===
     case 'legs_phoenix_legendary':
-      // Animated flame licks at bottom
-      const phoenixFlicker = Math.sin(time * 0.006);
-      const phoenixGlow = Math.sin(time * 0.004) * 0.3 + 0.7;
+      // Animated flame licks at bottom (use cached time for performance)
+      const phoenixFlicker = Math.sin(cachedTime * 0.006);
+      const phoenixGlow = Math.sin(cachedTime * 0.004) * 0.3 + 0.7;
       
       // Flame pattern
       ctx.fillStyle = `rgba(255, 215, 0, ${phoenixGlow})`;
@@ -12590,16 +12528,16 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
       ctx.fillRect(bodyX + p + leftOffset, legY + legH - 2 * p, legW - p, 2 * p);
       ctx.fillRect(bodyX + bodyW - legW + rightOffset, legY + legH - 2 * p, legW - p, 2 * p);
       
-      // Rising embers
-      const emberY = ((time * 0.003) % legH);
+      // Rising embers (use cached time for performance)
+      const emberY = ((cachedTime * 0.003) % legH);
       ctx.fillStyle = 'rgba(255, 100, 0, 0.8)';
       ctx.fillRect(bodyX + 2 * p + leftOffset, legY + legH - emberY, p, p);
       break;
       
     case 'legs_void':
-      // Swirling void energy
-      const voidSwirl = time * 0.002;
-      const voidAlpha = Math.sin(time * 0.003) * 0.2 + 0.6;
+      // Swirling void energy (use cached time for performance)
+      const voidSwirl = cachedTime * 0.002;
+      const voidAlpha = Math.sin(cachedTime * 0.003) * 0.2 + 0.6;
       
       // Purple energy bands
       ctx.fillStyle = `rgba(148, 0, 211, ${voidAlpha})`;
@@ -12615,10 +12553,10 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
       break;
       
     case 'legs_celestial':
-      // Twinkling stars
-      const star1Alpha = Math.sin(time * 0.005) * 0.5 + 0.5;
-      const star2Alpha = Math.sin(time * 0.004 + 1) * 0.5 + 0.5;
-      const star3Alpha = Math.sin(time * 0.006 + 2) * 0.5 + 0.5;
+      // Twinkling stars (use cached time for performance)
+      const star1Alpha = Math.sin(cachedTime * 0.005) * 0.5 + 0.5;
+      const star2Alpha = Math.sin(cachedTime * 0.004 + 1) * 0.5 + 0.5;
+      const star3Alpha = Math.sin(cachedTime * 0.006 + 2) * 0.5 + 0.5;
       
       ctx.fillStyle = `rgba(255, 255, 200, ${star1Alpha})`;
       ctx.fillRect(bodyX + 2 * p + leftOffset, legY + p, p, p);
@@ -12634,8 +12572,8 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
       break;
       
     case 'legs_galaxy':
-      // Swirling galaxy colors
-      const galaxyPhase = time * 0.001;
+      // Swirling galaxy colors (use cached time for performance)
+      const galaxyPhase = cachedTime * 0.001;
       const bluePulse = Math.sin(galaxyPhase) * 0.3 + 0.6;
       const purplePulse = Math.sin(galaxyPhase + 1) * 0.3 + 0.6;
       
@@ -12648,20 +12586,20 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
       ctx.fillRect(bodyX + p + leftOffset, legY + 4 * p, legW - 2 * p, p);
       ctx.fillRect(bodyX + bodyW - legW + rightOffset, legY + p, legW - 2 * p, p);
       
-      // Twinkling stars
-      if (Math.sin(time * 0.008) > 0.5) {
+      // Twinkling stars (use cached time)
+      if (Math.sin(cachedTime * 0.008) > 0.5) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(bodyX + 2 * p + leftOffset, legY + 2 * p, p, p);
       }
-      if (Math.sin(time * 0.007 + 1) > 0.5) {
+      if (Math.sin(cachedTime * 0.007 + 1) > 0.5) {
         ctx.fillStyle = '#00ced1';
         ctx.fillRect(bodyX + bodyW - legW + p + rightOffset, legY + 4 * p, p, p);
       }
       break;
       
     case 'legs_rainbow':
-      // Animated rainbow stripes that shift
-      const rainbowShift = (time * 0.002) % 7;
+      // Animated rainbow stripes that shift (use cached time for performance)
+      const rainbowShift = (cachedTime * 0.002) % 7;
       const rainbowColors = ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#4b0082', '#8b00ff'];
       
       // Draw shifting bands on left leg
@@ -12678,17 +12616,17 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
         ctx.fillRect(bodyX + bodyW - legW + rightOffset, legY + i * 2 * p, legW - p, p);
       }
       
-      // Shimmer effect
-      const legShimmerX = Math.sin(time * 0.003) * (legW / 2 - p);
+      // Shimmer effect (use cached time)
+      const legShimmerX = Math.sin(cachedTime * 0.003) * (legW / 2 - p);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.fillRect(bodyX + legW / 2 + legShimmerX + leftOffset, legY, p, legH);
       break;
       
     // === GODLIKE LEGS (void/chaos themed with intense animations) ===
     case 'legs_godlike_void':
-      // Void leggings with intense void energy
-      const voidLegPulse = Math.sin(time * 0.005) * 0.3 + 0.7;
-      const voidLegSwirl = time * 0.004;
+      // Void leggings with intense void energy (use cached time for performance)
+      const voidLegPulse = Math.sin(cachedTime * 0.005) * 0.3 + 0.7;
+      const voidLegSwirl = cachedTime * 0.004;
       
       // Swirling void energy bands
       for (let i = 0; i < 3; i++) {
@@ -12709,9 +12647,9 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
       break;
       
     case 'legs_godlike_chaos':
-      // Chaos greaves with chaotic energy
-      const chaosLegPulse = Math.sin(time * 0.006) * 0.4 + 0.6;
-      const chaosLegSwirl = time * 0.005;
+      // Chaos greaves with chaotic energy (use cached time for performance)
+      const chaosLegPulse = Math.sin(cachedTime * 0.006) * 0.4 + 0.6;
+      const chaosLegSwirl = cachedTime * 0.005;
       
       // Chaotic energy swirls
       for (let i = 0; i < 5; i++) {
@@ -12723,9 +12661,9 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
         ctx.fillRect(bodyX + bodyW - legW + rightOffset, legY + swirlY, legW - p, p);
       }
       
-      // Distortion effects
-      const legDistortion1 = Math.sin(time * 0.004) * p;
-      const legDistortion2 = Math.sin(time * 0.005 + 1) * p;
+      // Distortion effects (use cached time)
+      const legDistortion1 = Math.sin(cachedTime * 0.004) * p;
+      const legDistortion2 = Math.sin(cachedTime * 0.005 + 1) * p;
       ctx.fillStyle = '#ef4444';
       ctx.fillRect(bodyX + 2 * p + leftOffset + legDistortion1, legY + 3 * p, 2 * p, 2 * p);
       ctx.fillStyle = '#9400d3';
@@ -12733,9 +12671,9 @@ function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: 
       break;
       
     case 'legs_godlike_abyss':
-      // Abyssal pants with deep void energy
-      const abyssLegPulse = Math.sin(time * 0.004) * 0.3 + 0.7;
-      const abyssLegDepth = time * 0.003;
+      // Abyssal pants with deep void energy (use cached time for performance)
+      const abyssLegPulse = Math.sin(cachedTime * 0.004) * 0.3 + 0.7;
+      const abyssLegDepth = cachedTime * 0.003;
       
       // Deep abyssal portal layers on legs
       for (let i = 0; i < 2; i++) {

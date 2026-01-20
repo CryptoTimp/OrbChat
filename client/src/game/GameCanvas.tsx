@@ -37,6 +37,7 @@ import {
   getReturnPortalPosition,
   setReturnPortalPosition,
   drawBlackjackTables,
+  buildBlackjackTablePositionsCache,
   getClickedBlackjackTable,
   getHoveredBlackjackTable,
   drawSlotMachines,
@@ -151,9 +152,41 @@ export function GameCanvas() {
   // Interpolated players for smooth rendering
   const interpolatedPlayersRef = useRef<Map<string, InterpolatedPlayer>>(new Map());
   
-  // Last move time for throttling
+  // Last move time for server updates (send position every 100ms)
   const lastMoveTimeRef = useRef(0);
-  const moveThrottle = 50;
+  const moveThrottle = 100; // Send position to server every 100ms
+  
+  // FPS tracking for movement speed scaling
+  const fpsRef = useRef<number>(60);
+  const fpsFrameCountRef = useRef<number>(0);
+  const fpsUpdateTimeRef = useRef<number>(Date.now());
+  
+  // Performance metrics tracking (module scope for HUD access)
+  if (!(window as any).__renderMetrics) {
+    (window as any).__renderMetrics = {
+      timings: new Map<string, number[]>(),
+      lastUpdate: Date.now(),
+      lastMetricUpdate: {} as Record<string, number>, // Track when each metric was last updated
+    };
+  }
+  
+  // Helper function to track render time
+  const trackRenderTime = (metrics: any, name: string, time: number) => {
+    if (!metrics.timings.has(name)) {
+      metrics.timings.set(name, []);
+    }
+    const timings = metrics.timings.get(name);
+    timings.push(time);
+    // Keep only last 60 samples (1 second at 60fps)
+    if (timings.length > 60) {
+      timings.shift();
+    }
+    // Track when this metric was last updated
+    if (!metrics.lastMetricUpdate) {
+      metrics.lastMetricUpdate = {};
+    }
+    metrics.lastMetricUpdate[name] = Date.now();
+  };
   
   // Hovered shrine state (use ref so game loop can always read latest value)
   const hoveredShrineRef = useRef<string | null>(null);
@@ -1241,11 +1274,22 @@ export function GameCanvas() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // Performance metrics tracking (declare once for entire game loop)
+    const renderMetrics = (window as any).__renderMetrics;
+    
     // Calculate render scale based on canvas size vs base resolution
     const renderScale = canvasSize.width / CANVAS_WIDTH;
     
     const currentTime = Date.now();
     const camera = cameraRef.current;
+    
+    // Track FPS for debug monitor (not used for movement scaling)
+    fpsFrameCountRef.current++;
+    if (currentTime - fpsUpdateTimeRef.current >= 1000) {
+      fpsRef.current = fpsFrameCountRef.current;
+      fpsFrameCountRef.current = 0;
+      fpsUpdateTimeRef.current = currentTime;
+    }
     
     // Get fresh state from store
     const currentPlayers = useGameStore.getState().players;
@@ -1565,16 +1609,18 @@ export function GameCanvas() {
         // Don't update position
       } else if (!cuttingTreeRef.current) {
         // Normal movement - use current position
+        const moveStart = performance.now();
         const movement = calculateMovement(
           freshLocalPlayer.x,
           freshLocalPlayer.y,
           keys,
-          deltaTime,
-          speedMultiplier,
+          deltaTime, // Use actual deltaTime
+          speedMultiplier, // No FPS-based scaling - movement is frame-rate independent
           currentMapType,
           anyKeyPressed ? null : currentClickTarget, // Only use click target if no keys pressed
           treeStates // Pass treeStates for collision detection (cut trees have no collision)
         );
+        trackRenderTime(renderMetrics, 'Movement Calculation', performance.now() - moveStart);
         newX = movement.x;
         newY = movement.y;
         newDirection = movement.direction;
@@ -2292,6 +2338,7 @@ export function GameCanvas() {
     }
     
     // Update interpolated players
+    const interpStart = performance.now();
     const interpolatedPlayers = interpolatedPlayersRef.current;
     
     currentPlayers.forEach((player, id) => {
@@ -2323,8 +2370,10 @@ export function GameCanvas() {
         interpolatedPlayers.delete(id);
       }
     }
+    trackRenderTime(renderMetrics, `Player Interpolation (${currentPlayers.size - 1})`, performance.now() - interpStart);
     
     // === RENDERING ===
+    let start: number; // Declare once for all performance tracking
     
     // Clear canvas
     ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
@@ -2338,32 +2387,73 @@ export function GameCanvas() {
     ctx.translate(-camera.x, -camera.y);
     
     // Draw background (draws the full map, context clips to viewport)
+    start = performance.now();
     drawBackground(ctx, currentMapType, camera);
+    trackRenderTime(renderMetrics, 'Background', performance.now() - start);
     
     // Draw fountain orb sprays (before orbs so they appear behind)
     if (currentMapType === 'forest') {
+      start = performance.now();
       updateAndDrawFountainOrbSprays(ctx, deltaTime);
-      // Draw shrine orb launches (explosion animation)
+      trackRenderTime(renderMetrics, 'Fountain Orbs', performance.now() - start);
+      
+      start = performance.now();
       updateAndDrawShrineOrbLaunches(ctx, deltaTime);
+      trackRenderTime(renderMetrics, 'Shrine Orbs', performance.now() - start);
     }
     
     // Draw smoke particles (for spawn/despawn effects) - before orbs
+    start = performance.now();
     updateAndDrawSmokeParticles(ctx, deltaTime);
+    trackRenderTime(renderMetrics, 'Smoke Particles', performance.now() - start);
     
     // Draw orbs (only visible ones)
+    // Note: Skip orbs on casino map for performance
     // Note: isVisible expects unscaled world coordinates (like orb.x, orb.y)
-    for (const orb of currentOrbs) {
-      // Hide orbs that are animating from shrines
-      if (isShrineOrbHidden(orb.id)) {
-        continue;
+    // Performance: When there are many orbs, prioritize closer ones and skip distant ones
+    start = performance.now();
+    if (currentMapType !== 'casino') {
+      const visibleOrbs: typeof currentOrbs = [];
+      for (const orb of currentOrbs) {
+        // Hide orbs that are animating from shrines
+        if (isShrineOrbHidden(orb.id)) {
+          continue;
+        }
+        if (isVisible(camera, orb.x, orb.y, GAME_CONSTANTS.ORB_SIZE, GAME_CONSTANTS.ORB_SIZE)) {
+          visibleOrbs.push(orb);
+        }
       }
-      if (isVisible(camera, orb.x, orb.y, GAME_CONSTANTS.ORB_SIZE, GAME_CONSTANTS.ORB_SIZE)) {
-        drawOrb(ctx, orb, currentTime);
+      
+      // If there are many visible orbs, limit rendering to closest ones for performance
+      if (visibleOrbs.length > 50) {
+        // Calculate distance from camera center and sort
+        const cameraCenterX = (camera.x + CANVAS_WIDTH / camera.zoom / 2) / SCALE;
+        const cameraCenterY = (camera.y + CANVAS_HEIGHT / camera.zoom / 2) / SCALE;
+        
+        visibleOrbs.sort((a, b) => {
+          const distA = Math.sqrt(Math.pow(a.x - cameraCenterX, 2) + Math.pow(a.y - cameraCenterY, 2));
+          const distB = Math.sqrt(Math.pow(b.x - cameraCenterX, 2) + Math.pow(b.y - cameraCenterY, 2));
+          return distA - distB;
+        });
+        
+        // Only render closest 50 orbs when there are many
+        for (let i = 0; i < Math.min(50, visibleOrbs.length); i++) {
+          drawOrb(ctx, visibleOrbs[i], currentTime);
+        }
+      } else {
+        // Render all visible orbs when there aren't too many
+        for (const orb of visibleOrbs) {
+          drawOrb(ctx, orb, currentTime);
+        }
       }
+      trackRenderTime(renderMetrics, `Orbs (${visibleOrbs.length})`, performance.now() - start);
+    } else {
+      trackRenderTime(renderMetrics, 'Orbs (0 - skipped on casino)', performance.now() - start);
     }
     
     // Draw shrines (before players, only for forest map)
     if (currentMapType === 'forest') {
+      start = performance.now();
       if (currentShrines.length > 0) {
         for (const shrine of currentShrines) {
           // isVisible expects unscaled world coordinates (like orb.x, orb.y)
@@ -2375,7 +2465,9 @@ export function GameCanvas() {
           }
         }
       }
+      trackRenderTime(renderMetrics, `Shrines (${currentShrines.length})`, performance.now() - start);
       
+      start = performance.now();
       // Draw treasure chests (before players, only for forest map)
       const currentChests = useGameStore.getState().treasureChests;
       if (currentChests.length > 0) {
@@ -2389,17 +2481,23 @@ export function GameCanvas() {
           }
         }
       }
+      trackRenderTime(renderMetrics, `Treasure Chests (${currentChests.length})`, performance.now() - start);
       
+      start = performance.now();
       // Draw tree stumps BEFORE players (so players appear on top of stumps)
       drawForestStumps(ctx, treeStates, camera);
+      trackRenderTime(renderMetrics, 'Tree Stumps', performance.now() - start);
     }
     
     // Speed boost particle effects removed - no longer updating or drawing trails
     
+    start = performance.now();
     // Draw orb collection particles
     drawOrbCollectionParticles(ctx, deltaTime);
+    trackRenderTime(renderMetrics, 'Orb Particles', performance.now() - start);
     
     // Collect all players for rendering
+    const collectStart = performance.now();
     const allPlayers: Array<{ player: PlayerWithChat; isLocal: boolean; renderY: number }> = [];
     
     if (currentLocalPlayer) {
@@ -2410,9 +2508,11 @@ export function GameCanvas() {
       });
     }
     
+    let viewportChecks = 0;
     interpolatedPlayers.forEach((interpolated, id) => {
       if (typeof interpolated.renderX === 'number' && typeof interpolated.renderY === 'number') {
         // Only render if visible
+        viewportChecks++;
         if (isVisible(camera, interpolated.renderX, interpolated.renderY, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
           const playerToRender = { 
             ...interpolated, 
@@ -2447,6 +2547,7 @@ export function GameCanvas() {
       const centurionPlayers = updateCenturionPlayers(currentTime, deltaTime, camera);
       for (const centurion of centurionPlayers) {
         // Only add visible centurions to improve performance when zoomed out
+        viewportChecks++;
         if (isVisible(camera, centurion.x, centurion.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
           allPlayers.push({
             player: centurion,
@@ -2459,6 +2560,7 @@ export function GameCanvas() {
     
     // Sort by Y for depth ordering
     allPlayers.sort((a, b) => a.renderY - b.renderY);
+    trackRenderTime(renderMetrics, `Player Collection & Sorting (${allPlayers.length}, ${viewportChecks} checks)`, performance.now() - collectStart);
     
     // Separate NPCs from real players (exclude centurions - they're drawn separately after towers)
     const npcs: typeof allPlayers = [];
@@ -2478,17 +2580,28 @@ export function GameCanvas() {
     
     // Draw blackjack tables BEFORE players (so players appear on top of tables)
     if (currentMapType === 'casino') {
+      start = performance.now();
       // Draw pulsing lines around the dark grey central plaza ring
       drawCasinoPlazaPulsingLines(ctx, currentTime);
+      trackRenderTime(renderMetrics, 'Casino Plaza Lines', performance.now() - start);
+      
+      start = performance.now();
       // Draw slot machines (before players so players appear on top)
       // This includes the central light grey circle that the portal sits on
       const hoveredSlotMachineId = hoveredSlotMachineRef.current;
       drawSlotMachines(ctx, currentTime, hoveredSlotMachineId);
+      trackRenderTime(renderMetrics, 'Slot Machines', performance.now() - start);
+      
+      start = performance.now();
       // Draw return portal AFTER the central circle so it appears on top
       drawReturnPortal(ctx, currentTime, camera, previousRoomId, roomId);
+      trackRenderTime(renderMetrics, 'Return Portal', performance.now() - start);
+      
+      start = performance.now();
       // Draw blackjack tables (before players so players appear on top)
       const hoveredTableId = hoveredBlackjackTableRef.current;
       drawBlackjackTables(ctx, currentTime, hoveredTableId, hoveredDealerId);
+      trackRenderTime(renderMetrics, 'Blackjack Tables', performance.now() - start);
     }
     
     // Draw NPC pets first
@@ -2501,6 +2614,7 @@ export function GameCanvas() {
     
     // Draw NPCs first (so they appear below real players)
     // Skip trader NPCs - they're drawn separately in drawNPCStalls
+    start = performance.now();
     for (const { player, isLocal } of npcs) {
       const idParts = player.id.split('_');
       const isTraderNPC = player.id.startsWith('npc_') && idParts.length >= 3 && 
@@ -2511,6 +2625,7 @@ export function GameCanvas() {
         drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
       }
     }
+    trackRenderTime(renderMetrics, `NPCs (${npcs.length})`, performance.now() - start);
     
     // Draw real player pets
     for (const { player } of realPlayers) {
@@ -2521,57 +2636,47 @@ export function GameCanvas() {
     }
     
       // Draw real players (nameplates are drawn inside drawPlayer, so pets will be below them)
+      start = performance.now();
       // Check if players are at blackjack tables by checking their position against table seat positions
+      const blackjackStart = performance.now();
       const playersAtBlackjack = new Set<string>();
       if (currentMapType === 'casino') {
-        // Calculate blackjack table seat positions (same logic as server and renderer)
-        const SCALE = GAME_CONSTANTS.SCALE;
-        const WORLD_WIDTH_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_WIDTH * SCALE;
-        const WORLD_HEIGHT_SCALED = GAME_CONSTANTS.TILE_SIZE * GAME_CONSTANTS.MAP_HEIGHT * SCALE;
-        const centerXScaled = WORLD_WIDTH_SCALED / 2;
-        const centerYScaled = WORLD_HEIGHT_SCALED / 2;
-        const plazaRadiusScaled = 300 * SCALE;
-        const tableAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
-        const tableRadiusScaled = plazaRadiusScaled * 0.6;
-        const tableRadiusSizeScaled = 60 * SCALE;
-        const seatRadiusScaled = tableRadiusSizeScaled * 0.8;
-        const seatTolerance = 100; // pixels tolerance in unscaled coordinates (increased for robustness)
+        // Use cached blackjack table positions from renderer (no recalculation needed)
+        buildBlackjackTablePositionsCache();
+        const blackjackTablePositionsCache = (window as any).__blackjackTablePositionsCache;
         
-        // Check all 4 tables
-        for (let tableIndex = 0; tableIndex < 4; tableIndex++) {
-          const tableAngle = tableAngles[tableIndex];
-          const tableXScaled = centerXScaled + Math.cos(tableAngle) * tableRadiusScaled;
-          const tableYScaled = centerYScaled + Math.sin(tableAngle) * tableRadiusScaled;
+        if (blackjackTablePositionsCache && blackjackTablePositionsCache.length === 4) {
+          const seatTolerance = 100; // pixels tolerance in unscaled coordinates
           
-          // Convert to unscaled coordinates (player coordinates are unscaled)
-          const tableX = tableXScaled / SCALE;
-          const tableY = tableYScaled / SCALE;
-          const seatRadius = seatRadiusScaled / SCALE;
-          
-          // Check all 4 seats for each table (matching server and renderer)
-          for (let seat = 0; seat < 4; seat++) {
-            const seatAngle = Math.PI + (seat - 1.5) * (Math.PI / 3); // Seats on player side - 4 seats evenly spaced
-            const seatX = tableX + Math.cos(seatAngle) * seatRadius;
-            const seatY = tableY + Math.sin(seatAngle) * seatRadius;
+          // Check all 4 tables using cached positions
+          for (let tableIndex = 0; tableIndex < 4; tableIndex++) {
+            const cached = blackjackTablePositionsCache[tableIndex];
             
-            // Check if any player is near this seat position
-            for (const { player } of realPlayers) {
-              // Player position is already in unscaled coordinates
-              const playerCenterX = player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
-              const playerCenterY = player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
-              const distance = Math.sqrt(
-                Math.pow(playerCenterX - seatX, 2) + 
-                Math.pow(playerCenterY - seatY, 2)
-              );
-              
-              if (distance < seatTolerance) {
-                playersAtBlackjack.add(player.id);
-                break; // Player found at this table, no need to check other seats
+            // Check all 4 seats for each table using cached seat positions
+            for (const seatPos of cached.seatPositions) {
+              // Check if any player is near this seat position
+              for (const { player } of realPlayers) {
+                // Player position is already in unscaled coordinates
+                // Seat positions are in scaled coordinates, so divide by SCALE
+                const seatX = seatPos.x / SCALE;
+                const seatY = seatPos.y / SCALE;
+                const playerCenterX = player.x + GAME_CONSTANTS.PLAYER_WIDTH / 2;
+                const playerCenterY = player.y + GAME_CONSTANTS.PLAYER_HEIGHT / 2;
+                const distance = Math.sqrt(
+                  Math.pow(playerCenterX - seatX, 2) + 
+                  Math.pow(playerCenterY - seatY, 2)
+                );
+                
+                if (distance < seatTolerance) {
+                  playersAtBlackjack.add(player.id);
+                  break; // Player found at this table, no need to check other seats
+                }
               }
             }
           }
         }
       }
+      trackRenderTime(renderMetrics, 'Blackjack Seat Detection', performance.now() - blackjackStart);
       
       for (const { player, isLocal } of realPlayers) {
         const isHovered = hoveredPlayerRef.current === player.id;
@@ -2579,21 +2684,25 @@ export function GameCanvas() {
         const playerWithBlackjackFlag = { ...player, isAtBlackjackTable: playersAtBlackjack.has(player.id) };
         drawPlayer(ctx, playerWithBlackjackFlag, isLocal, currentTime, false, isHovered);
       }
+    trackRenderTime(renderMetrics, `Players (${realPlayers.length})`, performance.now() - start);
     
     // Draw flag bunting BEFORE trader NPCs (so it appears behind them, their nameplates, and speech bubbles)
-    if (currentMapType === 'forest') {
-      const p = SCALE;
-      const centerX = WORLD_WIDTH / 2;
-      const centerY = WORLD_HEIGHT / 2;
-      const plazaRadius = 540 * p;
-      drawFlagBunting(ctx, centerX, centerY, plazaRadius, currentTime, camera);
-    }
+    // TEMPORARILY DISABLED FOR PERFORMANCE TESTING
+    // if (currentMapType === 'forest') {
+    //   const p = SCALE;
+    //   const centerX = WORLD_WIDTH / 2;
+    //   const centerY = WORLD_HEIGHT / 2;
+    //   const plazaRadius = 540 * p;
+    //   drawFlagBunting(ctx, centerX, centerY, plazaRadius, currentTime, camera);
+    // }
     
     // Draw animated fountain (before foliage so it's behind trees)
     // This includes trader NPCs (bodies and speech bubbles)
     if (currentMapType === 'forest') {
+      start = performance.now();
       const playerOrbs = currentLocalPlayer?.orbs || 0;
       drawForestFountain(ctx, currentTime, deltaTime, hoveredNPCStallRef.current, hoveredDealerId, camera, playerOrbs);
+      trackRenderTime(renderMetrics, 'Forest Fountain', performance.now() - start);
     } else if (currentMapType === 'millionaires_lounge') {
       // Draw return portal in lounge map (background is drawn in drawBackground)
       drawMillionairesLoungeReturnPortal(ctx, currentTime, camera);
@@ -2601,10 +2710,14 @@ export function GameCanvas() {
     
     // Draw forest foliage on TOP of players (so they walk behind full trees)
     if (currentMapType === 'forest') {
+      start = performance.now();
       drawForestFoliage(ctx, treeStates, camera);
+      trackRenderTime(renderMetrics, 'Forest Foliage', performance.now() - start);
       
+      start = performance.now();
       // Draw plaza wall top AFTER players (so they walk under the wall)
       drawPlazaWallTop(ctx, camera);
+      trackRenderTime(renderMetrics, 'Plaza Wall', performance.now() - start);
       
       // Draw tree cutting progress bars AFTER foliage (so it's visible on top)
       // Use ref as source of truth since state might be stale
@@ -2642,6 +2755,7 @@ export function GameCanvas() {
     
     // Draw guard towers on top of everything (so they're not covered by terrain and players walk behind them)
     if (currentMapType === 'forest') {
+      start = performance.now();
       const p = SCALE;
       const centerX = WORLD_WIDTH / 2;
       const centerY = WORLD_HEIGHT / 2;
@@ -2657,13 +2771,16 @@ export function GameCanvas() {
         // Draw guard tower (multi-tiered like podiums, but taller)
         drawGuardTower(ctx, towerX, towerY, currentTime, i);
       }
+      trackRenderTime(renderMetrics, 'Guard Towers', performance.now() - start);
     }
     
+    start = performance.now();
     // Draw centurions on top of towers (so they're not hidden by the towers)
     for (const { player, isLocal } of centurions) {
       const isHovered = hoveredPlayerRef.current === player.id;
       drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
     }
+    trackRenderTime(renderMetrics, `Centurions (${centurions.length})`, performance.now() - start);
     
     // Draw NPC nameplates (background NPCs, etc.) - only if visible
     // Note: Trader NPCs are drawn with their nameplates in drawNPCStalls, so they're already handled
@@ -2694,6 +2811,7 @@ export function GameCanvas() {
     }
     
     // Draw chat bubbles on top of everything (NPCs first, then real players, then centurions)
+    start = performance.now();
     for (const { player } of npcs) {
       if (player.chatBubble) {
         drawChatBubble(ctx, player, currentTime, camera.zoom);
@@ -2709,6 +2827,7 @@ export function GameCanvas() {
         drawChatBubble(ctx, player, currentTime, camera.zoom);
       }
     }
+    trackRenderTime(renderMetrics, 'Chat Bubbles', performance.now() - start);
     
     // Draw shrine speech bubbles (after players and chat bubbles)
     if (currentMapType === 'forest') {
@@ -2750,12 +2869,15 @@ export function GameCanvas() {
     ctx.restore();
     
     // Draw zoom indicator (UI overlay, scaled for full screen)
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset to screen coordinates
     const uiScale = renderScale;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(10 * uiScale, canvasSize.height - 30 * uiScale, 80 * uiScale, 20 * uiScale);
     ctx.fillStyle = '#fff';
     ctx.font = `${Math.round(12 * uiScale)}px "Press Start 2P", monospace`;
     ctx.fillText(`${Math.round(camera.zoom * 100)}%`, 20 * uiScale, canvasSize.height - 15 * uiScale);
+    ctx.restore();
     
   }, [getKeys, move, collectOrb, setLocalPlayerPosition, canvasSize]);
   

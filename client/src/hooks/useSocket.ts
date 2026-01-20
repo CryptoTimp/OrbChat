@@ -83,15 +83,15 @@ function getOrCreateSocket(): Socket {
       timeout: 10000,
     });
     
-    // Measure ping using timestamp echo
+    // Measure ping using timestamp echo (consistent timing)
     const measurePing = () => {
-      const timestamp = Date.now();
-      const startTime = performance.now(); // Use performance.now() for higher precision
+      const timestamp = Date.now(); // Use Date.now() for both client and server consistency
+      const startTime = Date.now(); // Use Date.now() consistently (not performance.now())
       pendingPings.set(timestamp, startTime);
       socket?.emit('ping', { timestamp });
       
       // Clean up old pending pings (older than 5 seconds) to prevent memory leak
-      const now = performance.now();
+      const now = Date.now();
       for (const [ts, start] of pendingPings) {
         if (now - start > 5000) {
           pendingPings.delete(ts);
@@ -118,7 +118,7 @@ function getOrCreateSocket(): Socket {
       const receivedTimestamp = data.timestamp;
       if (receivedTimestamp && pendingPings.has(receivedTimestamp)) {
         const startTime = pendingPings.get(receivedTimestamp)!;
-        const ping = Math.round(performance.now() - startTime); // Round to nearest ms
+        const ping = Math.max(0, Math.round(Date.now() - startTime)); // Round to nearest ms, ensure non-negative
         const state = useGameStore.getState();
         if (state.playerId) {
           state.setPlayerPing(state.playerId, ping);
@@ -441,8 +441,8 @@ function attachListeners(sock: Socket) {
     }
     
     if (playerId === state.playerId) {
-      // Only update local player position if it's a significant change (e.g., blackjack table teleport)
-      // This prevents feedback loops from normal movement while still handling special positioning
+      // CLIENT-SIDE MOVEMENT IS KING: Only accept server updates for teleportations
+      // Local movement is completely smooth and independent - server just syncs every 100ms
       const localPlayer = state.localPlayer;
       if (localPlayer) {
         const dx = Math.abs(x - localPlayer.x);
@@ -450,13 +450,13 @@ function attachListeners(sock: Socket) {
         const distance = Math.sqrt(dx * dx + dy * dy);
         
         // Prevent duplicate processing of the same position update
-        // This can happen when socket is recreated during room changes
         const lastMove = lastProcessedMove.get(playerId);
         const now = Date.now();
         if (lastMove && lastMove.x === x && lastMove.y === y && (now - lastMove.timestamp) < 100) {
           // Same position update within 100ms - likely duplicate, skip it
           return;
         }
+        
         lastProcessedMove.set(playerId, { x, y, timestamp: now });
         
         // Clean up old entries (older than 1 second)
@@ -466,22 +466,23 @@ function attachListeners(sock: Socket) {
           }
         }
         
-        // Always update animation state position to match server position without resetting
-        // This prevents jump detection and back-and-forth teleportation with speed boosts
-        // No distance threshold - speed boosts can move fast, we should always sync to server
+        // Update animation state position to match server position (for rendering other players)
+        // This doesn't affect local player position - it's just for animation smoothing
         import('../game/renderer').then(({ updatePlayerAnimationPosition }) => {
           updatePlayerAnimationPosition(playerId, x, y);
         }).catch(() => {
           // Silently fail if renderer module isn't loaded yet
         });
         
-        // Update position immediately for very large changes (teleportation to seats, map changes, etc.)
-        // Seat teleportations (blackjack/slot machines) are typically 500+ pixels, so 200 is safe
-        // Speed boosts can cause large movements, but typically not >200 pixels per server update
-        // This ensures seat teleportations always work while allowing fast normal movement
-        if (distance > 200) {
+        // ONLY accept server position updates for teleportations (blackjack seats, map changes, etc.)
+        // Teleportations are typically 500+ pixels, so 300 is a safe threshold
+        // Normal movement (even with speed boosts) should never exceed this in a single update
+        if (distance > 300) {
+          // Large change - this is a teleportation, accept it immediately
           state.setLocalPlayerPosition(x, y, direction);
         }
+        // All other server updates are ignored - client-side movement is authoritative
+        // This ensures silky smooth movement without server corrections causing jitter
       }
     } else {
       state.updatePlayerPosition(playerId, x, y, direction);
