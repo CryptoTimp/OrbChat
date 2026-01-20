@@ -192,6 +192,7 @@ export interface ServerToClientEvents {
   chat_message: (data: { playerId: string; text: string; createdAt: number; textColor?: string }) => void;
   orb_spawned: (orb: Orb) => void;
   orb_collected: (data: { orbId: string; playerId: string; newBalance: number; orbValue?: number }) => void;
+  orbs_cleared: () => void;
   fountain_next_spawn: (data: { nextSpawnTime: number }) => void;
   player_orbs_updated: (data: { playerId: string; orbs: number; rewardAmount?: number; rewardType?: string }) => void;
   idle_reward: (data: { rewardAmount: number; maxIdleRewardRate: number }) => void;
