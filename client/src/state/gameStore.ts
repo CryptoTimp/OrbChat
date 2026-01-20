@@ -25,9 +25,6 @@ interface GameState {
   clickTarget: { x: number; y: number } | null;
   lastOrbValue?: number; // Last orb value collected (for HUD floating text)
   
-  // Player ping tracking (for debugging sync issues)
-  playerPings: Map<string, number>; // playerId -> ping in ms
-  
   // Shop & Inventory
   shopItems: ShopItem[];
   inventory: InventoryItem[];
