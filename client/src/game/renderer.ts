@@ -1533,6 +1533,7 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
   let hasGodlike = false;
   let floorSet: 'void' | 'chaos' | 'abyss' = 'void';
   let floorColors: string[] = ['#ffffff', '#4b0082', '#800080', '#000000'];
+  let foundChaos = false;
   
   for (const item of outfit) {
     if (item.includes('godlike')) {
@@ -1540,12 +1541,13 @@ function spawnLegendaryParticles(playerId: string, x: number, y: number, outfit:
       if (item.includes('godlike_chaos')) {
         floorSet = 'chaos';
         floorColors = ['#00ffff', '#0080ff', '#00bfff', '#0066cc'];
+        foundChaos = true;
         break; // Found chaos, use it (highest priority)
-      } else if (item.includes('godlike_abyss') && floorSet !== 'chaos') {
+      } else if (item.includes('godlike_abyss') && !foundChaos && floorSet !== 'abyss') {
         floorSet = 'abyss';
         floorColors = ['#1a0033', '#4b0082', '#000000', '#6a0dad'];
         // Don't break, continue to check for chaos (chaos takes priority)
-      } else if (item.includes('godlike_void') && floorSet === 'void') {
+      } else if (item.includes('godlike_void') && !foundChaos && floorSet === 'void') {
         floorSet = 'void';
         floorColors = ['#ffffff', '#4b0082', '#800080', '#000000'];
         // Don't break, continue to check for chaos/abyss (they take priority)
