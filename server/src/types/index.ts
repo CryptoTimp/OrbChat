@@ -169,6 +169,7 @@ export interface ClientToServerEvents {
   trade_decline: () => void;
   trade_cancel: () => void;
   kick_player: (data: { targetPlayerId: string }) => void;
+  ping: (data: { timestamp: number }) => void;
 }
 
 // Socket Events - Server to Client
@@ -240,6 +241,7 @@ export interface ServerToClientEvents {
   trade_error: (data: { message: string }) => void;
   player_kicked: (data: { message: string }) => void;
   error: (data: { message: string }) => void;
+  pong: (data: { timestamp: number }) => void;
 }
 
 // Blackjack types

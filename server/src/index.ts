@@ -733,6 +733,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     }
   });
 
+  // Handle ping for latency measurement
+  socket.on('ping', ({ timestamp }: { timestamp: number }) => {
+    socket.emit('pong', { timestamp });
+  });
+
   // Handle movement
   socket.on('move', ({ x, y, direction }) => {
     const mapping = socketToPlayer.get(socket.id);

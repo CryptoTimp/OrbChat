@@ -74,6 +74,41 @@ function getOrCreateSocket(): Socket {
       reconnectionDelay: 1000,
       timeout: 10000,
     });
+    
+    // Track ping for local player using timestamp-based approach
+    let pingStartTime: number | null = null;
+    let pingInterval: NodeJS.Timeout | null = null;
+    
+    // Measure ping using timestamp echo
+    const measurePing = () => {
+      pingStartTime = Date.now();
+      socket?.emit('ping', { timestamp: pingStartTime });
+    };
+    
+    socket.on('connect', () => {
+      // Measure ping every 2 seconds
+      pingInterval = setInterval(measurePing, 2000);
+      measurePing(); // Initial measurement
+    });
+    
+    socket.on('pong', (data: { timestamp?: number }) => {
+      if (pingStartTime !== null) {
+        const ping = Date.now() - pingStartTime;
+        const state = useGameStore.getState();
+        if (state.playerId) {
+          state.setPlayerPing(state.playerId, ping);
+        }
+        pingStartTime = null;
+      }
+    });
+    
+    // Clean up interval on disconnect
+    socket.on('disconnect', () => {
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+    });
   }
   return socket;
 }
@@ -346,8 +381,12 @@ function attachListeners(sock: Socket) {
         // Update animation state to prevent jump detection in both cases
         if (distance > 20) {
           // For large changes (>50), update position (teleportation)
-          // For moderate changes (20-50), update animation state but don't update position to prevent feedback loop
+          // For moderate changes (20-200), it's a server correction - smoothly reconcile
           if (distance > 50) {
+            state.setLocalPlayerPosition(x, y, direction);
+          } else if (distance > 20 && distance <= 200) {
+            // Server correction - update position smoothly to reconcile
+            // This prevents the client from continuing to move from the wrong position
             state.setLocalPlayerPosition(x, y, direction);
           }
           // Always update animation state position to match server position without resetting
@@ -358,8 +397,6 @@ function attachListeners(sock: Socket) {
           });
           
           // Track server correction to prevent sending moves immediately after (prevents feedback loop)
-          // Store this in a way that GameCanvas can access it
-          // We'll use a custom event or store it in a way the game loop can check
           if (distance > 20 && distance <= 200) {
             // This is a server correction (not a teleport), mark it so client doesn't send conflicting moves
             window.dispatchEvent(new CustomEvent('server_position_correction', { 

@@ -157,7 +157,7 @@ export function GameCanvas() {
   
   // Track last server position correction to prevent sending moves immediately after correction
   const lastServerCorrectionRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const SERVER_CORRECTION_COOLDOWN = 100; // Don't send moves for 100ms after server correction
+  const SERVER_CORRECTION_COOLDOWN = 200; // Don't send moves for 200ms after server correction (gives time for reconciliation)
   
   // Listen for server position corrections
   useEffect(() => {

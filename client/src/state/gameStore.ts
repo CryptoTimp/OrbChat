@@ -17,10 +17,16 @@ interface GameState {
   treasureChests: TreasureChest[];
   treeStates: Map<string, TreeState>;
   
+  // Player ping tracking (for debugging sync issues)
+  playerPings: Map<string, number>; // playerId -> ping in ms
+  
   // Local player state
   localPlayer: PlayerWithChat | null;
   clickTarget: { x: number; y: number } | null;
   lastOrbValue?: number; // Last orb value collected (for HUD floating text)
+  
+  // Player ping tracking (for debugging sync issues)
+  playerPings: Map<string, number>; // playerId -> ping in ms
   
   // Shop & Inventory
   shopItems: ShopItem[];
@@ -166,6 +172,9 @@ interface GameState {
   setLocalPlayerPosition: (x: number, y: number, direction: Direction) => void;
   setClickTarget: (x: number | null, y: number | null) => void;
   
+  // Player ping actions
+  setPlayerPing: (playerId: string, ping: number) => void;
+  
   // Room actions
   leaveRoom: () => void;
 }
@@ -211,6 +220,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   shrines: [],
   treasureChests: [],
   treeStates: new Map(),
+  playerPings: new Map(),
   localPlayer: null,
   clickTarget: null,
   shopItems: [],
@@ -867,6 +877,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     } else {
       set({ clickTarget: { x, y } });
     }
+  },
+  
+  // Set player ping
+  setPlayerPing: (playerId, ping) => {
+    const pings = new Map(get().playerPings);
+    pings.set(playerId, ping);
+    set({ playerPings: pings });
   },
   
   // Leave current room

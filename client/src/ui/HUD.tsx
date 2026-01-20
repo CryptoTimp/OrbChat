@@ -40,6 +40,7 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   const connected = useGameStore(state => state.connected);
   const roomId = useGameStore(state => state.roomId);
   const players = useGameStore(state => state.players);
+  const playerPings = useGameStore(state => state.playerPings);
   const mapType = useGameStore(state => state.mapType);
   const shopItems = useGameStore(state => state.shopItems);
   const inventory = useGameStore(state => state.inventory);
@@ -720,14 +721,24 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                             >
                               {player.name}
                             </span>
-                            <span 
-                              className="text-emerald-400 shrink-0"
-                              style={{
-                                color: playerOrbColor.color,
-                              }}
-                            >
-                              {player.orbs ? player.orbs.toLocaleString() : '0'}
-                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span 
+                                className="text-emerald-400"
+                                style={{
+                                  color: playerOrbColor.color,
+                                }}
+                              >
+                                {player.orbs ? player.orbs.toLocaleString() : '0'}
+                              </span>
+                              {playerPings.has(player.id) && (
+                                <span 
+                                  className="text-xs text-gray-500"
+                                  title="Ping to server"
+                                >
+                                  {playerPings.get(player.id)}ms
+                                </span>
+                              )}
+                            </div>
                           </div>
                         );
                       })}

@@ -57,18 +57,8 @@ export function calculateMovement(
   let dy = 0;
   let direction: Direction | null = null;
   
-  // Clamp deltaTime to prevent frame-rate dependent issues and huge spikes
-  // This ensures consistent movement calculations across different frame rates
-  // Clamp to reasonable range: 8ms (120fps) to 50ms (20fps)
-  // This prevents huge spikes when tab is inactive (can be 1000ms+) which would cause teleportation
-  const MIN_DELTA = 8;   // 120fps minimum (very fast frame rate)
-  const MAX_DELTA = 50;  // 20fps maximum (prevent huge spikes from tab switching/background)
-  
-  const clampedDelta = Math.max(MIN_DELTA, Math.min(deltaTime, MAX_DELTA));
-  
-  // Convert clamped deltaTime from milliseconds to seconds for frame-rate independent movement
-  // Using clamped value ensures movement is consistent even with varying frame rates
-  const deltaSeconds = clampedDelta / 1000;
+  // Convert deltaTime from milliseconds to seconds for frame-rate independent movement
+  const deltaSeconds = deltaTime / 1000;
   
   // Base movement speed in pixels per second - reduced by 75% for slower base movement
   // At 2.5x multiplier (Phantom Velocity), this gives 300 pixels/second = fast running speed
