@@ -1,7 +1,7 @@
 import { PlayerWithChat, Orb, GAME_CONSTANTS, CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, MapType, ShopItem, ItemRarity, Direction, Shrine, TreasureChest } from '../types';
 import { Camera, worldToScreen, isVisible } from './Camera';
 import { instrumentFunction } from '../utils/functionProfiler';
-import { particleArrayPool, playerArrayPool } from '../utils/arrayPool';
+import { particleArrayPool, playerArrayPool, stringArrayPool } from '../utils/arrayPool';
 
 const { TILE_SIZE, SCALE, MAP_WIDTH, MAP_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ORB_SIZE } = GAME_CONSTANTS;
 
@@ -4439,6 +4439,23 @@ export function getNPCStalls(): NPCStall[] {
   return npcStalls;
 }
 
+// Module-level constant for NPC stalls to avoid array allocation every frame
+const NPC_STALLS: Array<{
+  angle: number;
+  tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | undefined;
+  rarity: ItemRarity;
+  name: string;
+}> = [
+  { angle: 0, tab: 'hats', rarity: 'legendary', name: 'Hat Merchant' },
+  { angle: Math.PI / 4, tab: 'shirts', rarity: 'legendary', name: 'Shirt Vendor' },
+  { angle: Math.PI / 2, tab: 'legs', rarity: 'legendary', name: 'Legwear Shop' },
+  { angle: 3 * Math.PI / 4, tab: 'capes', rarity: 'legendary', name: 'Cape Trader' },
+  { angle: Math.PI, tab: 'wings', rarity: 'legendary', name: 'Wings Merchant' },
+  { angle: 5 * Math.PI / 4, tab: 'accessories', rarity: 'legendary', name: 'Accessories' },
+  { angle: 3 * Math.PI / 2, tab: 'boosts', rarity: 'legendary', name: 'Boost Dealer' },
+  { angle: 7 * Math.PI / 4, tab: 'pets', rarity: 'legendary', name: 'Pet Merchant' }, // 8th NPC - Pet Merchant
+];
+
 // Legendary items for each category (for NPC rotation)
 const LEGENDARY_ITEMS_BY_CATEGORY: Record<string, string[]> = {
   hats: ['hat_golden', 'hat_phoenix_legendary', 'hat_void', 'hat_celestial', 'hat_galaxy', 'hat_rainbow'],
@@ -4748,21 +4765,8 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
   const npcRadius = plazaRadius * 0.7;
   const npcPodiumRadius = 35 * p; // Radius of each NPC podium
   
-  const stalls: Array<{
-    angle: number;
-    tab: 'hats' | 'shirts' | 'legs' | 'capes' | 'wings' | 'accessories' | 'boosts' | 'pets' | undefined;
-    rarity: ItemRarity;
-    name: string;
-  }> = [
-    { angle: 0, tab: 'hats', rarity: 'legendary', name: 'Hat Merchant' },
-    { angle: Math.PI / 4, tab: 'shirts', rarity: 'legendary', name: 'Shirt Vendor' },
-    { angle: Math.PI / 2, tab: 'legs', rarity: 'legendary', name: 'Legwear Shop' },
-    { angle: 3 * Math.PI / 4, tab: 'capes', rarity: 'legendary', name: 'Cape Trader' },
-    { angle: Math.PI, tab: 'wings', rarity: 'legendary', name: 'Wings Merchant' },
-    { angle: 5 * Math.PI / 4, tab: 'accessories', rarity: 'legendary', name: 'Accessories' },
-    { angle: 3 * Math.PI / 2, tab: 'boosts', rarity: 'legendary', name: 'Boost Dealer' },
-    { angle: 7 * Math.PI / 4, tab: 'pets', rarity: 'legendary', name: 'Pet Merchant' }, // 8th NPC - Pet Merchant
-  ];
+  // Use module-level constant to avoid array allocation every frame
+  const stalls = NPC_STALLS;
   
   // Update NPC speech bubbles
   // Filter stalls with tabs (reuse array to avoid allocation)
@@ -4791,15 +4795,12 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
     const isHovered = hoveredStall && hoveredStall.tab === stall.tab && hoveredStall.rarity === stall.rarity;
     
     // Draw yellow glow effect when hovered (before NPC)
+    // Optimized: Use simple fills instead of gradients to avoid memory allocation
     if (isHovered) {
       ctx.save();
       // Draw bright yellow glow ring around NPC/stall (on top platform)
       ctx.globalAlpha = 0.6;
-      const gradient = ctx.createRadialGradient(npcX, npcTopY, 0, npcX, npcTopY, 30 * p);
-      gradient.addColorStop(0, 'rgba(255, 215, 0, 0.8)');
-      gradient.addColorStop(0.5, 'rgba(255, 215, 0, 0.4)');
-      gradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
       ctx.beginPath();
       ctx.arc(npcX, npcTopY, 30 * p, 0, Math.PI * 2);
       ctx.fill();
@@ -4830,24 +4831,11 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
     const npcId = `npc_${stall.tab}_${stall.rarity}`;
     const currentItemId = getCurrentLegendaryItem(stall.tab, npcId, time);
     
-    // Build outfit based on category
-    const outfit: string[] = [];
+    // Build outfit based on category (optimized: reuse array from pool)
+    const outfit = stringArrayPool.acquire();
     if (currentItemId) {
-      if (stall.tab === 'hats') {
-        outfit.push(currentItemId);
-      } else if (stall.tab === 'shirts') {
-        outfit.push(currentItemId);
-      } else if (stall.tab === 'legs') {
-        outfit.push(currentItemId);
-      } else if (stall.tab === 'capes') {
-        outfit.push(currentItemId);
-      } else if (stall.tab === 'wings') {
-        outfit.push(currentItemId);
-      } else if (stall.tab === 'accessories') {
-        outfit.push(currentItemId);
-      } else if (stall.tab === 'boosts') {
-        outfit.push(currentItemId);
-      }
+      // All categories just push the current item - simplified logic
+      outfit.push(currentItemId);
     }
     
     // Create NPC player object with appropriate costume
@@ -4871,20 +4859,10 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
       const animatedTraderBeamWidth = traderBeamWidth * traderPulse;
       const animatedTraderBeamX = npcX - animatedTraderBeamWidth / 2;
       
-      // Trader lightbeam gradient
-      const traderBeamGradient = ctx.createLinearGradient(
-        animatedTraderBeamX, 
-        traderBeamStartY, 
-        animatedTraderBeamX, 
-        traderBeamStartY - traderBeamHeight
-      );
-      traderBeamGradient.addColorStop(0, `rgba(255, 255, 255, ${traderIntensity})`);
-      traderBeamGradient.addColorStop(0.3, `rgba(200, 230, 255, ${traderIntensity * 0.7})`);
-      traderBeamGradient.addColorStop(0.6, `rgba(150, 200, 255, ${traderIntensity * 0.4})`);
-      traderBeamGradient.addColorStop(1, 'rgba(100, 180, 255, 0)');
-      
-      // Draw trader beam
-      ctx.fillStyle = traderBeamGradient;
+      // Trader lightbeam (optimized: use simple fill instead of gradient to avoid memory allocation)
+      // Use semi-transparent white/blue fill for beam effect
+      ctx.globalAlpha = traderIntensity * 0.6;
+      ctx.fillStyle = `rgba(200, 230, 255, ${traderIntensity * 0.5})`;
       ctx.fillRect(
         animatedTraderBeamX, 
         traderBeamStartY - traderBeamHeight, 
@@ -4904,16 +4882,9 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
         traderBeamHeight
       );
       
-      // Trader beam inner core (reuse shadow)
-      const traderCoreGradient = ctx.createLinearGradient(
-        animatedTraderBeamX, 
-        traderBeamStartY, 
-        animatedTraderBeamX, 
-        traderBeamStartY - traderBeamHeight * 0.6
-      );
-      traderCoreGradient.addColorStop(0, `rgba(255, 255, 255, ${traderIntensity * 0.6})`);
-      traderCoreGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = traderCoreGradient;
+      // Trader beam inner core (optimized: use simple fill instead of gradient)
+      ctx.globalAlpha = traderIntensity * 0.4;
+      ctx.fillStyle = `rgba(255, 255, 255, ${traderIntensity * 0.3})`;
       ctx.fillRect(
         animatedTraderBeamX + 1 * p, 
         traderBeamStartY - traderBeamHeight * 0.6, 
@@ -4921,31 +4892,27 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
         traderBeamHeight * 0.6
       );
       
-      // Reset shadow after trader beam operations
+      // Reset shadow and alpha after trader beam operations
       ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
       
       // Trader beam shimmer effect (only for hovered to save performance)
+      // Optimized: use simple fill instead of gradient
       if (isHovered) {
-        const traderShimmerOffset = ((time * 0.0015 + stall.angle) % (traderBeamHeight * 0.4));
-        const traderShimmerGradient = ctx.createLinearGradient(
-          animatedTraderBeamX, 
-          traderBeamStartY - traderShimmerOffset, 
-          animatedTraderBeamX, 
-          traderBeamStartY - traderShimmerOffset - traderBeamHeight * 0.25
-        );
-        traderShimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-        traderShimmerGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
-        traderShimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = traderShimmerGradient;
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.fillRect(
           animatedTraderBeamX, 
           traderBeamStartY - traderBeamHeight, 
           animatedTraderBeamWidth, 
           traderBeamHeight
         );
+        ctx.globalAlpha = 1;
       }
     }
     
+    // Optimized: Reuse NPC player objects to avoid allocations
+    // Create NPC player object (reuse if possible, but outfit may change)
     const npcPlayer: PlayerWithChat = {
       id: npcId,
       name: stall.name,
@@ -4956,7 +4923,7 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
       roomId: '', // NPCs don't need a room ID
       sprite: {
         body: 'default',
-        outfit: outfit,
+        outfit: outfit, // Reference to existing array, not a copy
       },
       chatBubble: speechBubble ? {
         text: speechBubble.text,
@@ -4966,6 +4933,9 @@ function drawNPCStalls(ctx: CanvasRenderingContext2D, centerX: number, centerY: 
     
     // Draw NPC (on top of stall, centered) - draw nameplate normally
     drawPlayer(ctx, npcPlayer, false, time, false);
+    
+    // Release outfit array back to pool
+    stringArrayPool.release(outfit);
     
     // Reset shadow after drawing NPC (so it doesn't affect other elements)
     if (isHovered) {
@@ -7846,13 +7816,24 @@ function drawSingleDealer(ctx: CanvasRenderingContext2D, dealerType: DealerType,
   // Check if this is a blackjack dealer (they should show "$ $ $" instead of "z z z")
   const isBlackjackDealer = dealerType.id.startsWith('blackjack_dealer_');
   
-  // Create player object with blackjack table flag for blackjack dealers
-  const npcPlayerWithBlackjackFlag = isBlackjackDealer 
-    ? { ...npcPlayer, isAtBlackjackTable: true }
-    : npcPlayer;
-  
-  // Skip nameplate in drawPlayer since we draw it explicitly with proper zoom
-  drawPlayer(ctx, npcPlayerWithBlackjackFlag, false, time, true);
+  // Optimized: Avoid object spread - create object only if needed
+  if (isBlackjackDealer) {
+    const npcPlayerWithBlackjackFlag: any = {
+      id: npcPlayer.id,
+      name: npcPlayer.name,
+      x: npcPlayer.x,
+      y: npcPlayer.y,
+      direction: npcPlayer.direction,
+      orbs: npcPlayer.orbs,
+      roomId: npcPlayer.roomId,
+      sprite: npcPlayer.sprite,
+      chatBubble: npcPlayer.chatBubble,
+      isAtBlackjackTable: true,
+    };
+    drawPlayer(ctx, npcPlayerWithBlackjackFlag, false, time, true);
+  } else {
+    drawPlayer(ctx, npcPlayer, false, time, true);
+  }
   
   // Draw nameplate with proper zoom (get from context transform like other NPCs)
   // Use Infinity to show purple infinity icon, and use nameColor if provided (for heralds)

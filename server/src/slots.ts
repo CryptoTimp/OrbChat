@@ -172,6 +172,52 @@ const PAYOUTS: Record<string, number> = {
   '3_common': 0.5, // 3 commons: 2.5k (bet 5k = 2.5k, bet 25k = 12.5k) - lose half bet since odds increased
 };
 
+// Debug helper to log payout calculation
+export function debugPayoutCalculation(symbols: SlotSymbol[], betAmount: number): void {
+  console.log('[Slots Debug] Symbols:', symbols.join(', '));
+  let maxConsecutive = 0;
+  let maxSymbol: SlotSymbol | null = null;
+  let currentConsecutive = 0;
+  let currentSymbol: SlotSymbol | null = null;
+  
+  for (let i = 0; i < symbols.length; i++) {
+    const symbol = symbols[i];
+    if (symbol === 'bonus') {
+      if (currentConsecutive > maxConsecutive) {
+        maxConsecutive = currentConsecutive;
+        maxSymbol = currentSymbol;
+      }
+      currentConsecutive = 0;
+      currentSymbol = null;
+      continue;
+    }
+    if (symbol === currentSymbol) {
+      currentConsecutive++;
+    } else {
+      if (currentConsecutive > maxConsecutive) {
+        maxConsecutive = currentConsecutive;
+        maxSymbol = currentSymbol;
+      }
+      currentConsecutive = 1;
+      currentSymbol = symbol;
+    }
+  }
+  if (currentConsecutive > maxConsecutive) {
+    maxConsecutive = currentConsecutive;
+    maxSymbol = currentSymbol;
+  }
+  
+  console.log('[Slots Debug] Max consecutive:', maxConsecutive, 'Symbol:', maxSymbol);
+  if (maxConsecutive >= 3 && maxSymbol) {
+    const payoutCount = Math.min(maxConsecutive, 5);
+    const payoutKey = `${payoutCount}_${maxSymbol}`;
+    const multiplier = PAYOUTS[payoutKey] || 0;
+    console.log('[Slots Debug] Payout key:', payoutKey, 'Multiplier:', multiplier, 'Payout:', Math.floor(betAmount * multiplier));
+  } else {
+    console.log('[Slots Debug] No payout - consecutive count:', maxConsecutive);
+  }
+}
+
 // Generate a random symbol based on weights
 function generateSymbol(): SlotSymbol {
   let random = Math.random() * TOTAL_WEIGHT;
@@ -237,58 +283,47 @@ export function checkBonusTrigger(symbols: SlotSymbol[]): boolean {
   return bonusCount >= 3 && middleReelIsBonus;
 }
 
-// Calculate payout based on symbols (only pays for consecutive matches in a row)
+// Calculate payout based on symbols (pays for 3+ of a kind anywhere, not just consecutive)
 export function calculatePayout(symbols: SlotSymbol[], betAmount: number): number {
-  // Find the longest consecutive sequence of matching symbols (excluding bonus)
-  let maxConsecutive = 0;
-  let maxSymbol: SlotSymbol | null = null;
-  let currentConsecutive = 0;
-  let currentSymbol: SlotSymbol | null = null;
+  // Count occurrences of each symbol (exclude bonus from payout calculation)
+  const counts: Record<SlotSymbol, number> = {
+    common: 0,
+    uncommon: 0,
+    rare: 0,
+    epic: 0,
+    legendary: 0,
+    godlike: 0,
+    orb: 0,
+    bonus: 0  // Bonus symbols don't count for payouts
+  };
   
-  for (let i = 0; i < symbols.length; i++) {
-    const symbol = symbols[i];
-    
-    // Skip bonus symbols - they don't count for payouts
-    if (symbol === 'bonus') {
-      // Reset consecutive count when we hit a bonus
-      if (currentConsecutive > maxConsecutive) {
-        maxConsecutive = currentConsecutive;
-        maxSymbol = currentSymbol;
-      }
-      currentConsecutive = 0;
-      currentSymbol = null;
-      continue;
-    }
-    
-    // If this symbol matches the current consecutive sequence
-    if (symbol === currentSymbol) {
-      currentConsecutive++;
-    } else {
-      // Check if previous sequence was longer
-      if (currentConsecutive > maxConsecutive) {
-        maxConsecutive = currentConsecutive;
-        maxSymbol = currentSymbol;
-      }
-      // Start new sequence
-      currentConsecutive = 1;
-      currentSymbol = symbol;
+  for (const symbol of symbols) {
+    if (symbol !== 'bonus') {
+      counts[symbol]++;
     }
   }
   
-  // Check final sequence
-  if (currentConsecutive > maxConsecutive) {
-    maxConsecutive = currentConsecutive;
-    maxSymbol = currentSymbol;
+  // Check for winning combinations (3, 4, or 5 of a kind)
+  // Priority: orb > godlike > legendary > epic > rare > uncommon > common
+  const symbolOrder: SlotSymbol[] = ['orb', 'godlike', 'legendary', 'epic', 'rare', 'uncommon', 'common'];
+  
+  for (const symbol of symbolOrder) {
+    const count = counts[symbol];
+    if (count >= 3) {
+      const payoutKey = `${count}_${symbol}`;
+      const multiplier = PAYOUTS[payoutKey];
+      
+      if (multiplier === undefined) {
+        console.warn(`[Slots] Missing payout entry for: ${payoutKey}. Symbols: ${symbols.join(', ')}`);
+        return 0;
+      }
+      
+      const payout = Math.floor(betAmount * multiplier);
+      console.log(`[Slots] Payout: ${payoutKey} (${count} of ${symbol}) = ${multiplier}x bet = ${payout} orbs (bet: ${betAmount})`);
+      return payout;
+    }
   }
   
-  // Only pay out for 3, 4, or 5 consecutive symbols
-  if (maxConsecutive >= 3 && maxSymbol) {
-    // Use the actual count (capped at 5 for payout key)
-    const payoutCount = Math.min(maxConsecutive, 5);
-    const payoutKey = `${payoutCount}_${maxSymbol}`;
-    const multiplier = PAYOUTS[payoutKey] || 0;
-    return Math.floor(betAmount * multiplier);
-  }
-  
+  console.log(`[Slots] No payout - no 3+ of a kind found. Symbols: ${symbols.join(', ')}`);
   return 0; // No win
 }

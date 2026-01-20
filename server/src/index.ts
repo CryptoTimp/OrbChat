@@ -3346,6 +3346,16 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const netPayout = isFreeSpin ? payout : (payout - numericBet); // In bonus game or trigger, payout is pure win
       const finalBalance = balanceAfterBet + payout;
       
+      // Debug logging for payout issues
+      console.log('[Slots] Payout calculation:', {
+        symbols: symbols.join(', '),
+        payout,
+        betAmount: numericBet,
+        netPayout,
+        isFreeSpin,
+        finalBalance
+      });
+      
       console.log('[Slots] Payout calculation:', {
         symbols: symbols.join(', '),
         payout,

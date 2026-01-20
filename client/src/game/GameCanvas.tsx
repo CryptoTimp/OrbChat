@@ -2833,12 +2833,28 @@ export function GameCanvas() {
         if (isVisible(camera, player.x, player.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
           const isHovered = hoveredPlayerRef.current === player.id;
           // Mark if player is at blackjack table or slot machine
-          const playerWithSeatFlags = { 
-            ...player, 
-            isAtBlackjackTable: playersAtBlackjack.has(player.id),
-            isAtSlotMachine: playersAtSlotMachine.has(player.id)
-          };
-          drawPlayer(ctx, playerWithSeatFlags, isLocal, currentTime, false, isHovered);
+          // Optimized: Avoid object spread - directly pass flags to drawPlayer
+          const isAtBlackjackTable = playersAtBlackjack.has(player.id);
+          const isAtSlotMachine = playersAtSlotMachine.has(player.id);
+          // Create minimal object only if flags are needed (most players won't have them)
+          if (isAtBlackjackTable || isAtSlotMachine) {
+            const playerWithSeatFlags: any = {
+              id: player.id,
+              name: player.name,
+              x: player.x,
+              y: player.y,
+              direction: player.direction,
+              orbs: player.orbs,
+              roomId: player.roomId,
+              sprite: player.sprite,
+              chatBubble: player.chatBubble,
+              isAtBlackjackTable: isAtBlackjackTable,
+              isAtSlotMachine: isAtSlotMachine,
+            };
+            drawPlayer(ctx, playerWithSeatFlags, isLocal, currentTime, false, isHovered);
+          } else {
+            drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
+          }
           playersDrawn++;
         }
       }
