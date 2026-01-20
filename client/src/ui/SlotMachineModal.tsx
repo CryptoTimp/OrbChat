@@ -638,7 +638,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   
   // Cooldown timer effect
   useEffect(() => {
-    const COOLDOWN_DURATION = 2500; // 2.5 seconds in milliseconds
+    const COOLDOWN_DURATION = 3500; // 3.5 seconds in milliseconds
     
     const updateCooldown = () => {
       const now = Date.now();
@@ -659,7 +659,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const handleSpin = () => {
     // Always use the current balance from localPlayer.orbs to ensure sync across all modals
     const currentBalance = localPlayer?.orbs || 0;
-    const COOLDOWN_DURATION = 2500; // 2.5 seconds in milliseconds
+    const COOLDOWN_DURATION = 3500; // 3.5 seconds in milliseconds
     const now = Date.now();
     const timeSinceLastSpin = now - lastSpinTime;
     

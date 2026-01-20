@@ -1114,38 +1114,8 @@ export function GameCanvas() {
     previousRoomIdRef.current = roomId || null;
   }, [roomId, setClickTarget]);
   
-  // Reset animation state when local player position changes significantly (server transfer/map change)
-  const localPlayer = useGameStore(state => state.localPlayer);
-  const previousLocalPlayerPosRef = useRef<{ x: number; y: number } | null>(null);
-  useEffect(() => {
-    if (localPlayer && typeof localPlayer.x === 'number' && typeof localPlayer.y === 'number') {
-      const currentPos = { x: localPlayer.x, y: localPlayer.y };
-      const previousPos = previousLocalPlayerPosRef.current;
-      
-      if (previousPos) {
-        const dx = currentPos.x - previousPos.x;
-        const dy = currentPos.y - previousPos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // If position changed by more than 50 units, it's likely a server transfer/map change
-        // Reset animation state to prevent laggy movement
-        if (distance > 50) {
-          console.log(`[Position Jump] Local player position changed by ${distance.toFixed(2)} units, resetting animation state`);
-          
-          // Clear animation state for local player specifically
-          if (localPlayer.id) {
-            clearPlayerAnimationState(localPlayer.id);
-            console.log(`[Position Jump] Cleared animation state for player ${localPlayer.id}`);
-          }
-        }
-      }
-      
-      previousLocalPlayerPosRef.current = currentPos;
-    } else if (!localPlayer) {
-      // Player disconnected or not in room - clear previous position
-      previousLocalPlayerPosRef.current = null;
-    }
-  }, [localPlayer?.x, localPlayer?.y, localPlayer?.id]);
+  // Note: Animation state reset on map/room changes is handled by the useEffect hooks above
+  // The getPlayerAnimation function in renderer.ts also has protection against large position jumps
   
   // Initialize return portal position when entering casino map
   useEffect(() => {

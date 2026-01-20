@@ -11566,7 +11566,8 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
   
   // Reset animation state if position jump is too large (teleportation, map change, etc.)
   // This prevents animation state corruption that causes laggy movement with speed boosts
-  const MAX_REASONABLE_DISTANCE = 50; // Max reasonable distance per frame (prevents huge jumps)
+  // Note: Speed boosts can cause 50-100 units per frame, so threshold must be higher
+  const MAX_REASONABLE_DISTANCE = 200; // Max reasonable distance per frame (prevents huge jumps/teleportation)
   if (distance > MAX_REASONABLE_DISTANCE) {
     // Large jump detected - reset animation state to prevent corruption
     anim.lastX = x;
