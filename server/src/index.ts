@@ -734,7 +734,10 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
   });
 
   // Handle ping for latency measurement
+  // Respond immediately (synchronously) to minimize server processing delay
+  // This ensures ping measurements reflect true network latency, not server load
   socket.on('ping', ({ timestamp }: { timestamp: number }) => {
+    // Send pong immediately without any async delay
     socket.emit('pong', { timestamp });
   });
 

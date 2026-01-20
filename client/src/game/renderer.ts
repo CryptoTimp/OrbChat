@@ -7284,9 +7284,10 @@ export function checkMillionairesLoungeReturnPortalCollision(x: number, y: numbe
 
 // Draw return portal in casino map (green/blue portal to return to previous room)
 export function drawReturnPortal(ctx: CanvasRenderingContext2D, time: number, camera?: Camera, previousRoomId?: string | null, currentRoomId?: string | null): void {
-  // Only draw return portal if we're in a casino or lounge room
-  if (!currentRoomId || (!currentRoomId.startsWith('casino-') && !currentRoomId.startsWith('millionaires_lounge-'))) {
-    // Not in casino or lounge - no return portal to show
+  // Always draw return portal if we're in casino or lounge map type
+  // Check currentMapType instead of relying on currentRoomId which might be temporarily null in production
+  // This prevents the portal from disappearing when roomId is briefly undefined
+  if (currentMapType !== 'casino' && currentMapType !== 'millionaires_lounge') {
     return;
   }
   

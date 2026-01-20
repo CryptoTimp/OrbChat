@@ -730,14 +730,12 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                               >
                                 {player.orbs ? player.orbs.toLocaleString() : '0'}
                               </span>
-                              {playerPings.has(player.id) && (
-                                <span 
-                                  className="text-xs text-gray-500"
-                                  title="Ping to server"
-                                >
-                                  {playerPings.get(player.id)}ms
-                                </span>
-                              )}
+                              <span 
+                                className="text-xs text-gray-500"
+                                title={playerPings.has(player.id) ? "Ping to server" : "Ping not available"}
+                              >
+                                {playerPings.has(player.id) ? `${playerPings.get(player.id)}ms` : '-'}
+                              </span>
                             </div>
                           </div>
                         );

@@ -797,9 +797,9 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
       e.preventDefault();
       e.stopPropagation();
       
-      // Calculate the modal's center position based on the current modalPosition state
-      // The modal is centered with transform: translate(calc(50% + ${modalPosition.x}px), calc(50% + ${modalPosition.y}px))
-      // So the center in screen coordinates = viewport center + modalPosition
+      // Calculate offset from click position to where the user clicked on the modal
+      // The modal is centered with transform: translate(calc(50% + ${modalPosition.x}px), ...)
+      // So we need to calculate the offset relative to the modal's current center position
       const centerX = window.innerWidth / 2;
       const centerY = window.innerHeight / 2;
       const modalCenterX = centerX + modalPosition.x;

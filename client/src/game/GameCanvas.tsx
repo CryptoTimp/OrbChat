@@ -1593,14 +1593,14 @@ export function GameCanvas() {
         newDirection = freshLocalPlayer.direction;
         // Don't update position
       } else if (!cuttingTreeRef.current) {
-        // Only apply smooth reconciliation if ping is over 100ms (for high latency players)
+        // Only apply smooth reconciliation if ping is over 80ms (for high latency players)
         const currentPing = useGameStore.getState().playerPings.get(currentPlayerId) || 0;
         const correction = serverCorrectionTargetRef.current;
         let baseX = freshLocalPlayer.x;
         let baseY = freshLocalPlayer.y;
         
-        // Only do smooth reconciliation for high ping players (>100ms)
-        if (correction && currentPing > 100) {
+        // Only do smooth reconciliation for high ping players (>80ms)
+        if (correction && currentPing > 80) {
           const timeSinceCorrection = currentTime - correction.time;
           const RECONCILIATION_TIME = 300; // 300ms to smoothly reconcile
           
@@ -1614,7 +1614,7 @@ export function GameCanvas() {
             // Reconciliation complete, clear target
             serverCorrectionTargetRef.current = null;
           }
-        } else if (correction && currentPing <= 100) {
+        } else if (correction && currentPing <= 80) {
           // Low ping - clear reconciliation target immediately (no interpolation needed)
           serverCorrectionTargetRef.current = null;
         }
@@ -2276,9 +2276,9 @@ export function GameCanvas() {
         const timeSinceCorrection = lastCorrection ? currentTime - lastCorrection.time : Infinity;
         const canSendMove = timeSinceCorrection > SERVER_CORRECTION_COOLDOWN;
         
-        // Only apply latency compensation if ping is over 100ms
+        // Only apply latency compensation if ping is over 80ms
         const currentPing = useGameStore.getState().playerPings.get(currentPlayerId) || 0;
-        const adaptiveCooldown = currentPing > 100 ? Math.min(moveThrottle + (currentPing - 100) * 0.5, 150) : moveThrottle;
+        const adaptiveCooldown = currentPing > 80 ? Math.min(moveThrottle + (currentPing - 80) * 0.5, 150) : moveThrottle;
         
         if (canSendMove && currentTime - lastMoveTimeRef.current > adaptiveCooldown) {
           move(x, y, direction);

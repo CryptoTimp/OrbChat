@@ -76,13 +76,24 @@ function getOrCreateSocket(): Socket {
     });
     
     // Track ping for local player using timestamp-based approach
-    let pingStartTime: number | null = null;
+    // Use a Map to track multiple in-flight pings (handles out-of-order responses)
     let pingInterval: NodeJS.Timeout | null = null;
+    const pendingPings = new Map<number, number>(); // timestamp -> startTime
     
     // Measure ping using timestamp echo
     const measurePing = () => {
-      pingStartTime = Date.now();
-      socket?.emit('ping', { timestamp: pingStartTime });
+      const timestamp = Date.now();
+      const startTime = performance.now(); // Use performance.now() for higher precision
+      pendingPings.set(timestamp, startTime);
+      socket?.emit('ping', { timestamp });
+      
+      // Clean up old pending pings (older than 5 seconds) to prevent memory leak
+      const now = performance.now();
+      for (const [ts, start] of pendingPings) {
+        if (now - start > 5000) {
+          pendingPings.delete(ts);
+        }
+      }
     };
     
     socket.on('connect', () => {
@@ -92,13 +103,15 @@ function getOrCreateSocket(): Socket {
     });
     
     socket.on('pong', (data: { timestamp?: number }) => {
-      if (pingStartTime !== null) {
-        const ping = Date.now() - pingStartTime;
+      const receivedTimestamp = data.timestamp;
+      if (receivedTimestamp && pendingPings.has(receivedTimestamp)) {
+        const startTime = pendingPings.get(receivedTimestamp)!;
+        const ping = Math.round(performance.now() - startTime); // Round to nearest ms
         const state = useGameStore.getState();
         if (state.playerId) {
           state.setPlayerPing(state.playerId, ping);
         }
-        pingStartTime = null;
+        pendingPings.delete(receivedTimestamp);
       }
     });
     
