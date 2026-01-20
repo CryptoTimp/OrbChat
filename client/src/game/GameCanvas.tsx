@@ -548,6 +548,41 @@ export function GameCanvas() {
           return; // Don't move via normal click handling
         }
         
+        // Check if clicking on blackjack dealer (must come before other dealers to prioritize)
+        if (clickedDealerId && clickedDealerId.startsWith('blackjack_dealer_')) {
+          // Extract table number from dealer ID (blackjack_dealer_1 -> blackjack_table_1)
+          const dealerNumber = clickedDealerId.split('_').pop();
+          const tableId = `blackjack_table_${dealerNumber}`;
+          
+          const localPlayer = useGameStore.getState().localPlayer;
+          if (localPlayer) {
+            playClickSound();
+            // Import blackjackTablePositions dynamically
+            import('./renderer').then(({ blackjackTablePositions }) => {
+              const tablePos = blackjackTablePositions.get(tableId);
+              if (tablePos) {
+                // Check if player is in range
+                const playerCenterX = localPlayer.x * SCALE + (PLAYER_WIDTH * SCALE) / 2;
+                const playerCenterY = localPlayer.y * SCALE + (PLAYER_HEIGHT * SCALE) / 2;
+                const dx = tablePos.x - playerCenterX;
+                const dy = tablePos.y - playerCenterY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const interactionRange = 80 * SCALE;
+                
+                if (dist < interactionRange) {
+                  // Player is in range, open blackjack modal
+                  useGameStore.getState().openBlackjackTable(tableId);
+                } else {
+                  // Player is far away, walk to table first
+                  setClickTarget(tablePos.x / SCALE, tablePos.y / SCALE);
+                  pendingBlackjackTableInteractionRef.current = tableId;
+                }
+              }
+            });
+          }
+          return; // Don't move via normal click handling
+        }
+        
         // Check if clicking on orb dealer
         if (clickedDealerId === 'orb_dealer') {
           const localPlayer = useGameStore.getState().localPlayer;

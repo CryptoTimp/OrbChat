@@ -7690,7 +7690,31 @@ export function getClickedDealer(worldX: number, worldY: number): string | null 
   let closestDist = Infinity;
   
   // Find the closest dealer (in case multiple dealers share the same ID)
+  // Prioritize blackjack dealers by checking them first
+  const blackjackDealers: Array<[string, { x: number; y: number }]> = [];
+  const otherDealers: Array<[string, { x: number; y: number }]> = [];
+  
   for (const [dealerKey, position] of dealerPositions.entries()) {
+    if (dealerKey.startsWith('blackjack_dealer_')) {
+      blackjackDealers.push([dealerKey, position]);
+    } else {
+      otherDealers.push([dealerKey, position]);
+    }
+  }
+  
+  // Check blackjack dealers first (they have priority)
+  for (const [dealerKey, position] of blackjackDealers) {
+    const dx = worldX - position.x;
+    const dy = worldY - position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < clickRadius && dist < closestDist) {
+      closestDist = dist;
+      closestDealer = dealerKey; // Keep full ID for blackjack dealers (blackjack_dealer_1, etc.)
+    }
+  }
+  
+  // Then check other dealers
+  for (const [dealerKey, position] of otherDealers) {
     const dx = worldX - position.x;
     const dy = worldY - position.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -8354,6 +8378,9 @@ export function drawBlackjackTables(ctx: CanvasRenderingContext2D, time: number,
     const dealerAngle = 0; // Dealer at top
     const dealerX = tableX + Math.cos(dealerAngle) * (tableRadiusSize * 0.7);
     const dealerY = tableY + Math.sin(dealerAngle) * (tableMinorRadius * 0.7);
+    
+    // Store blackjack dealer position for click detection (must be stored before other dealers)
+    dealerPositions.set(dealerId, { x: dealerX, y: dealerY });
     
     // Draw dealer marker
     ctx.fillStyle = '#8a0000';
