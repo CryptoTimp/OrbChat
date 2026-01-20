@@ -10104,7 +10104,10 @@ export function setCurrentMap(mapType: MapType): void {
   if (mapType !== currentMapType) {
     console.log(`Map type changed from ${currentMapType} to ${mapType}`);
     currentMapType = mapType;
-    // Clear cache for old map if needed (optional - we keep all caches for performance)
+    // Clear animation state for all players when map changes to prevent corruption
+    // This fixes laggy movement when joining casino with speed boosts
+    extendedPlayerAnimations.clear();
+    console.log('Cleared player animation state due to map change');
   }
 }
 
@@ -10613,6 +10616,12 @@ export function drawParticleTrails(ctx: CanvasRenderingContext2D, time: number, 
 export function clearPlayerTrail(playerId: string): void {
   playerTrails.delete(playerId);
   lastTrailSpawn.delete(playerId);
+}
+
+// Clear all player trails (useful when changing maps/rooms)
+export function clearAllPlayerTrails(): void {
+  playerTrails.clear();
+  lastTrailSpawn.clear();
 }
 
 // === SMOKE PARTICLE SYSTEM (for spawn/despawn) ===
@@ -11522,6 +11531,22 @@ function getPlayerAnimation(playerId: string, x: number, y: number, time: number
   const dx = x - anim.lastX;
   const dy = y - anim.lastY;
   const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  // Reset animation state if position jump is too large (teleportation, map change, etc.)
+  // This prevents animation state corruption that causes laggy movement with speed boosts
+  const MAX_REASONABLE_DISTANCE = 50; // Max reasonable distance per frame (prevents huge jumps)
+  if (distance > MAX_REASONABLE_DISTANCE) {
+    // Large jump detected - reset animation state to prevent corruption
+    anim.lastX = x;
+    anim.lastY = y;
+    anim.distanceTraveled = 0;
+    anim.isMoving = false;
+    anim.frame = 0;
+    anim.idleTime = time;
+    anim.idleBobPhase = 0;
+    anim.lastFrameTime = time;
+    return anim; // Return reset state (player appears idle)
+  }
   
   // Force stationary for dealers (they should never move)
   const isDealer = playerId.startsWith('orb_dealer') || playerId.startsWith('loot_box_dealer') || 

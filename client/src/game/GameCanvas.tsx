@@ -12,6 +12,7 @@ import {
   updatePlayerTrail,
   drawParticleTrails,
   clearPlayerTrail,
+  clearAllPlayerTrails,
   setShopItems,
   drawForestFoliage,
   drawForestStumps,
@@ -1035,6 +1036,52 @@ export function GameCanvas() {
   }, [canvasSize]);
   
   const currentMapType = useGameStore(state => state.mapType);
+  const previousMapTypeRef = useRef<MapType | null>(null);
+  
+  // Reset position-related state when map or room changes (through portals)
+  useEffect(() => {
+    const mapChanged = previousMapTypeRef.current !== null && previousMapTypeRef.current !== currentMapType;
+    
+    if (mapChanged) {
+      console.log(`[Map Change] Clearing position state - ${previousMapTypeRef.current} -> ${currentMapType}`);
+      
+      // Clear interpolated players (prevents stale position data)
+      interpolatedPlayersRef.current.clear();
+      
+      // Clear all player trails (prevents ghost trails from previous map)
+      clearAllPlayerTrails();
+      
+      // Clear click target (prevents player trying to move to old map position)
+      setClickTarget(null, null);
+      
+      // Reset camera to center (optional - might want to keep camera position)
+      // cameraRef.current.x = WORLD_WIDTH / 2;
+      // cameraRef.current.y = WORLD_HEIGHT / 2;
+    }
+    
+    previousMapTypeRef.current = currentMapType;
+  }, [currentMapType, setClickTarget]);
+  
+  // Also reset when roomId changes (in case map type doesn't change but room does)
+  const previousRoomIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const roomChanged = previousRoomIdRef.current !== null && previousRoomIdRef.current !== roomId;
+    
+    if (roomChanged) {
+      console.log(`[Room Change] Clearing position state - ${previousRoomIdRef.current} -> ${roomId}`);
+      
+      // Clear interpolated players
+      interpolatedPlayersRef.current.clear();
+      
+      // Clear all player trails (prevents ghost trails from previous room)
+      clearAllPlayerTrails();
+      
+      // Clear click target
+      setClickTarget(null, null);
+    }
+    
+    previousRoomIdRef.current = roomId || null;
+  }, [roomId, setClickTarget]);
   
   // Initialize return portal position when entering casino map
   useEffect(() => {
