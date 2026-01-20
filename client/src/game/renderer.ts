@@ -11483,6 +11483,17 @@ export function clearPlayerAnimationState(playerId: string): void {
   extendedPlayerAnimations.delete(playerId);
 }
 
+// Export function to update animation state position without resetting (for server position corrections)
+export function updatePlayerAnimationPosition(playerId: string, x: number, y: number): void {
+  const anim = extendedPlayerAnimations.get(playerId);
+  if (anim) {
+    // Update position tracking to match server position
+    // This prevents jump detection when server corrects position
+    anim.lastX = x;
+    anim.lastY = y;
+  }
+}
+
 // Track which players are chopping
 const choppingPlayers: Map<string, { startTime: number }> = new Map();
 

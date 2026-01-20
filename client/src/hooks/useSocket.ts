@@ -345,6 +345,11 @@ function attachListeners(sock: Socket) {
         // Otherwise, ignore it to prevent feedback loops from normal movement
         if (distance > 50) {
           state.setLocalPlayerPosition(x, y, direction);
+          // Update animation state position to match server position without resetting
+          // This prevents jump detection and back-and-forth teleportation with speed boosts
+          import('../game/renderer').then(({ updatePlayerAnimationPosition }) => {
+            updatePlayerAnimationPosition(playerId, x, y);
+          });
         }
       }
     } else {
