@@ -47,11 +47,16 @@ export function HUD({ onLeaveRoom }: HUDProps) {
   const lastOrbValue = useGameStore(state => state.lastOrbValue);
   const { leaveRoom: socketLeaveRoom } = useSocket();
   
-  // FPS tracking
+  // FPS tracking (capped by monitor refresh rate)
   const [fps, setFps] = useState<number>(60);
   const fpsFrameCountRef = useRef<number>(0);
   const fpsUpdateTimeRef = useRef<number>(Date.now());
   const fpsAnimationFrameRef = useRef<number | null>(null);
+  
+  // Real FPS tracking (uncapped, based on actual frame times)
+  const [realFps, setRealFps] = useState<number>(60);
+  const realFpsFrameTimesRef = useRef<number[]>([]);
+  const lastFrameTimeRef = useRef<number>(performance.now());
   
   // Render performance metrics
   const [renderMetrics, setRenderMetrics] = useState<Array<{ name: string; avgTime: number; fpsImpact: number; frameBudgetPercent: number }>>([]);
@@ -63,6 +68,27 @@ export function HUD({ onLeaveRoom }: HUDProps) {
     const measureFPS = () => {
       fpsFrameCountRef.current++;
       const now = Date.now();
+      
+      // Track real FPS using performance.now() for accurate frame timing
+      const currentFrameTime = performance.now();
+      const frameDelta = currentFrameTime - lastFrameTimeRef.current;
+      lastFrameTimeRef.current = currentFrameTime;
+      
+      if (frameDelta > 0 && frameDelta < 100) { // Ignore outliers (e.g., tab switching)
+        const frameFps = 1000 / frameDelta;
+        realFpsFrameTimesRef.current.push(frameFps);
+        
+        // Keep only last ~60 frames (roughly 1 second at 60fps)
+        if (realFpsFrameTimesRef.current.length > 60) {
+          realFpsFrameTimesRef.current.shift();
+        }
+        
+        // Calculate average real FPS
+        if (realFpsFrameTimesRef.current.length > 0) {
+          const avgRealFps = realFpsFrameTimesRef.current.reduce((a, b) => a + b, 0) / realFpsFrameTimesRef.current.length;
+          setRealFps(Math.round(avgRealFps));
+        }
+      }
       
       if (now - fpsUpdateTimeRef.current >= 1000) {
         const currentFps = fpsFrameCountRef.current; // Get FPS before resetting
@@ -501,9 +527,40 @@ export function HUD({ onLeaveRoom }: HUDProps) {
               style={{
                 color: fps >= 55 ? '#0f0' : fps >= 30 ? '#ff0' : '#f00',
               }}
+              title="Capped FPS (limited by monitor refresh rate)"
             >
               {fps} FPS
             </span>
+            <span className="text-gray-500 text-xs">|</span>
+            <span 
+              className="font-pixel text-xs"
+              style={{
+                color: realFps >= 55 ? '#0f0' : realFps >= 30 ? '#ff0' : '#f00',
+              }}
+              title="Raw FPS (uncapped, actual frame rate)"
+            >
+              {Math.round(realFps)} Raw FPS
+            </span>
+            {(() => {
+              const fpsDelta = fps - Math.round(realFps);
+              if (fpsDelta !== 0) {
+                return (
+                  <>
+                    <span className="text-gray-500 text-xs">|</span>
+                    <span 
+                      className="font-pixel text-xs"
+                      style={{
+                        color: fpsDelta > 0 ? '#0f0' : '#ff0',
+                      }}
+                      title={`Delta: Capped FPS ${fpsDelta > 0 ? '+' : ''}${fpsDelta} vs Raw FPS`}
+                    >
+                      {fpsDelta > 0 ? '+' : ''}{fpsDelta}
+                    </span>
+                  </>
+                );
+              }
+              return null;
+            })()}
             {renderMetrics.length > 0 && (
               <button
                 onClick={() => setShowDebugMonitor(!showDebugMonitor)}
@@ -566,8 +623,8 @@ export function HUD({ onLeaveRoom }: HUDProps) {
                     className="font-pixel text-xs py-0.5 hover:bg-gray-800/30 rounded px-1" 
                     style={{ color }}
                   >
-                    <div className="flex justify-between items-center gap-2">
-                      <span className="truncate max-w-[180px]" title={metric.name}>
+                    <div className="flex justify-between items-center gap-2 w-full">
+                      <span className="truncate flex-1 min-w-0" title={metric.name}>
                         {metric.name}
                       </span>
                       <div className="flex items-center gap-2 flex-shrink-0 text-right">

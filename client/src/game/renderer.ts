@@ -3611,6 +3611,168 @@ export function drawCasinoPlazaPulsingLines(ctx: CanvasRenderingContext2D, time:
   ctx.restore();
 }
 
+// Track last spawn time and previous animation offset for each slot machine to prevent spam
+const lastSlotOrbSpawn: Map<string, number> = new Map();
+const lastAnimationOffset: Map<string, number> = new Map();
+const SLOT_ORB_SPAWN_COOLDOWN = 100; // ms between spawns (to prevent spam when line loops)
+
+// Draw pulsing lines down paths from center portal to slot plazas
+function drawCasinoPathPulsingLines(ctx: CanvasRenderingContext2D, time: number, centerX: number, centerY: number, plazaRadius: number, slotMachineDistance: number): void {
+  const p = SCALE;
+  const portalCircleRadius = 100 * p; // Circle around the center portal
+  const pathStartRadius = portalCircleRadius; // Start path at the edge of the central circle
+  const pathLength = slotMachineDistance - pathStartRadius;
+  
+  // Directions: North (0), East (π/2), South (π), West (3π/2)
+  const directions = [
+    { angle: 0, id: 'slot_machine_north' },      // North
+    { angle: Math.PI / 2, id: 'slot_machine_east' },   // East
+    { angle: Math.PI, id: 'slot_machine_south' },      // South
+    { angle: 3 * Math.PI / 2, id: 'slot_machine_west' } // West
+  ];
+  
+  // Animation parameters (matching plaza style)
+  const animationSpeed = 0.3; // Speed of line movement along path
+  const trailLength = pathLength * 0.3; // Length of trail (30% of path length)
+  const lineWidth = 6 * p; // Width of each line
+  const trailSegments = 12; // Number of segments in trail
+  
+  ctx.save();
+  ctx.lineCap = 'round';
+  
+  // Draw pulsing line for each path
+  for (let i = 0; i < directions.length; i++) {
+    const dir = directions[i];
+    const theme = SLOT_MACHINE_THEMES[dir.id];
+    
+    // Parse theme color to RGB
+    const hex = theme.primary.replace('#', '');
+    const color = {
+      r: parseInt(hex.substring(0, 2), 16),
+      g: parseInt(hex.substring(2, 4), 16),
+      b: parseInt(hex.substring(4, 6), 16)
+    };
+    
+    // Calculate animation position along path (0 to pathLength, looping)
+    const animationOffset = (time * animationSpeed) % (pathLength + trailLength);
+    const basePosition = animationOffset - trailLength; // Start of trail
+    
+    // Check if leading edge has reached the end of the path (slot machine)
+    // Spawn orbs when line reaches the end (detect wrap-around)
+    const previousOffset = lastAnimationOffset.get(dir.id);
+    
+    // Detect when we cross the pathLength threshold
+    // Case 1: First time (previousOffset is undefined)
+    // Case 2: Normal progression: previousOffset < pathLength and now >= pathLength
+    // Case 3: Wrap-around: previousOffset > animationOffset (wrapped from high to low)
+    let hasReachedEnd = false;
+    if (previousOffset === undefined) {
+      // First time - only trigger if we're already past the threshold
+      hasReachedEnd = animationOffset >= pathLength;
+    } else {
+      // Check if we crossed the threshold
+      hasReachedEnd = (previousOffset < pathLength && animationOffset >= pathLength) || 
+                      (previousOffset > animationOffset && animationOffset >= pathLength);
+    }
+    
+    // Update stored offset for next frame
+    lastAnimationOffset.set(dir.id, animationOffset);
+    
+    if (hasReachedEnd) {
+      const lastSpawn = lastSlotOrbSpawn.get(dir.id) || 0;
+      if (time - lastSpawn > SLOT_ORB_SPAWN_COOLDOWN) {
+        // Calculate slot machine position
+        const slotX = centerX + Math.cos(dir.angle) * slotMachineDistance;
+        const slotY = centerY + Math.sin(dir.angle) * slotMachineDistance;
+        const slotTopY = slotY - (PLAYER_HEIGHT * SCALE) / 2 - 10 * p; // Top of slot machine
+        const floorY = slotY + (PLAYER_HEIGHT * SCALE) / 2 + 5 * p; // Floor position
+        
+        spawnSlotMachineOrbs(slotX, slotY, slotTopY, floorY, theme.primary);
+        lastSlotOrbSpawn.set(dir.id, time);
+      }
+    }
+    
+    // Draw trail segments
+    for (let j = 0; j < trailSegments; j++) {
+      const trailProgress = j / trailSegments; // 0 to 1
+      const segmentPosition = basePosition + (trailProgress * trailLength);
+      
+      // Skip if segment is outside path bounds
+      if (segmentPosition < 0 || segmentPosition > pathLength) continue;
+      
+      const alpha = (1 - trailProgress) * 0.8; // Fade from 0.8 to 0
+      const segmentLength = trailLength / trailSegments;
+      const segmentStart = Math.max(0, segmentPosition);
+      const segmentEnd = Math.min(pathLength, segmentPosition + segmentLength);
+      const actualSegmentLength = segmentEnd - segmentStart;
+      
+      if (actualSegmentLength <= 0) continue;
+      
+      // Calculate positions along the path
+      const startDist = pathStartRadius + segmentStart;
+      const endDist = pathStartRadius + segmentEnd;
+      
+      const startX = centerX + Math.cos(dir.angle) * startDist;
+      const startY = centerY + Math.sin(dir.angle) * startDist;
+      const endX = centerX + Math.cos(dir.angle) * endDist;
+      const endY = centerY + Math.sin(dir.angle) * endDist;
+      
+      // Only draw glow for brightest segments (optimization)
+      const shouldGlow = trailProgress < 0.25;
+      
+      // Draw line segment
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+      ctx.lineWidth = lineWidth * (1 - trailProgress * 0.5);
+      
+      if (shouldGlow) {
+        ctx.shadowBlur = 8 * p;
+        ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha * 0.6})`;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    
+    // Draw bright leading edge
+    const leadPosition = animationOffset;
+    if (leadPosition >= 0 && leadPosition <= pathLength) {
+      const leadStartDist = pathStartRadius + leadPosition;
+      const leadEndDist = pathStartRadius + Math.min(pathLength, leadPosition + (trailLength / trailSegments));
+      
+      const leadStartX = centerX + Math.cos(dir.angle) * leadStartDist;
+      const leadStartY = centerY + Math.sin(dir.angle) * leadStartDist;
+      const leadEndX = centerX + Math.cos(dir.angle) * leadEndDist;
+      const leadEndY = centerY + Math.sin(dir.angle) * leadEndDist;
+      
+      // Bright leading segment
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 1)`;
+      ctx.lineWidth = lineWidth * 1.2;
+      ctx.shadowBlur = 12 * p;
+      ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`;
+      ctx.beginPath();
+      ctx.moveTo(leadStartX, leadStartY);
+      ctx.lineTo(leadEndX, leadEndY);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      
+      // White highlight on leading edge
+      ctx.strokeStyle = `rgba(255, 255, 255, 0.6)`;
+      ctx.lineWidth = lineWidth * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(leadStartX, leadStartY);
+      ctx.lineTo(leadEndX, leadEndY);
+      ctx.stroke();
+    }
+  }
+  
+  ctx.restore();
+}
+
 // ============ MILLIONAIRE'S LOUNGE MAP ============
 
 export function drawMillionairesLoungeBackground(ctx: CanvasRenderingContext2D): void {
@@ -7997,20 +8159,20 @@ function buildHeraldPodiumCache(): void {
   const centerX = cacheWidth / 2;
   const baseY = cacheHeight - podiumRadius - 2 * p; // Base at bottom
   
-  // Podium base (dark grey)
+  // Podium base (light grey)
   const baseGradient = cacheCtx.createRadialGradient(centerX, baseY, 0, centerX, baseY, podiumRadius);
-  baseGradient.addColorStop(0, '#2a2a2a');
-  baseGradient.addColorStop(1, '#1a1a1a');
+  baseGradient.addColorStop(0, '#d0d0d0');
+  baseGradient.addColorStop(1, '#b0b0b0');
   cacheCtx.fillStyle = baseGradient;
   cacheCtx.beginPath();
   cacheCtx.arc(centerX, baseY, podiumRadius, 0, Math.PI * 2);
   cacheCtx.fill();
   
-  // Stem (vertical cylinder)
+  // Stem (vertical cylinder) - light grey
   const stemGradient = cacheCtx.createLinearGradient(centerX - stemRadius, baseY, centerX + stemRadius, baseY);
-  stemGradient.addColorStop(0, '#1a1a1a');
-  stemGradient.addColorStop(0.5, '#2a2a2a');
-  stemGradient.addColorStop(1, '#1a1a1a');
+  stemGradient.addColorStop(0, '#b0b0b0');
+  stemGradient.addColorStop(0.5, '#d0d0d0');
+  stemGradient.addColorStop(1, '#b0b0b0');
   cacheCtx.fillStyle = stemGradient;
   
   // Draw stem sides
@@ -8023,10 +8185,10 @@ function buildHeraldPodiumCache(): void {
   cacheCtx.closePath();
   cacheCtx.fill();
   
-  // Top platform
+  // Top platform - light grey
   const topGradient = cacheCtx.createRadialGradient(centerX, topPlatformY, 0, centerX, topPlatformY, podiumRadius);
-  topGradient.addColorStop(0, '#3a3a3a');
-  topGradient.addColorStop(1, '#2a2a2a');
+  topGradient.addColorStop(0, '#e0e0e0');
+  topGradient.addColorStop(1, '#c0c0c0');
   cacheCtx.fillStyle = topGradient;
   cacheCtx.beginPath();
   cacheCtx.arc(centerX, topPlatformY, podiumRadius, 0, Math.PI * 2);
@@ -8948,8 +9110,8 @@ function buildCasinoPathsCache(): void {
   const offsetX = cacheSize / 2;
   const offsetY = cacheSize / 2;
   
-  // === PATHS TO SLOT MACHINES (drawn first, so central circle can overlap them) ===
-  // Define portal circle radius here (used by paths, then drawn after paths)
+  // === PATHS REMOVED - only plazas and central circle remain ===
+  // Define portal circle radius here (used by central circle)
   const portalCircleRadius = 100 * p; // Circle around the center portal
   
   const directions = [
@@ -8959,40 +9121,11 @@ function buildCasinoPathsCache(): void {
     { angle: 3 * Math.PI / 2, id: 'slot_machine_west' } // West
   ];
   
-  const pathWidth = 48 * p; // Width of the path (doubled from 24 to 48)
-  const pathStartRadius = portalCircleRadius; // Start path at the edge of the central circle for seamless connection
-  
   for (const dir of directions) {
     const slotX = offsetX + Math.cos(dir.angle) * slotMachineDistance;
     const slotY = offsetY + Math.sin(dir.angle) * slotMachineDistance;
     
-    // Calculate path length
-    const pathLength = slotMachineDistance - pathStartRadius;
-    
-    cacheCtx.save();
-    cacheCtx.translate(offsetX, offsetY);
-    cacheCtx.rotate(dir.angle);
-    
-    // === FLAT PATH (2D only - no 3D effects) ===
-    // Simple flat path - no base, sides, or depth
-    cacheCtx.fillStyle = '#e0e0e0'; // Simple light grey fill
-    cacheCtx.fillRect(pathStartRadius, -pathWidth / 2, pathLength, pathWidth);
-    
-    // Simple edge lines
-    cacheCtx.strokeStyle = '#b0b0b0';
-    cacheCtx.lineWidth = 1 * p;
-    // Top edge
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(pathStartRadius, -pathWidth / 2);
-    cacheCtx.lineTo(pathStartRadius + pathLength, -pathWidth / 2);
-    cacheCtx.stroke();
-    // Bottom edge
-    cacheCtx.beginPath();
-    cacheCtx.moveTo(pathStartRadius, pathWidth / 2);
-    cacheCtx.lineTo(pathStartRadius + pathLength, pathWidth / 2);
-    cacheCtx.stroke();
-    
-    cacheCtx.restore();
+    // === PATHS REMOVED - only plazas remain ===
     
     // === SMALL PLAZA AROUND EACH SLOT MACHINE (2D only - no 3D effects) ===
     const smallPlazaRadius = 120 * p; // Radius of small plaza around slot machine
@@ -9146,8 +9279,13 @@ export function drawSlotMachines(ctx: CanvasRenderingContext2D, time: number, ho
     ctx.drawImage(casinoPathsCache, offsetX, offsetY);
   }
   
-    // === ANIMATED LIGHTS AND PULSING LINES - REMOVED FOR PERFORMANCE ===
-    // Lights and pulsing lines removed entirely - too expensive when multiple slot machines in view
+  // Draw pulsing lines down paths from center to slot plazas
+  drawCasinoPathPulsingLines(ctx, time, centerX, centerY, plazaRadius, slotMachineDistance);
+  
+  // Update and draw cosmetic slot machine orbs (spawned when pulsing lines reach machines)
+  // Note: deltaTime calculation - approximate 16ms per frame at 60fps
+  const deltaTime = 16; // Approximate frame time
+  updateAndDrawSlotMachineOrbs(ctx, deltaTime);
   
   // Draw cached static slot machines
   if (slotMachineCache) {
@@ -10196,6 +10334,171 @@ const boostDealerOrbParticles: BoostDealerOrbParticle[] = [];
 const BOOST_DEALER_ORB_SPAWN_INTERVAL = 300; // ms between spawns
 let lastBoostDealerSpawn = 0;
 const BOOST_DEALER_ORB_LIFETIME = 1000; // ms
+
+// Slot machine cosmetic orb particles (purely visual, cannot be collected)
+interface SlotMachineCosmeticOrb {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  createdAt: number;
+  lifetime: number;
+  floorY: number; // Y position where orb lands (despawns after landing)
+  color: string; // Theme color of the slot machine
+  hasLanded: boolean; // Track if orb has hit the floor
+  landTime?: number; // Time when orb landed
+}
+
+const slotMachineCosmeticOrbs: SlotMachineCosmeticOrb[] = [];
+const SLOT_ORB_LIFETIME = 2000; // ms total lifetime
+const SLOT_ORB_LAND_DESPAWN_TIME = 500; // ms after landing before despawn
+const SLOT_ORB_SPAWN_COUNT = 18; // Number of orbs to spawn per burst (reduced by 50% from 36)
+
+// Spawn cosmetic orbs from slot machine top when pulsing line reaches it
+function spawnSlotMachineOrbs(slotX: number, slotY: number, slotTopY: number, floorY: number, themeColor: string): void {
+  const now = Date.now();
+  
+  // Spawn multiple orbs in a burst
+  for (let i = 0; i < SLOT_ORB_SPAWN_COUNT; i++) {
+    // Random spread angle (mostly upward with wider spread) - reduced by 50%
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.8; // Mostly upward, 180 degree spread (reduced by 50% from 3.6)
+    const speed = 150 + Math.random() * 90; // Initial upward speed (reduced by 50%: 150-240, was 300-480)
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed;
+    
+    // Horizontal offset for spread - reduced by 50%
+    const spawnX = slotX + (Math.random() - 0.5) * 75 * SCALE; // Reduced by 50%: 75 (was 150)
+    
+    slotMachineCosmeticOrbs.push({
+      x: spawnX,
+      y: slotTopY,
+      vx: vx,
+      vy: vy,
+      size: ORB_SIZE * SCALE * 0.5, // Smaller than real orbs
+      createdAt: now,
+      lifetime: SLOT_ORB_LIFETIME,
+      floorY: floorY,
+      color: themeColor,
+      hasLanded: false,
+    });
+  }
+  
+  // Limit total particles
+  while (slotMachineCosmeticOrbs.length > 50) {
+    slotMachineCosmeticOrbs.shift();
+  }
+}
+
+// Update and draw slot machine cosmetic orb particles
+function updateAndDrawSlotMachineOrbs(ctx: CanvasRenderingContext2D, deltaTime: number): void {
+  const now = Date.now();
+  const dt = deltaTime / 1000; // Convert to seconds
+  const p = SCALE;
+  
+  // Update and draw particles
+  for (let i = slotMachineCosmeticOrbs.length - 1; i >= 0; i--) {
+    const orb = slotMachineCosmeticOrbs[i];
+    const age = now - orb.createdAt;
+    
+    // Remove dead particles
+    if (age > orb.lifetime) {
+      slotMachineCosmeticOrbs.splice(i, 1);
+      continue;
+    }
+    
+    // Remove if landed and despawn time has passed
+    if (orb.hasLanded && orb.landTime) {
+      if (now - orb.landTime > SLOT_ORB_LAND_DESPAWN_TIME) {
+        slotMachineCosmeticOrbs.splice(i, 1);
+        continue;
+      }
+    }
+    
+    // Update position with gravity (only if not landed)
+    if (!orb.hasLanded) {
+      orb.x += orb.vx * dt;
+      orb.vy += 300 * dt; // Gravity
+      orb.y += orb.vy * dt;
+      
+      // Slow down horizontal velocity (air resistance)
+      orb.vx *= 0.98;
+      
+      // Check if orb has landed on floor
+      if (orb.y >= orb.floorY) {
+        orb.y = orb.floorY;
+        orb.vy = 0;
+        orb.vx *= 0.5; // Stop horizontal movement when landing
+        orb.hasLanded = true;
+        orb.landTime = now;
+      }
+    } else {
+      // After landing, just fade out (no movement)
+      orb.vx *= 0.9; // Continue slowing down
+    }
+    
+    // Calculate alpha based on age and landing state
+    let alpha = 1;
+    if (orb.hasLanded && orb.landTime) {
+      // Fade out after landing
+      const timeSinceLanding = now - orb.landTime;
+      alpha = 1 - (timeSinceLanding / SLOT_ORB_LAND_DESPAWN_TIME);
+    } else {
+      // Fade out at end of lifetime
+      const lifeProgress = age / orb.lifetime;
+      alpha = lifeProgress > 0.9 ? (1 - lifeProgress) / 0.1 : 1;
+    }
+    
+    // Parse color to RGB
+    const hex = orb.color.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    
+    // Draw cosmetic orb
+    const radius = orb.size / 2;
+    const centerX = orb.x;
+    const centerY = orb.y;
+    
+    // Outer glow
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius * 2.5);
+    gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.4 * alpha})`);
+    gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${0.2 * alpha})`);
+    gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    
+    ctx.globalAlpha = alpha * 0.3;
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Main orb
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = orb.color;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Inner glow (lighter version of theme color)
+    const lighterR = Math.min(255, r + 40);
+    const lighterG = Math.min(255, g + 40);
+    const lighterB = Math.min(255, b + 40);
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.fillStyle = `rgb(${lighterR}, ${lighterG}, ${lighterB})`;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Highlight
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(centerX - radius * 0.3, centerY - radius * 0.3, radius * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  ctx.globalAlpha = 1;
+}
 
 // Spawn fake orb from Boost Dealer's head
 function spawnBoostDealerOrb(headX: number, headY: number, feetY: number): void {
