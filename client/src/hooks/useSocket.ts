@@ -356,6 +356,16 @@ function attachListeners(sock: Socket) {
           import('../game/renderer').then(({ updatePlayerAnimationPosition }) => {
             updatePlayerAnimationPosition(playerId, x, y);
           });
+          
+          // Track server correction to prevent sending moves immediately after (prevents feedback loop)
+          // Store this in a way that GameCanvas can access it
+          // We'll use a custom event or store it in a way the game loop can check
+          if (distance > 20 && distance <= 200) {
+            // This is a server correction (not a teleport), mark it so client doesn't send conflicting moves
+            window.dispatchEvent(new CustomEvent('server_position_correction', { 
+              detail: { x, y, time: Date.now() } 
+            }));
+          }
         }
       }
     } else {

@@ -155,6 +155,22 @@ export function GameCanvas() {
   const lastMoveTimeRef = useRef(0);
   const moveThrottle = 50;
   
+  // Track last server position correction to prevent sending moves immediately after correction
+  const lastServerCorrectionRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const SERVER_CORRECTION_COOLDOWN = 100; // Don't send moves for 100ms after server correction
+  
+  // Listen for server position corrections
+  useEffect(() => {
+    const handleServerCorrection = (e: CustomEvent<{ x: number; y: number; time: number }>) => {
+      lastServerCorrectionRef.current = e.detail;
+    };
+    
+    window.addEventListener('server_position_correction', handleServerCorrection as EventListener);
+    return () => {
+      window.removeEventListener('server_position_correction', handleServerCorrection as EventListener);
+    };
+  }, []);
+  
   // Hovered shrine state (use ref so game loop can always read latest value)
   const hoveredShrineRef = useRef<string | null>(null);
   const [hoveredShrine, setHoveredShrine] = useState<string | null>(null);
@@ -2216,7 +2232,12 @@ export function GameCanvas() {
       if (moved && direction) {
         setLocalPlayerPosition(x, y, direction);
         
-        if (currentTime - lastMoveTimeRef.current > moveThrottle) {
+        // Don't send move if we just received a server correction (prevents feedback loop)
+        const lastCorrection = lastServerCorrectionRef.current;
+        const timeSinceCorrection = lastCorrection ? currentTime - lastCorrection.time : Infinity;
+        const canSendMove = timeSinceCorrection > SERVER_CORRECTION_COOLDOWN;
+        
+        if (canSendMove && currentTime - lastMoveTimeRef.current > moveThrottle) {
           move(x, y, direction);
           lastMoveTimeRef.current = currentTime;
         }
