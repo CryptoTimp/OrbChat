@@ -887,14 +887,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Broadcast player_left to all clients in the room
         io.to(roomId).emit('player_left', { playerId });
         
-        // Remove socket mappings and emit kick event
+        // Remove socket mappings and emit kick event BEFORE disconnecting
         playerSockets.forEach(playerSocket => {
-          socketToPlayer.delete(playerSocket.id);
+          // Emit event first so client can receive it
           playerSocket.emit('force_room_change', { 
             roomId: plazaRoomId,
             reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
           });
-          playerSocket.disconnect();
+          // Disconnect after a short delay to ensure event is received
+          setTimeout(() => {
+            socketToPlayer.delete(playerSocket.id);
+            playerSocket.disconnect();
+          }, 100);
         });
         
         // Don't send balance update since player is being kicked
@@ -1891,13 +1895,6 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                     // Broadcast win/loss to chat for all players (wins and losses)
                     broadcastBlackjackResult(payoutPlayerId, payout, roomIdForPayouts);
                     
-                    // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
-                    // Don't send any event for losses to avoid confusing the client
-                    if (payout === 0) {
-                      console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted (no event sent)`);
-                      continue;
-                    }
-                    
                     const roomPlayer = rooms.getPlayerInRoom(roomIdForPayouts, payoutPlayerId);
                     if (roomPlayer) {
                       // CRITICAL: Server calculates balance updates for blackjack
@@ -1905,12 +1902,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                       // 2. Update room state
                       // 3. Broadcast to clients (clients will update Firebase)
                       const currentOrbs = roomPlayer.orbs || 0;
-                      const newBalance = currentOrbs + payout;
+                      // For losses (payout === 0), balance was already deducted when bet was placed
+                      // For wins, add the payout to current balance
+                      const newBalance = payout === 0 ? currentOrbs : (currentOrbs + payout);
                       
-                      roomPlayer.orbs = newBalance;
-                      players.updatePlayerOrbs(payoutPlayerId, newBalance);
+                      // Update balance if it changed (wins only, losses already deducted)
+                      if (payout > 0) {
+                        roomPlayer.orbs = newBalance;
+                        players.updatePlayerOrbs(payoutPlayerId, newBalance);
+                      }
                       
                       // Check if player balance dropped below 5M in casino - kick them to plaza
+                      // This check applies to both wins and losses
                       if (roomIdForPayouts.startsWith('casino-') && newBalance < 5000000) {
                         // Extract server region from casino room ID (e.g., "casino-eu-1" -> "eu-1")
                         const serverRegion = roomIdForPayouts.replace('casino-', '');
@@ -1930,17 +1933,28 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                         // Broadcast player_left to all clients in the room
                         io.to(roomIdForPayouts).emit('player_left', { playerId: payoutPlayerId });
                         
-                        // Remove socket mappings and emit kick event
+                        // Remove socket mappings and emit kick event BEFORE disconnecting
                         playerSockets.forEach(playerSocket => {
-                          socketToPlayer.delete(playerSocket.id);
+                          // Emit event first so client can receive it
                           playerSocket.emit('force_room_change', { 
                             roomId: plazaRoomId,
                             reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
                           });
-                          playerSocket.disconnect();
+                          // Disconnect after a short delay to ensure event is received
+                          setTimeout(() => {
+                            socketToPlayer.delete(playerSocket.id);
+                            playerSocket.disconnect();
+                          }, 100);
                         });
                         
                         // Don't send balance update since player is being kicked
+                        continue;
+                      }
+                      
+                      // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
+                      // Don't send any event for losses to avoid confusing the client
+                      if (payout === 0) {
+                        console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted (no event sent)`);
                         continue;
                       }
                       
@@ -2475,13 +2489,6 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           // Broadcast win/loss to chat for all players (wins and losses)
           broadcastBlackjackResult(payoutPlayerId, payout, mapping.roomId);
           
-          // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
-          // Don't send any event for losses - bet deduction event was already sent when bet was placed
-          if (payout === 0) {
-            console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted (no event sent)`);
-            return; // Don't process further - bet was already deducted when placed
-          }
-          
           const roomPlayer = rooms.getPlayerInRoom(mapping.roomId, payoutPlayerId);
           if (roomPlayer) {
             // CRITICAL: Server calculates balance updates for blackjack
@@ -2489,12 +2496,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
             // 2. Update room state
             // 3. Broadcast to clients (clients will update Firebase)
             const currentOrbs = roomPlayer.orbs || 0;
-            const newBalance = currentOrbs + payout;
+            // For losses (payout === 0), balance was already deducted when bet was placed
+            // For wins, add the payout to current balance
+            const newBalance = payout === 0 ? currentOrbs : (currentOrbs + payout);
             
-            roomPlayer.orbs = newBalance;
-            players.updatePlayerOrbs(payoutPlayerId, newBalance);
+            // Update balance if it changed (wins only, losses already deducted)
+            if (payout > 0) {
+              roomPlayer.orbs = newBalance;
+              players.updatePlayerOrbs(payoutPlayerId, newBalance);
+            }
             
             // Check if player balance dropped below 5M in casino - kick them to plaza
+            // This check applies to both wins and losses
             if (mapping.roomId.startsWith('casino-') && newBalance < 5000000) {
               // Extract server region from casino room ID (e.g., "casino-eu-1" -> "eu-1")
               const serverRegion = mapping.roomId.replace('casino-', '');
@@ -2514,18 +2527,29 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
               // Broadcast player_left to all clients in the room
               io.to(mapping.roomId).emit('player_left', { playerId: payoutPlayerId });
               
-              // Remove socket mappings and emit kick event
+              // Remove socket mappings and emit kick event BEFORE disconnecting
               playerSockets.forEach(playerSocket => {
-                socketToPlayer.delete(playerSocket.id);
+                // Emit event first so client can receive it
                 playerSocket.emit('force_room_change', { 
                   roomId: plazaRoomId,
                   reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
                 });
-                playerSocket.disconnect();
+                // Disconnect after a short delay to ensure event is received
+                setTimeout(() => {
+                  socketToPlayer.delete(playerSocket.id);
+                  playerSocket.disconnect();
+                }, 100);
               });
               
               // Don't send balance update since player is being kicked
               return;
+            }
+            
+            // CRITICAL: Skip losses (payout = 0) - bet was already deducted when placed
+            // Don't send any event for losses - bet deduction event was already sent when bet was placed
+            if (payout === 0) {
+              console.log(`[Blackjack] Player ${payoutPlayerId} lost - payout is 0, bet already deducted (no event sent)`);
+              return; // Don't process further - bet was already deducted when placed
             }
             
             io.to(mapping.roomId).emit('player_orbs_updated', { 
@@ -3501,14 +3525,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Broadcast player_left to all clients in the room
         io.to(roomId).emit('player_left', { playerId });
         
-        // Remove socket mappings and emit kick event
+        // Remove socket mappings and emit kick event BEFORE disconnecting
         playerSockets.forEach(playerSocket => {
-          socketToPlayer.delete(playerSocket.id);
+          // Emit event first so client can receive it
           playerSocket.emit('force_room_change', { 
             roomId: plazaRoomId,
             reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
           });
-          playerSocket.disconnect();
+          // Disconnect after a short delay to ensure event is received
+          setTimeout(() => {
+            socketToPlayer.delete(playerSocket.id);
+            playerSocket.disconnect();
+          }, 100);
         });
         
         return; // Don't send slot result since player is being kicked
@@ -3589,14 +3617,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         // Broadcast player_left to all clients in the room
         io.to(roomId).emit('player_left', { playerId });
         
-        // Remove socket mappings and emit kick event
+        // Remove socket mappings and emit kick event BEFORE disconnecting
         playerSockets.forEach(playerSocket => {
-          socketToPlayer.delete(playerSocket.id);
+          // Emit event first so client can receive it
           playerSocket.emit('force_room_change', { 
             roomId: plazaRoomId,
             reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
           });
-          playerSocket.disconnect();
+          // Disconnect after a short delay to ensure event is received
+          setTimeout(() => {
+            socketToPlayer.delete(playerSocket.id);
+            playerSocket.disconnect();
+          }, 100);
         });
       }
       
