@@ -570,8 +570,9 @@ export function updateVillagers(time: number, deltaTime: number, camera?: Camera
 export function updateCenturionPlayers(time: number, deltaTime: number = 16, camera?: Camera): PlayerWithChat[] {
   initializeCenturions();
   
-  // Reuse array from pool to avoid allocation
-  const centurionPlayers = playerArrayPool.acquire();
+  // Small array, only created on forest map - acceptable allocation
+  // The real optimization is caching the PlayerWithChat objects themselves
+  const centurionPlayers = [] as PlayerWithChat[];
   
   // Calculate viewport bounds for distance checking
   let viewportWidth = Infinity;
@@ -10000,11 +10001,30 @@ let currentMapType: MapType = 'cafe';
 
 export function setCurrentMap(mapType: MapType): void {
   if (mapType !== currentMapType) {
+    const previousMapType = currentMapType;
     console.log(`Map type changed from ${currentMapType} to ${mapType}`);
     currentMapType = mapType;
     // Clear animation state for all players when map changes to prevent corruption
     // This fixes laggy movement when joining casino with speed boosts
     extendedPlayerAnimations.clear();
+    
+    // Clear centurion player cache when switching maps (centurions are forest-specific)
+    if (mapType !== 'forest') {
+      centurionPlayerCache.clear();
+    }
+    
+    // Clear casino-specific caches when leaving casino
+    if (previousMapType === 'casino' && mapType !== 'casino') {
+      // Leaving casino - clear casino caches
+      plazaWallTopCache = null;
+      plazaWallTopCacheInitialized = false;
+      slotMachineCache = null;
+      slotMachineCacheInitialized = false;
+      casinoPathsCache = null;
+      casinoPathsCacheInitialized = false;
+      console.log('Cleared casino caches when leaving casino');
+    }
+    
     console.log('Cleared player animation state due to map change');
   }
 }

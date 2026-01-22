@@ -1371,7 +1371,8 @@ export function GameCanvas() {
           }
         } else if (treeState && (!treeState.cutBy || treeState.isCut)) {
           // Tree is no longer being cut - clear tracking for any players cutting it
-          for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+          // Use for...of directly on Map instead of .entries() to avoid iterator allocation
+          for (const [playerId, cutting] of otherPlayersCuttingRef.current) {
             if (cutting.treeId === treeId) {
               otherPlayersCuttingRef.current.delete(playerId);
               setPlayerChopping(playerId, false);
@@ -1381,7 +1382,8 @@ export function GameCanvas() {
       }
       
       // Clean up tracking for players who are no longer cutting (or finished)
-      for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+      // Use for...of directly on Map instead of .entries() to avoid iterator allocation
+      for (const [playerId, cutting] of otherPlayersCuttingRef.current) {
         const treeState = treeStates.get(cutting.treeId);
         // Check if progress is complete (>= 1) or tree state indicates cutting is done
         const elapsed = currentTime - cutting.startTime;
@@ -1454,7 +1456,8 @@ export function GameCanvas() {
           
           // Check all players in the room
           const allPlayers = useGameStore.getState().players;
-          allPlayers.forEach(player => {
+          // Use for...of instead of forEach to avoid iterator allocation
+          for (const [id, player] of allPlayers) {
             if (player.id !== currentPlayerId) {
               // Calculate distance from player to tree center
               const playerCenterX = player.x + PLAYER_WIDTH / 2;
@@ -1468,7 +1471,7 @@ export function GameCanvas() {
                 playChoppingSound();
               }
             }
-          });
+          }
         }
       }
       
@@ -2400,7 +2403,8 @@ export function GameCanvas() {
     const viewportTop = camera.y - viewportMargin;
     const viewportBottom = camera.y + (CANVAS_HEIGHT / camera.zoom) + viewportMargin;
     
-    currentPlayers.forEach((player, id) => {
+    // Use for...of instead of forEach to avoid iterator allocation
+    for (const [id, player] of currentPlayers) {
       if (id === currentPlayerId) return;
       
       if (typeof player.x !== 'number' || typeof player.y !== 'number') return;
@@ -2435,10 +2439,11 @@ export function GameCanvas() {
         interpolated.renderX = interpolated.targetX;
         interpolated.renderY = interpolated.targetY;
       }
-    });
+    }
     
     // Remove disconnected players
-    for (const id of interpolatedPlayers.keys()) {
+    // Use for...of directly on Map instead of .keys() to avoid iterator allocation
+    for (const [id] of interpolatedPlayers) {
       if (!currentPlayers.has(id)) {
         interpolatedPlayers.delete(id);
       }
@@ -2621,7 +2626,8 @@ export function GameCanvas() {
     }
     
     let viewportChecks = 0;
-    interpolatedPlayers.forEach((interpolated, id) => {
+    // Use for...of instead of forEach to avoid iterator allocation
+    for (const [id, interpolated] of interpolatedPlayers) {
       if (typeof interpolated.renderX === 'number' && typeof interpolated.renderY === 'number') {
         // Only render if visible
         viewportChecks++;
@@ -2642,7 +2648,7 @@ export function GameCanvas() {
           allPlayers.push(wrapper);
         }
       }
-    });
+    }
     
     // Add wandering villagers and centurions to the player list (so they're sorted and drawn together)
     if (currentMapType === 'forest') {
@@ -2669,8 +2675,8 @@ export function GameCanvas() {
           allPlayers.push(wrapper);
         }
       }
-      // Release centurionPlayers array back to pool (it's from playerArrayPool)
-      playerArrayPool.release(centurionPlayers);
+      // Note: centurionPlayers array is small and only created on forest map
+      // The real optimization is caching the PlayerWithChat objects (done in renderer.ts)
     }
     
     // Sort by Y for depth ordering
@@ -2947,7 +2953,8 @@ export function GameCanvas() {
       
       // Draw progress bars for other players cutting trees
       const allTrees = getForestTrees();
-      for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+      // Use for...of directly on Map instead of .entries() to avoid iterator allocation
+      for (const [playerId, cutting] of otherPlayersCuttingRef.current) {
         const tree = allTrees.find(t => getTreeId(t) === cutting.treeId);
         if (tree) {
           const elapsed = currentTime - cutting.startTime;
