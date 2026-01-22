@@ -1625,7 +1625,8 @@ export function GameCanvas() {
       }
       
       // Block movement if loot box modal is open
-      if (selectedLootBox) {
+      const blackjackTableOpen = useGameStore.getState().blackjackTableOpen;
+      if (selectedLootBox || blackjackTableOpen) {
         // Clear click target when modal opens
         if (currentClickTarget) {
           useGameStore.getState().setClickTarget(null, null);

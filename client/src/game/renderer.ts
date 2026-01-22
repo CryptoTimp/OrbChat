@@ -8686,22 +8686,99 @@ function drawBlackjackTablesImpl(ctx: CanvasRenderingContext2D, time: number, ho
     ctx.arc(dealerX, dealerY, 10 * p, 0, Math.PI * 2);
     ctx.stroke();
     
-    // === ANIMATED GREEN LIGHTBEAM ABOVE BLACKJACK DEALER - HEAVILY OPTIMIZED ===
-    // OPTIMIZED: Simplified lightbeam - single simple rectangle instead of multiple gradients
+    // === COSMIC LIGHTBEAM ABOVE BLACKJACK DEALER WITH PARTICLE EFFECTS ===
     const dealerHeadY = dealerY - (PLAYER_HEIGHT * SCALE) / 2;
-    const beamHeight = 80 * p; // Reduced height
-    const baseBeamWidth = 6 * p; // Reduced width
+    const beamHeight = 100 * p; // Increased height for cosmic effect
+    const baseBeamWidth = 8 * p; // Slightly wider for cosmic theme
     const beamStartY = dealerHeadY - 5 * p;
     
-    // Simplified animation - cached time
-    const cachedTime = Math.floor(time / 32) * 32; // Update every ~32ms
-    const beamIntensity = Math.sin(cachedTime * 0.002 + i * Math.PI / 2) * 0.2 + 0.6; // Reduced intensity range
-    const animatedBeamWidth = baseBeamWidth;
+    // Animation - cached time for performance
+    const cachedTime = Math.floor(time / 16) * 16; // Update every ~16ms for smoother animation
+    const beamIntensity = Math.sin(cachedTime * 0.003 + i * Math.PI / 2) * 0.3 + 0.7; // Intensity 0.4-1.0
+    const pulse = Math.sin(cachedTime * 0.002 + i * Math.PI / 2) * 0.15 + 1; // Pulse width
+    const animatedBeamWidth = baseBeamWidth * pulse;
     const animatedBeamX = dealerX - animatedBeamWidth / 2;
     
-    // OPTIMIZED: Single simple fill instead of multiple gradients
-    ctx.fillStyle = `rgba(34, 197, 94, ${beamIntensity * 0.4})`; // Simple green fill
+    // Cosmic gradient colors (purple, blue, cyan)
+    const cosmicColors = [
+      { r: 147, g: 51, b: 234 },   // Purple
+      { r: 79, g: 70, b: 229 },    // Indigo
+      { r: 59, g: 130, b: 246 },   // Blue
+      { r: 6, g: 182, b: 212 }     // Cyan
+    ];
+    
+    // Main cosmic beam gradient
+    const beamGradient = ctx.createLinearGradient(animatedBeamX, beamStartY, animatedBeamX, beamStartY - beamHeight);
+    beamGradient.addColorStop(0, `rgba(147, 51, 234, ${beamIntensity * 0.6})`); // Purple at bottom
+    beamGradient.addColorStop(0.3, `rgba(79, 70, 229, ${beamIntensity * 0.5})`); // Indigo
+    beamGradient.addColorStop(0.6, `rgba(59, 130, 246, ${beamIntensity * 0.4})`); // Blue
+    beamGradient.addColorStop(0.9, `rgba(6, 182, 212, ${beamIntensity * 0.3})`); // Cyan
+    beamGradient.addColorStop(1, 'rgba(6, 182, 212, 0)'); // Fade to transparent at top
+    
+    // Draw main cosmic beam
+    ctx.fillStyle = beamGradient;
     ctx.fillRect(animatedBeamX, beamStartY - beamHeight, animatedBeamWidth, beamHeight);
+    
+    // Outer glow effect
+    ctx.shadowBlur = 20 * p * pulse;
+    ctx.shadowColor = `rgba(147, 51, 234, ${beamIntensity * 0.5})`;
+    ctx.fillRect(animatedBeamX - 4 * p, beamStartY - beamHeight, animatedBeamWidth + 8 * p, beamHeight);
+    ctx.shadowBlur = 0;
+    
+    // Inner bright core
+    const coreGradient = ctx.createLinearGradient(animatedBeamX, beamStartY, animatedBeamX, beamStartY - beamHeight * 0.8);
+    coreGradient.addColorStop(0, `rgba(255, 255, 255, ${beamIntensity * 0.4})`);
+    coreGradient.addColorStop(0.5, `rgba(147, 51, 234, ${beamIntensity * 0.3})`);
+    coreGradient.addColorStop(1, 'rgba(147, 51, 234, 0)');
+    ctx.fillStyle = coreGradient;
+    ctx.fillRect(animatedBeamX + 2 * p, beamStartY - beamHeight * 0.8, animatedBeamWidth - 4 * p, beamHeight * 0.8);
+    
+    // Shimmer effect (moving highlight)
+    const shimmerOffset = (cachedTime * 0.001) % (beamHeight * 0.6);
+    const shimmerGradient = ctx.createLinearGradient(
+      animatedBeamX, 
+      beamStartY - shimmerOffset, 
+      animatedBeamX, 
+      beamStartY - shimmerOffset - beamHeight * 0.3
+    );
+    shimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    shimmerGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)');
+    shimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = shimmerGradient;
+    ctx.fillRect(animatedBeamX, beamStartY - shimmerOffset - beamHeight * 0.3, animatedBeamWidth, beamHeight * 0.3);
+    
+    // Cosmic particles within the beam
+    const cosmicParticleCount = 15;
+    for (let pIdx = 0; pIdx < cosmicParticleCount; pIdx++) {
+      // Create stable particle positions based on dealer position and time
+      const particlePhase = (cachedTime * 0.001 + pIdx * 0.3 + i) % (Math.PI * 2);
+      const particleY = beamStartY - beamHeight * 0.2 - (pIdx / cosmicParticleCount) * beamHeight * 0.8;
+      const particleX = dealerX + Math.sin(particlePhase) * (animatedBeamWidth * 0.3);
+      const particleSize = (Math.sin(particlePhase * 2) * 0.5 + 0.5) * 2 * p + 1 * p;
+      const particleAlpha = (Math.sin(particlePhase * 3) * 0.3 + 0.7) * beamIntensity;
+      const particleColor = cosmicColors[pIdx % cosmicColors.length];
+      
+      // Draw particle with glow
+      ctx.globalAlpha = particleAlpha * 0.6;
+      ctx.fillStyle = `rgb(${particleColor.r}, ${particleColor.g}, ${particleColor.b})`;
+      ctx.shadowColor = `rgba(${particleColor.r}, ${particleColor.g}, ${particleColor.b}, 0.8)`;
+      ctx.shadowBlur = 8 * p;
+      ctx.beginPath();
+      ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Inner bright core
+      ctx.globalAlpha = particleAlpha * 0.9;
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(particleX, particleY, particleSize * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Reset shadow and alpha
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
     
     // Draw dealer NPC
     // Dealer should face south (toward the seats/players)

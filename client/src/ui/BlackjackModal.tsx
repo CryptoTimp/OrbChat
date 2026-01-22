@@ -6,6 +6,239 @@ import { BlackjackTableState, BlackjackPlayer, BlackjackHand, BlackjackCard, Pla
 import { getOrbCountColor, setDealerSpeechBubble } from '../game/renderer';
 import { GAME_CONSTANTS } from '../types';
 
+// Red particle effect for max bet (1M)
+function MaxBetParticleEffect() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+  const particlesRef = useRef<Array<{x: number; y: number; vx: number; vy: number; life: number; size: number; color: string}>>([]);
+  const timeRef = useRef(0);
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Set canvas size
+    const resize = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    
+    // Initialize particles
+    const initParticles = () => {
+      particlesRef.current = [];
+      for (let i = 0; i < 30; i++) {
+        particlesRef.current.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2,
+          life: Math.random(),
+          size: Math.random() * 3 + 2,
+          color: ['#ff0000', '#ff3333', '#ff6666', '#ff9999', '#ffcccc'][Math.floor(Math.random() * 5)]
+        });
+      }
+    };
+    initParticles();
+    
+    const animate = () => {
+      timeRef.current += 0.02;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Update and draw particles
+      particlesRef.current.forEach((p, i) => {
+        // Update position
+        p.x += p.vx;
+        p.y += p.vy;
+        
+        // Wrap around edges
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+        
+        // Update life for pulsing effect
+        p.life += 0.03;
+        if (p.life > 1) p.life = 0;
+        
+        // Calculate alpha with pulsing
+        const pulse = Math.sin(p.life * Math.PI * 2) * 0.5 + 0.5;
+        const alpha = 0.3 + pulse * 0.5;
+        
+        // Draw particle with glow
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner bright core
+        ctx.globalAlpha = alpha * 0.8;
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      
+      // Draw gradient overlay
+      const gradient = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, 0,
+        canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 2
+      );
+      gradient.addColorStop(0, 'rgba(255, 0, 0, 0.2)');
+      gradient.addColorStop(0.5, 'rgba(255, 50, 50, 0.1)');
+      gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+      
+      ctx.globalAlpha = 0.3 + Math.sin(timeRef.current) * 0.2;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    
+    animate();
+    
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+  
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none rounded-full"
+      style={{ zIndex: -1 }}
+    />
+  );
+}
+
+// Galactic background component with animated stars and nebula
+function GalacticBackground() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+  const starsRef = useRef<Array<{x: number; y: number; size: number; brightness: number; speed: number}>>([]);
+  const timeRef = useRef(0);
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Set canvas size
+    const resize = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    
+    // Initialize stars
+    if (starsRef.current.length === 0) {
+      for (let i = 0; i < 150; i++) {
+        starsRef.current.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 2 + 0.5,
+          brightness: Math.random(),
+          speed: Math.random() * 0.3 + 0.1
+        });
+      }
+    }
+    
+    const animate = () => {
+      timeRef.current += 0.01;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw nebula clouds
+      const gradient1 = ctx.createRadialGradient(
+        canvas.width * 0.3, canvas.height * 0.2, 0,
+        canvas.width * 0.3, canvas.height * 0.2, canvas.width * 0.5
+      );
+      gradient1.addColorStop(0, 'rgba(147, 51, 234, 0.15)');
+      gradient1.addColorStop(1, 'rgba(147, 51, 234, 0)');
+      ctx.fillStyle = gradient1;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const gradient2 = ctx.createRadialGradient(
+        canvas.width * 0.7, canvas.height * 0.8, 0,
+        canvas.width * 0.7, canvas.height * 0.8, canvas.width * 0.4
+      );
+      gradient2.addColorStop(0, 'rgba(79, 70, 229, 0.15)');
+      gradient2.addColorStop(1, 'rgba(79, 70, 229, 0)');
+      ctx.fillStyle = gradient2;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw animated stars
+      starsRef.current.forEach(star => {
+        star.brightness += star.speed * 0.01;
+        if (star.brightness > 1) star.brightness = 0;
+        
+        const alpha = 0.3 + Math.sin(star.brightness * Math.PI * 2) * 0.5;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+        ctx.shadowBlur = 3;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      
+      // Draw twinkling particles
+      for (let i = 0; i < 20; i++) {
+        const x = (Math.sin(timeRef.current + i) * 0.5 + 0.5) * canvas.width;
+        const y = (Math.cos(timeRef.current * 0.7 + i) * 0.5 + 0.5) * canvas.height;
+        const size = Math.sin(timeRef.current * 2 + i) * 1.5 + 2;
+        const alpha = Math.sin(timeRef.current * 3 + i) * 0.3 + 0.4;
+        
+        const colors = ['#9400d3', '#4169e1', '#00ced1', '#ff69b4'];
+        const color = colors[i % colors.length];
+        
+        ctx.fillStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 5;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    
+    animate();
+    
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+  
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ zIndex: 0 }}
+    />
+  );
+}
+
 const MIN_BET = 10000;
 const MAX_BET = 1000000;
 
@@ -37,12 +270,12 @@ function getCardText(card: BlackjackCard): string {
   return `${card.rank}${card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}`;
 }
 
-// Get card color
+// Get card color - always white for visibility on galactic background
 function getCardColor(card: BlackjackCard): string {
-  return card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-500' : 'text-black';
+  return 'text-white';
 }
 
-// Card component with animation
+// Card component with animation and particle effects
 function AnimatedCard({ 
   card, 
   index, 
@@ -56,7 +289,59 @@ function AnimatedCard({
   isAnimating?: boolean;
   animationProgress?: number;
 }) {
-  const baseClasses = "w-16 h-24 rounded-lg border-2 flex flex-col items-center justify-center font-pixel text-sm shadow-xl transition-all duration-300";
+  const [particles, setParticles] = useState<Array<{x: number; y: number; vx: number; vy: number; life: number; size: number; color: string}>>([]);
+  const particleRef = useRef<number>();
+  
+  // Particle effect for cards
+  useEffect(() => {
+    if (!card || isHidden) {
+      setParticles([]);
+      if (particleRef.current) {
+        cancelAnimationFrame(particleRef.current);
+      }
+      return;
+    }
+    
+    const animate = () => {
+      setParticles(prev => {
+        const now = Date.now();
+        const newParticles = prev.map(p => ({
+          ...p,
+          x: p.x + p.vx,
+          y: p.y + p.vy,
+          life: p.life - 0.015,
+          size: p.size * 0.99
+        })).filter(p => p.life > 0 && p.size > 0);
+        
+        // Spawn new particles occasionally
+        if (Math.random() < 0.1) {
+          const galacticColors = ['#ffffff', '#9400d3', '#4169e1', '#00ced1', '#ff69b4', '#9370db'];
+          newParticles.push({
+            x: 50 + (Math.random() - 0.5) * 20,
+            y: 50 + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5,
+            life: 1.0,
+            size: Math.random() * 2 + 1,
+            color: galacticColors[Math.floor(Math.random() * galacticColors.length)]
+          });
+        }
+        
+        return newParticles;
+      });
+      
+      particleRef.current = requestAnimationFrame(animate);
+    };
+    
+    particleRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (particleRef.current) {
+        cancelAnimationFrame(particleRef.current);
+      }
+    };
+  }, [card, isHidden]);
+  
+  const baseClasses = "w-16 h-24 rounded-lg border-2 flex flex-col items-center justify-center font-pixel text-sm shadow-xl transition-all duration-300 relative overflow-visible";
   
   if (isAnimating && animationProgress !== undefined) {
     // Animate from dealer position (top center) to player position
@@ -71,7 +356,7 @@ function AnimatedCard({
     
     return (
       <div
-        className={`${baseClasses} bg-white border-gray-400 ${card ? getCardColor(card) : ''}`}
+        className={`${baseClasses} bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 border-purple-400 ${card ? getCardColor(card) : ''}`}
         style={{
           position: 'absolute',
           left: `${currentX}%`,
@@ -79,15 +364,16 @@ function AnimatedCard({
           transform: `translate(-50%, -50%) scale(${scale}) rotate(${rotation}deg)`,
           zIndex: 1000,
           opacity: animationProgress < 0.1 ? 0 : 1,
+          boxShadow: '0 0 20px rgba(147, 51, 234, 0.5), 0 0 40px rgba(79, 70, 229, 0.3)',
         }}
       >
         {card && !isHidden ? (
           <>
-            <span className="text-xs">{card.rank}</span>
-            <span className="text-lg">{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</span>
+            <span className="text-xs text-white relative z-10 font-bold">{card.rank}</span>
+            <span className="text-lg text-white relative z-10 font-bold">{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</span>
           </>
         ) : (
-          <span className="text-gray-500 text-xl">?</span>
+          <span className="text-purple-200 text-xl">?</span>
         )}
       </div>
     );
@@ -97,23 +383,42 @@ function AnimatedCard({
     <div
       className={`${baseClasses} ${
         isHidden 
-          ? 'bg-gray-700 border-gray-600' 
-          : 'bg-white border-gray-400'
+          ? 'bg-gradient-to-br from-slate-800 via-purple-800 to-indigo-800 border-purple-500' 
+          : 'bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 border-purple-400'
       } ${!isHidden && card ? getCardColor(card) : ''}`}
       style={{ 
         transform: `rotate(${(index - 2) * 3}deg)`,
-        animation: isAnimating ? 'cardDeal 0.5s ease-out' : undefined
+        animation: isAnimating ? 'cardDeal 0.5s ease-out' : undefined,
+        boxShadow: !isHidden && card ? '0 0 15px rgba(147, 51, 234, 0.4), 0 0 30px rgba(79, 70, 229, 0.2)' : undefined,
       }}
     >
+      {/* Particle effects */}
+      {particles.map((p, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            left: `${p.x}%`,
+            top: `${p.y}%`,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            backgroundColor: p.color,
+            opacity: p.life,
+            transform: 'translate(-50%, -50%)',
+            boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
+          }}
+        />
+      ))}
+      
       {isHidden ? (
-        <span className="text-gray-500 text-xl">?</span>
+        <span className="text-purple-200 text-xl relative z-10">?</span>
       ) : card ? (
         <>
-          <span className="text-xs">{card.rank}</span>
-          <span className="text-lg">{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</span>
+          <span className="text-xs text-white relative z-10 font-bold">{card.rank}</span>
+          <span className="text-lg text-white relative z-10 font-bold">{card.suit === 'hearts' ? '♥' : card.suit === 'diamonds' ? '♦' : card.suit === 'clubs' ? '♣' : '♠'}</span>
         </>
       ) : (
-        <span className="text-gray-400 text-xs">No card</span>
+        <span className="text-purple-300 text-xs">No card</span>
       )}
     </div>
   );
@@ -152,6 +457,12 @@ export function BlackjackModal() {
   const previousCardCountsRef = useRef<Map<string, { dealer: number; players: Map<string, number> }>>(new Map());
   const [cardAnimations, setCardAnimations] = useState<Map<string, { progress: number; startTime: number }>>(new Map());
   const previousBustStatesRef = useRef<Map<string, boolean>>(new Map()); // Track previous bust state for each hand (key: playerId-handIndex)
+  
+  // Drag state for modal
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const modalRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     if (blackjackTableOpen && selectedTableId) {
@@ -521,6 +832,68 @@ export function BlackjackModal() {
     // The balance display will automatically update via the localPlayer dependency
   }, [localPlayer?.orbs]);
   
+  // Drag handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (modalRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Calculate offset from click position to where the user clicked on the modal
+      // The modal is centered with transform: translate(calc(50% + ${modalPosition.x}px), ...)
+      // So we need to calculate the offset relative to the modal's current center position
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const modalCenterX = centerX + modalPosition.x;
+      const modalCenterY = centerY + modalPosition.y;
+      
+      // Calculate offset from click position to modal's center
+      // This ensures the cursor stays exactly where the user clicked
+      setDragOffset({
+        x: e.clientX - modalCenterX,
+        y: e.clientY - modalCenterY
+      });
+      setIsDragging(true);
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        e.preventDefault();
+        // Calculate new center position based on mouse position and offset
+        // The offset is the distance from click point to modal center
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+        
+        // New center = mouse position - offset from click to center
+        const newCenterX = e.clientX - dragOffset.x;
+        const newCenterY = e.clientY - dragOffset.y;
+        
+        // Convert to offset from viewport center
+        setModalPosition({
+          x: newCenterX - centerX,
+          y: newCenterY - centerY
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = 'none'; // Prevent text selection during drag
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging, dragOffset]);
+  
   // Player sprite rendering removed - was causing glitches
   
   if (!blackjackTableOpen) return null;
@@ -626,10 +999,24 @@ export function BlackjackModal() {
         }
       `}</style>
       
-      <div className="bg-gray-900 rounded-lg p-4 border-2 border-amber-500 max-w-[1200px] w-full mx-2 max-h-[95vh] overflow-y-auto overflow-x-hidden pointer-events-auto" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-pixel text-amber-400">🃏 Blackjack Table {selectedTableId?.replace('blackjack_table_', '')}</h2>
+      <div 
+        ref={modalRef}
+        className="bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 rounded-lg p-4 border-2 border-purple-400 max-w-[1200px] w-full mx-2 max-h-[95vh] overflow-y-auto overflow-x-hidden pointer-events-auto shadow-2xl" 
+        style={{ 
+          boxShadow: '0 0 50px rgba(147, 51, 234, 0.5)',
+          transform: modalPosition.x !== 0 || modalPosition.y !== 0 
+            ? `translate(calc(50% + ${modalPosition.x}px), calc(50% + ${modalPosition.y}px))` 
+            : undefined,
+          cursor: isDragging ? 'grabbing' : 'default',
+        }} 
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - draggable */}
+        <div 
+          className="flex items-center justify-between mb-4 cursor-grab active:cursor-grabbing"
+          onMouseDown={handleMouseDown}
+        >
+          <h2 className="text-2xl font-pixel text-purple-200" style={{ textShadow: '0 0 10px rgba(147, 51, 234, 0.8)' }}> Blackjack Table {selectedTableId?.replace('blackjack_table_', '')}</h2>
           <div className="flex items-center gap-4">
             {localPlayer && balanceColorInfo && (
               <div className="flex flex-col gap-1">
@@ -674,32 +1061,44 @@ export function BlackjackModal() {
         
         {(!blackjackGameState && isJoining) ? (
           <div className="text-center py-8">
-            <p className="text-gray-300 font-pixel">Joining table...</p>
+            <p className="text-purple-200 font-pixel" style={{ textShadow: '0 0 10px rgba(147, 51, 234, 0.8)' }}>Joining table...</p>
           </div>
         ) : !blackjackGameState ? (
           <div className="text-center py-8">
-            <p className="text-red-400 font-pixel mb-2">Failed to join table.</p>
+            <p className="text-red-300 font-pixel mb-2" style={{ textShadow: '0 0 10px rgba(239, 68, 68, 0.8)' }}>Failed to join table.</p>
             <button
               onClick={() => {
                 setIsJoining(true);
                 joinBlackjackTable(selectedTableId);
               }}
-              className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded font-pixel"
+              className="mt-4 px-4 py-2 bg-gradient-to-br from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded font-pixel shadow-lg transition-all"
+              style={{ boxShadow: '0 0 15px rgba(147, 51, 234, 0.5)' }}
             >
               Retry
             </button>
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Table Layout - Proper Perspective */}
-            <div className="relative bg-gradient-to-b from-green-900 to-green-800 rounded-lg p-4 border-4 border-amber-600" style={{ minHeight: '500px', height: '55vh' }}>
+            {/* Table Layout - Galactic Theme */}
+            <div 
+              className="relative rounded-lg p-4 border-4 border-purple-400 overflow-hidden" 
+              style={{ 
+                minHeight: '500px', 
+                height: '55vh',
+                background: 'radial-gradient(ellipse at center, #1a0a2e 0%, #0d0520 50%, #000000 100%)',
+                boxShadow: 'inset 0 0 100px rgba(147, 51, 234, 0.3), 0 0 50px rgba(79, 70, 229, 0.5)',
+                position: 'relative',
+              }}
+            >
+              {/* Galactic background with stars */}
+              <GalacticBackground />
               
               {/* Dealer Section - Top (Opposite Side) */}
-              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-center w-full">
-                <div className="inline-block bg-gray-800 rounded-lg px-6 py-3 mb-4 border-2 border-gray-600">
-                  <h3 className="text-xl font-pixel text-amber-300">Dealer</h3>
+              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-center w-full z-10">
+                <div className="inline-block bg-gradient-to-br from-purple-900/80 to-indigo-900/80 backdrop-blur-sm rounded-lg px-6 py-3 mb-4 border-2 border-purple-400 shadow-lg" style={{ boxShadow: '0 0 20px rgba(147, 51, 234, 0.5)' }}>
+                  <h3 className="text-xl font-pixel text-purple-200" style={{ textShadow: '0 0 10px rgba(147, 51, 234, 0.8)' }}>Dealer</h3>
                   {(blackjackGameState.gameState === 'finished' || blackjackGameState.gameState === 'dealer_turn') && (
-                    <p className="text-gray-300 font-pixel text-sm mt-1">
+                    <p className="text-purple-200 font-pixel text-sm mt-1">
                       Value: {dealerValue} {blackjackGameState.dealerHasBlackjack && '(Blackjack!)'}
                     </p>
                   )}
@@ -725,8 +1124,8 @@ export function BlackjackModal() {
                     );
                   })}
                   {blackjackGameState.dealerHand.length === 0 && (
-                    <div className="w-16 h-24 rounded-lg border-2 border-gray-600 bg-gray-800/50 flex items-center justify-center">
-                      <span className="text-gray-500 text-xs"></span>
+                    <div className="w-16 h-24 rounded-lg border-2 border-purple-500 bg-gradient-to-br from-slate-800/50 via-purple-800/50 to-indigo-800/50 flex items-center justify-center">
+                      <span className="text-purple-300 text-xs"></span>
                     </div>
                   )}
                 </div>
@@ -777,7 +1176,7 @@ export function BlackjackModal() {
                           {/* Turn Indicator - Top */}
                           {isTheirTurn && (
                             <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 z-30">
-                              <div className="bg-green-500 rounded-full w-10 h-10 flex items-center justify-center animate-pulse shadow-lg border-2 border-green-300">
+                              <div className="bg-purple-500 rounded-full w-10 h-10 flex items-center justify-center animate-pulse shadow-lg border-2 border-purple-300" style={{ boxShadow: '0 0 20px rgba(147, 51, 234, 0.8)' }}>
                                 <span className="text-white text-xl">👈</span>
                               </div>
                             </div>
@@ -786,8 +1185,23 @@ export function BlackjackModal() {
                           {/* Bet Display - Below turn indicator */}
                           {player && totalBet > 0 && (
                             <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-30">
-                              <div className="bg-gradient-to-b from-amber-600 to-amber-700 rounded-full px-3 py-1.5 border-2 border-amber-400 shadow-xl">
-                                <span className="font-pixel text-xs text-white font-bold">
+                              <div 
+                                className={`rounded-full px-3 py-1.5 border-2 shadow-xl relative overflow-hidden ${
+                                  totalBet >= 1000000 
+                                    ? 'bg-gradient-to-b from-red-600 to-red-800 border-red-400' 
+                                    : 'bg-gradient-to-b from-purple-600 to-indigo-700 border-purple-400'
+                                }`} 
+                                style={{ 
+                                  boxShadow: totalBet >= 1000000 
+                                    ? '0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 50, 50, 0.5)' 
+                                    : '0 0 15px rgba(147, 51, 234, 0.6)',
+                                  width: 'fit-content',
+                                  minWidth: '80px',
+                                  height: '32px'
+                                }}
+                              >
+                                {totalBet >= 1000000 && <MaxBetParticleEffect />}
+                                <span className="font-pixel text-xs text-white font-bold relative z-10">
                                   {totalBet.toLocaleString()}
                                 </span>
                               </div>
@@ -816,11 +1230,11 @@ export function BlackjackModal() {
                           ) : (
                             // Show "No cards" placeholder for empty seats or players without cards
                             <div className="absolute top-8 left-1/2 transform -translate-x-1/2 flex gap-1 justify-center z-20">
-                              <div className="w-16 h-24 rounded-lg border-2 border-gray-600 bg-gray-800/50 flex items-center justify-center">
-                                <span className="text-gray-500 text-xs"></span>
+                              <div className="w-16 h-24 rounded-lg border-2 border-purple-500 bg-gradient-to-br from-slate-800/50 via-purple-800/50 to-indigo-800/50 flex items-center justify-center">
+                                <span className="text-purple-300 text-xs"></span>
                               </div>
-                              <div className="w-16 h-24 rounded-lg border-2 border-gray-600 bg-gray-800/50 flex items-center justify-center">
-                                <span className="text-gray-500 text-xs"></span>
+                              <div className="w-16 h-24 rounded-lg border-2 border-purple-500 bg-gradient-to-br from-slate-800/50 via-purple-800/50 to-indigo-800/50 flex items-center justify-center">
+                                <span className="text-purple-300 text-xs"></span>
                               </div>
                             </div>
                           )}
@@ -828,7 +1242,7 @@ export function BlackjackModal() {
                           {/* Hand Value - Below cards */}
                           {player && handValue !== null && (
                             <div className="absolute top-36 left-1/2 transform -translate-x-1/2 z-20">
-                              <div className="bg-blue-600 rounded-full w-8 h-8 flex items-center justify-center border-2 border-blue-400 shadow-lg">
+                              <div className="bg-gradient-to-br from-cyan-600 to-blue-600 rounded-full w-8 h-8 flex items-center justify-center border-2 border-cyan-400 shadow-lg" style={{ boxShadow: '0 0 15px rgba(6, 182, 212, 0.6)' }}>
                                 <span className="font-pixel text-xs text-white font-bold">{handValue}</span>
                               </div>
                             </div>
@@ -838,15 +1252,15 @@ export function BlackjackModal() {
                           {player ? (
                             <div className={`absolute top-48 left-1/2 transform -translate-x-1/2 px-3 py-1.5 rounded text-xs font-pixel border-2 shadow-lg z-30 ${
                               isCurrentPlayer 
-                                ? 'bg-amber-500 text-white border-amber-400' 
+                                ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white border-purple-400' 
                                 : isTheirTurn 
-                                  ? 'bg-green-500 text-white border-green-400' 
-                                  : 'bg-gray-800 text-gray-300 border-gray-600'
-                            }`}>
+                                  ? 'bg-gradient-to-br from-cyan-600 to-blue-600 text-white border-cyan-400' 
+                                  : 'bg-gradient-to-br from-slate-800/80 to-purple-900/80 text-purple-200 border-purple-600'
+                            }`} style={isCurrentPlayer || isTheirTurn ? { boxShadow: '0 0 15px rgba(147, 51, 234, 0.6)' } : {}}>
                               {player.playerName} {isCurrentPlayer && '(You)'}
                             </div>
                           ) : (
-                            <div className="absolute top-48 left-1/2 transform -translate-x-1/2 px-3 py-1.5 rounded text-xs font-pixel bg-gray-800/50 text-gray-600 border border-dashed border-gray-700 z-30">
+                            <div className="absolute top-48 left-1/2 transform -translate-x-1/2 px-3 py-1.5 rounded text-xs font-pixel bg-slate-800/50 text-purple-400 border border-dashed border-purple-600 z-30">
                               Seat {seatIndex + 1}
                             </div>
                           )}
@@ -865,8 +1279,8 @@ export function BlackjackModal() {
             
             {/* Action Buttons */}
             {currentPlayer && (
-              <div className="bg-gray-800 rounded-lg p-4 border-2 border-gray-700">
-                <h3 className="text-lg font-pixel text-amber-300 mb-4">Your Actions</h3>
+              <div className="bg-gradient-to-br from-slate-800/90 via-purple-900/90 to-indigo-900/90 backdrop-blur-sm rounded-lg p-4 border-2 border-purple-500 shadow-lg" style={{ boxShadow: '0 0 20px rgba(147, 51, 234, 0.4)' }}>
+                <h3 className="text-lg font-pixel text-purple-200 mb-4" style={{ textShadow: '0 0 10px rgba(147, 51, 234, 0.8)' }}>Your Actions</h3>
                 
                 {blackjackGameState.gameState === 'waiting' || blackjackGameState.gameState === 'betting' ? (
                   <div>
@@ -886,11 +1300,12 @@ export function BlackjackModal() {
                                 disabled={!canAfford}
                                 className={`px-4 py-2 rounded font-pixel text-sm border-2 transition-all ${
                                   isSelected
-                                    ? 'bg-amber-600 text-white border-amber-400 shadow-lg scale-105'
+                                    ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white border-purple-400 shadow-lg scale-105'
                                     : canAfford
-                                      ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600 hover:border-gray-500'
-                                      : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed opacity-50'
+                                      ? 'bg-gradient-to-br from-slate-700 to-purple-800 text-purple-200 border-purple-600 hover:bg-gradient-to-br hover:from-purple-700 hover:to-indigo-700 hover:border-purple-400'
+                                      : 'bg-slate-800 text-purple-500 border-purple-700 cursor-not-allowed opacity-50'
                                 }`}
+                                style={isSelected ? { boxShadow: '0 0 15px rgba(147, 51, 234, 0.6)' } : {}}
                               >
                                 {amount >= 1000000 
                                   ? `${(amount / 1000000).toFixed(0)}M`
@@ -904,13 +1319,14 @@ export function BlackjackModal() {
                         <button
                           onClick={handleBet}
                           disabled={betAmount < MIN_BET || betAmount > MAX_BET || betAmount > (localPlayer?.orbs || 0)}
-                          className="w-full px-6 py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded font-pixel text-lg"
+                          className="w-full px-6 py-3 bg-gradient-to-br from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded font-pixel text-lg transition-all shadow-lg"
+                          style={{ boxShadow: '0 0 20px rgba(147, 51, 234, 0.5)' }}
                         >
                           Place Bet ({betAmount.toLocaleString()} orbs)
                         </button>
                       </div>
                     ) : (
-                      <p className="text-gray-300 font-pixel">Waiting for other players to place bets...</p>
+                      <p className="text-purple-200 font-pixel">Waiting for other players to place bets...</p>
                     )}
                   </div>
                 ) : (
@@ -918,7 +1334,8 @@ export function BlackjackModal() {
                     {canHit && (
                       <button
                         onClick={handleHit}
-                        className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded font-pixel text-lg"
+                        className="px-6 py-3 bg-gradient-to-br from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded font-pixel text-lg shadow-lg transition-all"
+                        style={{ boxShadow: '0 0 15px rgba(6, 182, 212, 0.5)' }}
                       >
                         Hit
                       </button>
@@ -926,7 +1343,8 @@ export function BlackjackModal() {
                     {canStand && (
                       <button
                         onClick={handleStand}
-                        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded font-pixel text-lg"
+                        className="px-6 py-3 bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded font-pixel text-lg shadow-lg transition-all"
+                        style={{ boxShadow: '0 0 15px rgba(79, 70, 229, 0.5)' }}
                       >
                         Stand
                       </button>
@@ -934,7 +1352,8 @@ export function BlackjackModal() {
                     {canDoubleDown && (
                       <button
                         onClick={handleDoubleDown}
-                        className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded font-pixel text-lg"
+                        className="px-6 py-3 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded font-pixel text-lg shadow-lg transition-all"
+                        style={{ boxShadow: '0 0 15px rgba(147, 51, 234, 0.5)' }}
                       >
                         Double Down
                       </button>
@@ -949,7 +1368,7 @@ export function BlackjackModal() {
                       </button>
                     )}
                     {!canHit && !canStand && (
-                      <p className="text-gray-400 font-pixel">Waiting for your turn or round to finish...</p>
+                      <p className="text-purple-300 font-pixel">Waiting for your turn or round to finish...</p>
                     )}
                   </div>
                 )}
@@ -958,16 +1377,16 @@ export function BlackjackModal() {
             
             {/* Payout Display */}
             {lastPayout !== null && (
-              <div className={`p-4 rounded-lg border-2 font-pixel text-center ${
+              <div className={`p-4 rounded-lg border-2 font-pixel text-center backdrop-blur-sm ${
                 lastPayout > 0 
-                  ? 'bg-green-900/50 border-green-500 text-green-300' 
+                  ? 'bg-gradient-to-br from-cyan-900/70 to-blue-900/70 border-cyan-400 text-cyan-200' 
                   : lastPayout < 0 
-                    ? 'bg-red-900/50 border-red-500 text-red-300' 
-                    : 'bg-gray-800 border-gray-600 text-gray-300'
-              }`}>
-                {lastPayout > 0 && <p className="text-xl">🎉 You won {lastPayout.toLocaleString()} orbs!</p>}
-                {lastPayout < 0 && <p className="text-xl">You lost {Math.abs(lastPayout).toLocaleString()} orbs</p>}
-                {lastPayout === 0 && <p className="text-xl">Push - Bet returned</p>}
+                    ? 'bg-gradient-to-br from-red-900/70 to-pink-900/70 border-red-400 text-red-200' 
+                    : 'bg-gradient-to-br from-slate-800/70 to-purple-900/70 border-purple-500 text-purple-200'
+              }`} style={lastPayout > 0 ? { boxShadow: '0 0 20px rgba(6, 182, 212, 0.5)' } : lastPayout < 0 ? { boxShadow: '0 0 20px rgba(239, 68, 68, 0.5)' } : { boxShadow: '0 0 20px rgba(147, 51, 234, 0.4)' }}>
+                {lastPayout > 0 && <p className="text-xl" style={{ textShadow: '0 0 10px rgba(6, 182, 212, 0.8)' }}>🎉 You won {lastPayout.toLocaleString()} orbs!</p>}
+                {lastPayout < 0 && <p className="text-xl" style={{ textShadow: '0 0 10px rgba(239, 68, 68, 0.8)' }}>You lost {Math.abs(lastPayout).toLocaleString()} orbs</p>}
+                {lastPayout === 0 && <p className="text-xl" style={{ textShadow: '0 0 10px rgba(147, 51, 234, 0.8)' }}>Push - Bet returned</p>}
               </div>
             )}
           </div>
