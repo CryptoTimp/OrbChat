@@ -130,7 +130,7 @@ const EMPTY_OUTFIT_ARRAY: string[] = [];
 const DEFAULT_SPRITE = { body: 'default', outfit: EMPTY_OUTFIT_ARRAY };
 
 import { instrumentFunction } from '../utils/functionProfiler';
-import { orbArrayPool, playerArrayPool, numberArrayPool, playerWrapperPool, type PlayerWrapper } from '../utils/arrayPool';
+import { orbArrayPool, playerArrayPool, playerWithChatArrayPool, numberArrayPool, playerWrapperPool, type PlayerWrapper } from '../utils/arrayPool';
 
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2674,8 +2674,8 @@ export function GameCanvas() {
           allPlayers.push(wrapper);
         }
       }
-      // Release centurionPlayers array back to pool (it's from playerArrayPool)
-      playerArrayPool.release(centurionPlayers);
+      // Release centurionPlayers array back to pool (it's from playerWithChatArrayPool)
+      playerWithChatArrayPool.release(centurionPlayers);
     }
     
     // Sort by Y for depth ordering

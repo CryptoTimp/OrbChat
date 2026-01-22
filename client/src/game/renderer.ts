@@ -1,7 +1,7 @@
 import { PlayerWithChat, Orb, GAME_CONSTANTS, CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, MapType, ShopItem, ItemRarity, Direction, Shrine, TreasureChest } from '../types';
 import { Camera, worldToScreen, isVisible } from './Camera';
 import { instrumentFunction } from '../utils/functionProfiler';
-import { particleArrayPool, playerArrayPool, stringArrayPool } from '../utils/arrayPool';
+import { particleArrayPool, playerArrayPool, playerWithChatArrayPool, stringArrayPool } from '../utils/arrayPool';
 
 const { TILE_SIZE, SCALE, MAP_WIDTH, MAP_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ORB_SIZE } = GAME_CONSTANTS;
 
@@ -571,7 +571,7 @@ export function updateCenturionPlayers(time: number, deltaTime: number = 16, cam
   initializeCenturions();
   
   // Reuse array from pool to avoid allocation
-  const centurionPlayers = playerArrayPool.acquire();
+  const centurionPlayers = playerWithChatArrayPool.acquire();
   
   // Calculate viewport bounds for distance checking
   let viewportWidth = Infinity;
