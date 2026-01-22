@@ -633,16 +633,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       players.set(playerId, { ...player, orbs });
       
       if (playerId === currentState.playerId) {
-        console.log(`[gameStore] updatePlayerOrbs for local player:`, {
-          playerId,
-          oldOrbs,
-          newOrbs: orbs,
-          oldLocalOrbs,
-          change: orbs - (oldOrbs || 0),
-          lastOrbValue,
-          timestamp: new Date().toISOString(),
-          stackTrace: new Error().stack?.split('\n').slice(1, 4).join(' -> ')
-        });
+        // Reduced logging to prevent performance issues during orb collection spam
+        // Only log significant changes or in development mode
+        if (import.meta.env.DEV && Math.abs((orbs || 0) - (oldOrbs || 0)) > 100) {
+          console.log(`[gameStore] updatePlayerOrbs for local player:`, {
+            playerId,
+            oldOrbs,
+            newOrbs: orbs,
+            change: orbs - (oldOrbs || 0),
+            lastOrbValue
+          });
+        }
         set({ 
           players, 
           localPlayer: { ...currentState.localPlayer!, orbs },

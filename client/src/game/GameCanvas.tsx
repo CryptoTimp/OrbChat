@@ -130,7 +130,7 @@ const EMPTY_OUTFIT_ARRAY: string[] = [];
 const DEFAULT_SPRITE = { body: 'default', outfit: EMPTY_OUTFIT_ARRAY };
 
 import { instrumentFunction } from '../utils/functionProfiler';
-import { orbArrayPool, playerArrayPool, numberArrayPool } from '../utils/arrayPool';
+import { orbArrayPool, playerArrayPool, numberArrayPool, playerWrapperPool } from '../utils/arrayPool';
 
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -186,8 +186,14 @@ export function GameCanvas() {
     const timings = metrics.timings.get(name);
     timings.push(time);
     // Keep only last 60 samples (1 second at 60fps)
+    // Optimized: Manual removal to avoid creating new arrays with slice() and spread operator
     if (timings.length > 60) {
-      timings.shift();
+      // Remove oldest elements by shifting array contents (in-place, no new arrays)
+      const removeCount = timings.length - 60;
+      for (let i = 0; i < 60; i++) {
+        timings[i] = timings[i + removeCount];
+      }
+      timings.length = 60;
     }
     // Track when this metric was last updated
     if (!metrics.lastMetricUpdate) {
@@ -2344,11 +2350,12 @@ export function GameCanvas() {
               if (orbType !== 'shrine') {
                 let orbMultiplier = 1.0;
                 const equippedOutfit = currentLocalPlayer.sprite?.outfit;
-                if (equippedOutfit && equippedOutfit.length > 0) {
-                  // Optimized: Manual loop instead of find() to avoid array iteration overhead
+                if (equippedOutfit && equippedOutfit.length > 0 && shopItems.length > 0) {
+                  // Optimized: Use Set for O(1) lookup instead of includes() O(n)
+                  const outfitSet = new Set(equippedOutfit);
                   for (let j = 0; j < shopItems.length; j++) {
                     const item = shopItems[j];
-                    if (equippedOutfit.includes(item.id) && item.orbMultiplier && isFinite(item.orbMultiplier)) {
+                    if (outfitSet.has(item.id) && item.orbMultiplier && isFinite(item.orbMultiplier)) {
                       orbMultiplier = Math.min(2.5, Math.max(orbMultiplier, item.orbMultiplier));
                     }
                   }
@@ -2538,10 +2545,11 @@ export function GameCanvas() {
           drawOrb(ctx, orb, currentTime);
         }
       }
-      trackRenderTime(renderMetrics, `Orbs (${visibleOrbs.length})`, performance.now() - start);
+      // Use consistent name to avoid profiler spam when orb count changes
+      trackRenderTime(renderMetrics, 'Orbs', performance.now() - start);
       orbArrayPool.release(visibleOrbs);
     } else {
-      trackRenderTime(renderMetrics, 'Orbs (0 - skipped on casino)', performance.now() - start);
+      trackRenderTime(renderMetrics, 'Orbs', performance.now() - start);
     }
     
     // Draw shrines (before players, only for forest map)
@@ -2594,11 +2602,11 @@ export function GameCanvas() {
     const allPlayers = playerArrayPool.acquire();
     
     if (currentLocalPlayer) {
-      allPlayers.push({ 
-        player: currentLocalPlayer, 
-        isLocal: true, 
-        renderY: currentLocalPlayer.y 
-      });
+      const wrapper = playerWrapperPool.acquire();
+      wrapper.player = currentLocalPlayer;
+      wrapper.isLocal = true;
+      wrapper.renderY = currentLocalPlayer.y;
+      allPlayers.push(wrapper);
     }
     
     let viewportChecks = 0;
@@ -2607,23 +2615,20 @@ export function GameCanvas() {
         // Only render if visible
         viewportChecks++;
         if (isVisible(camera, interpolated.renderX, interpolated.renderY, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
-          // Optimized: Avoid object spread and use direct property assignment to reduce allocations
-          const playerToRender: PlayerWithChat = {
-            id: interpolated.id || id,
-            name: interpolated.name || 'Unknown',
-            x: interpolated.renderX,
-            y: interpolated.renderY,
-            direction: interpolated.direction || 'down',
-            orbs: interpolated.orbs || 0,
-            roomId: interpolated.roomId || '',
-            sprite: interpolated.sprite || DEFAULT_SPRITE,
-            chatBubble: interpolated.chatBubble,
-          };
-          allPlayers.push({ 
-            player: playerToRender,
-            isLocal: false,
-            renderY: interpolated.renderY
-          });
+          // Optimized: Reuse interpolated player directly instead of creating new object
+          // Temporarily update x/y to renderX/renderY for rendering (will be restored after rendering)
+          const originalX = interpolated.x;
+          const originalY = interpolated.y;
+          interpolated.x = interpolated.renderX;
+          interpolated.y = interpolated.renderY;
+          // Use object pool for wrapper to avoid allocations
+          const wrapper = playerWrapperPool.acquire();
+          wrapper.player = interpolated;
+          wrapper.isLocal = false;
+          wrapper.renderY = interpolated.renderY;
+          wrapper._restoreX = originalX;
+          wrapper._restoreY = originalY;
+          allPlayers.push(wrapper);
         }
       }
     });
@@ -2645,13 +2650,16 @@ export function GameCanvas() {
         // Only add visible centurions to improve performance when zoomed out
         viewportChecks++;
         if (isVisible(camera, centurion.x, centurion.y, GAME_CONSTANTS.PLAYER_WIDTH, GAME_CONSTANTS.PLAYER_HEIGHT)) {
-          allPlayers.push({
-            player: centurion,
-            isLocal: false,
-            renderY: centurion.y * SCALE
-          });
+          // Use object pool for wrapper to avoid allocations
+          const wrapper = playerWrapperPool.acquire();
+          wrapper.player = centurion;
+          wrapper.isLocal = false;
+          wrapper.renderY = centurion.y * SCALE;
+          allPlayers.push(wrapper);
         }
       }
+      // Note: centurionPlayers array is created by updateCenturionPlayers and will be GC'd
+      // We can't use array pool here because the function returns it and we don't control its lifecycle
     }
     
     // Sort by Y for depth ordering
@@ -2837,22 +2845,17 @@ export function GameCanvas() {
           // Optimized: Avoid object spread - directly pass flags to drawPlayer
           const isAtBlackjackTable = playersAtBlackjack.has(player.id);
           const isAtSlotMachine = playersAtSlotMachine.has(player.id);
-          // Create minimal object only if flags are needed (most players won't have them)
+          // Optimized: Add flags directly to player object temporarily instead of creating new object
           if (isAtBlackjackTable || isAtSlotMachine) {
-            const playerWithSeatFlags: any = {
-              id: player.id,
-              name: player.name,
-              x: player.x,
-              y: player.y,
-              direction: player.direction,
-              orbs: player.orbs,
-              roomId: player.roomId,
-              sprite: player.sprite,
-              chatBubble: player.chatBubble,
-              isAtBlackjackTable: isAtBlackjackTable,
-              isAtSlotMachine: isAtSlotMachine,
-            };
-            drawPlayer(ctx, playerWithSeatFlags, isLocal, currentTime, false, isHovered);
+            const playerAny = player as any;
+            const hadBlackjackFlag = playerAny.isAtBlackjackTable !== undefined;
+            const hadSlotFlag = playerAny.isAtSlotMachine !== undefined;
+            playerAny.isAtBlackjackTable = isAtBlackjackTable;
+            playerAny.isAtSlotMachine = isAtSlotMachine;
+            drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
+            // Restore original state (remove flags if they weren't there before)
+            if (!hadBlackjackFlag) delete playerAny.isAtBlackjackTable;
+            if (!hadSlotFlag) delete playerAny.isAtSlotMachine;
           } else {
             drawPlayer(ctx, player, isLocal, currentTime, false, isHovered);
           }
@@ -2860,6 +2863,18 @@ export function GameCanvas() {
         }
       }
     trackRenderTime(renderMetrics, `Players (${playersDrawn}/${realPlayers.length})`, performance.now() - start);
+    
+    // Restore original x/y values for interpolated players (we temporarily changed them to renderX/renderY)
+    // Also release wrapper objects back to pool
+    for (const playerData of allPlayers) {
+      if (playerData._restoreX !== undefined && playerData._restoreY !== undefined) {
+        const player = playerData.player as InterpolatedPlayer;
+        player.x = playerData._restoreX;
+        player.y = playerData._restoreY;
+      }
+      // Release wrapper object back to pool
+      playerWrapperPool.release(playerData);
+    }
     
     // Release arrays back to pool
     playerArrayPool.release(allPlayers);

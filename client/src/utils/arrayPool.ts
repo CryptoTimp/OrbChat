@@ -25,9 +25,56 @@ class ArrayPool<T> {
   }
 }
 
+// Object pool for player wrapper objects to avoid allocations
+class ObjectPool<T> {
+  private pools: T[] = [];
+  private maxPoolSize: number;
+  private factory: () => T;
+  private reset: (obj: T) => void;
+  
+  constructor(maxPoolSize: number, factory: () => T, reset: (obj: T) => void) {
+    this.maxPoolSize = maxPoolSize;
+    this.factory = factory;
+    this.reset = reset;
+  }
+  
+  acquire(): T {
+    const obj = this.pools.pop() || this.factory();
+    this.reset(obj);
+    return obj;
+  }
+  
+  release(obj: T): void {
+    if (this.pools.length < this.maxPoolSize) {
+      this.pools.push(obj);
+    }
+  }
+}
+
 // Global array pools for common types
 export const orbArrayPool = new ArrayPool<any>(5);
 export const playerArrayPool = new ArrayPool<{ player: any; isLocal: boolean; renderY: number }>(5);
 export const particleArrayPool = new ArrayPool<any>(10);
 export const numberArrayPool = new ArrayPool<number>(10);
 export const stringArrayPool = new ArrayPool<string>(10);
+
+// Object pool for player wrapper objects
+interface PlayerWrapper {
+  player: any;
+  isLocal: boolean;
+  renderY: number;
+  _restoreX?: number;
+  _restoreY?: number;
+}
+
+export const playerWrapperPool = new ObjectPool<PlayerWrapper>(
+  20, // Pool size
+  () => ({ player: null, isLocal: false, renderY: 0 }),
+  (obj) => {
+    obj.player = null;
+    obj.isLocal = false;
+    obj.renderY = 0;
+    obj._restoreX = undefined;
+    obj._restoreY = undefined;
+  }
+);

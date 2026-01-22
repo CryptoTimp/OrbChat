@@ -581,7 +581,11 @@ function attachListeners(sock: Socket) {
             console.error('Failed to update Firebase orbs:', error);
           });
           
-          console.log('Orb collected: +' + orbValue + ', new balance: ' + newFirebaseOrbs);
+          // Reduced logging to prevent performance issues during rapid orb collection
+          // Only log in dev mode or for significant orb values
+          if (import.meta.env.DEV && orbValue > 100) {
+            console.log('Orb collected: +' + orbValue + ', new balance: ' + newFirebaseOrbs);
+          }
         } catch (error) {
           console.error('Failed to get Firebase profile:', error);
           // Fallback to server's newBalance if Firebase read fails

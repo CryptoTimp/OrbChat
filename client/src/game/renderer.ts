@@ -5,6 +5,9 @@ import { particleArrayPool, playerArrayPool, stringArrayPool } from '../utils/ar
 
 const { TILE_SIZE, SCALE, MAP_WIDTH, MAP_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ORB_SIZE } = GAME_CONSTANTS;
 
+// Module-level constant to avoid array allocations in drawPlayer
+const EMPTY_OUTFIT_ARRAY: string[] = [];
+
 // ============ PET SYSTEM ============
 interface PetState {
   x: number;
@@ -10952,9 +10955,15 @@ export function spawnOrbCollectionParticles(x: number, y: number, orbType: strin
     });
   }
   
-  // Limit total particles (optimized: use length assignment instead of shift to avoid array allocation)
+  // Limit total particles (optimized: manual removal to avoid expensive splice)
   if (orbCollectionParticles.length > 200) {
-    orbCollectionParticles.splice(0, orbCollectionParticles.length - 200);
+    const keepCount = 200;
+    const removeCount = orbCollectionParticles.length - keepCount;
+    // Move remaining particles to the beginning (more efficient than splice)
+    for (let i = 0; i < keepCount; i++) {
+      orbCollectionParticles[i] = orbCollectionParticles[i + removeCount];
+    }
+    orbCollectionParticles.length = keepCount;
   }
 }
 
@@ -11906,8 +11915,10 @@ function drawPlayerImpl(
   const bodyY = scaledY + headH + bounceY;
   
   // Get shirt color/style
-  const shirtColor = getShirtColor(player.sprite.outfit);
-  const shirtStyle = getShirtStyle(player.sprite.outfit);
+  // Optimized: Use cached empty array to avoid allocations if outfit is missing
+  const outfit = player.sprite?.outfit || EMPTY_OUTFIT_ARRAY;
+  const shirtColor = getShirtColor(outfit);
+  const shirtStyle = getShirtStyle(outfit);
   
   // Draw back accessories (capes) BEFORE body (scaledY already includes bounceY)
   drawBackAccessories(ctx, player, scaledX, scaledY + bounceY, scaledWidth, p, anim.isMoving, time);
@@ -11918,7 +11929,7 @@ function drawPlayerImpl(
   // Spawn and draw legendary item particles BEHIND the player's face
   const playerCenterX = scaledX + scaledWidth / 2;
   const playerCenterY = scaledY + scaledHeight / 2;
-  spawnLegendaryParticles(player.id, playerCenterX, playerCenterY, player.sprite.outfit, time);
+  spawnLegendaryParticles(player.id, playerCenterX, playerCenterY, outfit, time);
   updateAndDrawLegendaryParticles(ctx, player.id, 16, time); // ~60fps delta
 
   ctx.fillStyle = PLAYER_COLORS.outline;
@@ -11995,8 +12006,9 @@ function drawPlayerImpl(
   }
   
   // Hat (optimize: manual loop instead of .some() to avoid array iteration overhead)
+  // Use cached outfit variable to avoid repeated property access
   let hasHat = false;
-  for (const item of player.sprite.outfit) {
+  for (const item of outfit) {
     if (item.startsWith('hat_')) {
       hasHat = true;
       break;
@@ -12535,8 +12547,10 @@ function getLegColor(outfit: string[]): string {
 }
 
 function drawLegs(ctx: CanvasRenderingContext2D, player: PlayerWithChat, bodyX: number, bodyW: number, legY: number, legW: number, legH: number, p: number, leftOffset: number, rightOffset: number, time: number = Date.now()): void {
-  const legStyle = getLegStyle(player.sprite.outfit);
-  const legColor = getLegColor(player.sprite.outfit);
+  // Optimized: Use cached empty array to avoid allocations if outfit is missing
+  const outfit = player.sprite?.outfit || EMPTY_OUTFIT_ARRAY;
+  const legStyle = getLegStyle(outfit);
+  const legColor = getLegColor(outfit);
   
   // Performance: Throttle expensive time-based animations for leg cosmetics
   // Use cached time rounded to reduce expensive Math.sin/cos calculations
