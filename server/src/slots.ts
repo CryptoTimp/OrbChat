@@ -130,7 +130,7 @@ const SYMBOL_WEIGHTS: Record<SlotSymbol, number> = {
   legendary: 14,   // Increased by 15% from 12 (was 6%)
   godlike: 3,      // Same (3%)
   orb: 1,          // Same (1%)
-  bonus: 25        // Bonus symbol only appears on row 2 (middle row) of any column (~21.5% per symbol, bonus trigger ~1 in 100 spins for 3 on row 2)
+  bonus: 8.5       // Bonus symbol only appears on row 2 (middle row) of any column (~7.4% per symbol, bonus trigger ~1 in 300 spins for 3 on row 2)
 };
 
 const TOTAL_WEIGHT = Object.values(SYMBOL_WEIGHTS).reduce((sum, weight) => sum + weight, 0);

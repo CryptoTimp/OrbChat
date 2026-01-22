@@ -232,6 +232,7 @@ export interface ServerToClientEvents {
   blackjack_error: (data: { tableId: string; message: string }) => void;
   slot_machine_joined: (data: { slotMachineId: string; seat: number }) => void;
   slot_machine_left: (data: { slotMachineId: string }) => void;
+  force_room_change: (data: { roomId: string; reason: string }) => void;
   slot_machine_result: (data: { 
     slotMachineId: string; 
     slotMachineName: string; 

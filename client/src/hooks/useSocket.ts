@@ -1833,6 +1833,34 @@ function attachListeners(sock: Socket) {
     console.error('[useSocket] Slot machine error:', slotMachineId, message);
     addNotification('error', message);
   });
+  
+  // Force room change (e.g., kicked from casino for low balance)
+  sock.on('force_room_change', ({ roomId, reason }) => {
+    console.log('[useSocket] Force room change requested:', roomId, reason);
+    const state = useGameStore.getState();
+    
+    // Show notification with reason
+    addNotification('info', reason);
+    
+    // Close any open modals (blackjack, slots, etc.)
+    if (state.blackjackTableOpen) {
+      state.closeBlackjackTable();
+    }
+    state.closeAllSlotMachines();
+    
+    // Join the new room (plaza)
+    if (state.playerName) {
+      state.setRoomId(roomId);
+      state.setMapType('forest'); // Plaza is forest map type
+      sock.emit('join_room', {
+        roomId,
+        playerName: state.playerName,
+        mapType: 'forest',
+        orbs: state.localPlayer?.orbs || 0,
+        equippedItems: state.localPlayer?.sprite?.outfit || [],
+      });
+    }
+  });
 }
 
 export function useSocket() {
