@@ -144,6 +144,7 @@ interface GameState {
   updateBlackjackState: (state: BlackjackTableState | null) => void;
   openSlotMachine: (slotMachineId: string) => void;
   closeSlotMachine: (slotMachineId: string) => void;
+  closeAllSlotMachines: () => void;
   setConfirmModal: (modal: GameState['confirmModal']) => void;
   
   // Player context menu actions
@@ -755,6 +756,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       updated.delete(slotMachineId);
       set({ openSlotMachines: updated });
     }
+  },
+  closeAllSlotMachines: () => {
+    set({ openSlotMachines: new Set<string>() });
   },
   setConfirmModal: (modal) => set({ confirmModal: modal }),
   
