@@ -160,6 +160,13 @@ export function GameCanvas() {
   // Interpolated players for smooth rendering
   const interpolatedPlayersRef = useRef<Map<string, InterpolatedPlayer>>(new Map());
   
+  // Reusable Sets for casino player tracking (avoid creating new Sets every frame)
+  const playersAtBlackjackRef = useRef<Set<string>>(new Set());
+  const playersAtSlotMachineRef = useRef<Set<string>>(new Set());
+  
+  // Reusable Set for outfit lookup when collecting orbs (avoid creating new Set every orb collection)
+  const outfitSetRef = useRef<Set<string>>(new Set());
+  
   // Last move time for server updates (send position every 100ms)
   const lastMoveTimeRef = useRef(0);
   const moveThrottle = 100; // Send position to server every 100ms
@@ -1364,7 +1371,8 @@ export function GameCanvas() {
           }
         } else if (treeState && (!treeState.cutBy || treeState.isCut)) {
           // Tree is no longer being cut - clear tracking for any players cutting it
-          for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+          // Use for...of directly on Map instead of .entries() to avoid iterator allocation
+          for (const [playerId, cutting] of otherPlayersCuttingRef.current) {
             if (cutting.treeId === treeId) {
               otherPlayersCuttingRef.current.delete(playerId);
               setPlayerChopping(playerId, false);
@@ -1374,7 +1382,8 @@ export function GameCanvas() {
       }
       
       // Clean up tracking for players who are no longer cutting (or finished)
-      for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+      // Use for...of directly on Map instead of .entries() to avoid iterator allocation
+      for (const [playerId, cutting] of otherPlayersCuttingRef.current) {
         const treeState = treeStates.get(cutting.treeId);
         // Check if progress is complete (>= 1) or tree state indicates cutting is done
         const elapsed = currentTime - cutting.startTime;
@@ -2351,8 +2360,12 @@ export function GameCanvas() {
                 let orbMultiplier = 1.0;
                 const equippedOutfit = currentLocalPlayer.sprite?.outfit;
                 if (equippedOutfit && equippedOutfit.length > 0 && shopItems.length > 0) {
-                  // Optimized: Use Set for O(1) lookup instead of includes() O(n)
-                  const outfitSet = new Set(equippedOutfit);
+                  // Optimized: Reuse Set instead of creating new one every orb collection
+                  const outfitSet = outfitSetRef.current;
+                  outfitSet.clear();
+                  for (let i = 0; i < equippedOutfit.length; i++) {
+                    outfitSet.add(equippedOutfit[i]);
+                  }
                   for (let j = 0; j < shopItems.length; j++) {
                     const item = shopItems[j];
                     if (outfitSet.has(item.id) && item.orbMultiplier && isFinite(item.orbMultiplier)) {
@@ -2389,7 +2402,8 @@ export function GameCanvas() {
     const viewportTop = camera.y - viewportMargin;
     const viewportBottom = camera.y + (CANVAS_HEIGHT / camera.zoom) + viewportMargin;
     
-    currentPlayers.forEach((player, id) => {
+    // Use for...of instead of forEach to avoid iterator allocation
+    for (const [id, player] of currentPlayers) {
       if (id === currentPlayerId) return;
       
       if (typeof player.x !== 'number' || typeof player.y !== 'number') return;
@@ -2424,10 +2438,11 @@ export function GameCanvas() {
         interpolated.renderX = interpolated.targetX;
         interpolated.renderY = interpolated.targetY;
       }
-    });
+    }
     
     // Remove disconnected players
-    for (const id of interpolatedPlayers.keys()) {
+    // Use for...of directly on Map instead of .keys() to avoid iterator allocation
+    for (const [id] of interpolatedPlayers) {
       if (!currentPlayers.has(id)) {
         interpolatedPlayers.delete(id);
       }
@@ -2610,7 +2625,8 @@ export function GameCanvas() {
     }
     
     let viewportChecks = 0;
-    interpolatedPlayers.forEach((interpolated, id) => {
+    // Use for...of instead of forEach to avoid iterator allocation
+    for (const [id, interpolated] of interpolatedPlayers) {
       if (typeof interpolated.renderX === 'number' && typeof interpolated.renderY === 'number') {
         // Only render if visible
         viewportChecks++;
@@ -2631,7 +2647,7 @@ export function GameCanvas() {
           allPlayers.push(wrapper);
         }
       }
-    });
+    }
     
     // Add wandering villagers and centurions to the player list (so they're sorted and drawn together)
     if (currentMapType === 'forest') {
@@ -2658,8 +2674,8 @@ export function GameCanvas() {
           allPlayers.push(wrapper);
         }
       }
-      // Note: centurionPlayers array is created by updateCenturionPlayers and will be GC'd
-      // We can't use array pool here because the function returns it and we don't control its lifecycle
+      // Release centurionPlayers array back to pool (it's from playerArrayPool)
+      playerArrayPool.release(centurionPlayers);
     }
     
     // Sort by Y for depth ordering
@@ -2762,8 +2778,11 @@ export function GameCanvas() {
       start = performance.now();
       // Check if players are at blackjack tables or slot machines by checking their position against seat positions
       const blackjackStart = performance.now();
-      const playersAtBlackjack = new Set<string>();
-      const playersAtSlotMachine = new Set<string>();
+      // Reuse Sets instead of creating new ones every frame
+      const playersAtBlackjack = playersAtBlackjackRef.current;
+      const playersAtSlotMachine = playersAtSlotMachineRef.current;
+      playersAtBlackjack.clear();
+      playersAtSlotMachine.clear();
       if (currentMapType === 'casino') {
         // Use cached blackjack table positions from renderer (no recalculation needed)
         buildBlackjackTablePositionsCache();
@@ -2933,7 +2952,8 @@ export function GameCanvas() {
       
       // Draw progress bars for other players cutting trees
       const allTrees = getForestTrees();
-      for (const [playerId, cutting] of otherPlayersCuttingRef.current.entries()) {
+      // Use for...of directly on Map instead of .entries() to avoid iterator allocation
+      for (const [playerId, cutting] of otherPlayersCuttingRef.current) {
         const tree = allTrees.find(t => getTreeId(t) === cutting.treeId);
         if (tree) {
           const elapsed = currentTime - cutting.startTime;
@@ -3075,6 +3095,12 @@ export function GameCanvas() {
     ctx.font = `${Math.round(12 * uiScale)}px "Press Start 2P", monospace`;
     ctx.fillText(`${Math.round(camera.zoom * 100)}%`, 20 * uiScale, canvasSize.height - 15 * uiScale);
     ctx.restore();
+    
+    // Release arrays back to pool to prevent memory leaks
+    playerArrayPool.release(allPlayers);
+    playerArrayPool.release(npcs);
+    playerArrayPool.release(realPlayers);
+    playerArrayPool.release(centurions);
   };
   
   const gameLoop = useCallback(instrumentFunction(gameLoopBase, 'GameCanvas.gameLoop'), [getKeys, move, collectOrb, setLocalPlayerPosition, canvasSize]);

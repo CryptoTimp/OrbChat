@@ -128,6 +128,9 @@ function getVillagerRandom(villagerId: string, cycle: number, index: number): nu
 
 // Track centurion NPCs
 const centurionNPCs: CenturionNPC[] = [];
+
+// Cache for centurion player objects to avoid creating new objects every frame
+const centurionPlayerCache = new Map<string, PlayerWithChat>();
 let centurionsInitialized = false;
 // Track last update time for each centurion (for throttling off-screen updates)
 const centurionLastUpdateTime: Map<string, number> = new Map();
@@ -567,7 +570,8 @@ export function updateVillagers(time: number, deltaTime: number, camera?: Camera
 export function updateCenturionPlayers(time: number, deltaTime: number = 16, camera?: Camera): PlayerWithChat[] {
   initializeCenturions();
   
-  const centurionPlayers: PlayerWithChat[] = [];
+  // Reuse array from pool to avoid allocation
+  const centurionPlayers = playerArrayPool.acquire();
   
   // Calculate viewport bounds for distance checking
   let viewportWidth = Infinity;
@@ -600,46 +604,10 @@ export function updateCenturionPlayers(time: number, deltaTime: number = 16, cam
         const lastUpdate = centurionLastUpdateTime.get(centurion.id) || time;
         centurionLastUpdateTime.set(centurion.id, lastUpdate);
         
-        // Create player object with current position (no update)
-        const centurionPlayer: PlayerWithChat = {
-          id: centurion.id,
-          name: centurion.name,
-          x: centurion.x,
-          y: centurion.y,
-          direction: centurion.direction,
-          orbs: 0,
-          roomId: '',
-          sprite: {
-            body: 'default',
-            outfit: centurion.outfit,
-          },
-          chatBubble: (() => {
-            const bubble = npcInteractionBubbles.get(centurion.id);
-            const now = Date.now();
-            if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
-              return {
-                text: bubble.text,
-                createdAt: bubble.createdAt,
-              };
-            }
-            if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
-              npcInteractionBubbles.delete(centurion.id);
-            }
-            return undefined;
-          })(),
-        };
-        centurionPlayers.push(centurionPlayer);
-        continue;
-      }
-      
-      // For off-screen but nearby NPCs, throttle updates to every 1000ms (1 second)
-      // This significantly reduces CPU usage when many NPCs are nearby but off-screen
-      if (!isVisibleNPC) {
-        const lastUpdate = centurionLastUpdateTime.get(centurion.id) || 0;
-        const timeSinceLastUpdate = time - lastUpdate;
-        if (timeSinceLastUpdate < 1000) {
-          // Skip update this frame
-          const centurionPlayer: PlayerWithChat = {
+        // Reuse cached player object instead of creating new one
+        let centurionPlayer = centurionPlayerCache.get(centurion.id);
+        if (!centurionPlayer) {
+          centurionPlayer = {
             id: centurion.id,
             name: centurion.name,
             x: centurion.x,
@@ -651,21 +619,77 @@ export function updateCenturionPlayers(time: number, deltaTime: number = 16, cam
               body: 'default',
               outfit: centurion.outfit,
             },
-            chatBubble: (() => {
-              const bubble = npcInteractionBubbles.get(centurion.id);
-              const now = Date.now();
-              if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
-                return {
-                  text: bubble.text,
-                  createdAt: bubble.createdAt,
-                };
-              }
-              if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
-                npcInteractionBubbles.delete(centurion.id);
-              }
-              return undefined;
-            })(),
+            chatBubble: undefined,
           };
+          centurionPlayerCache.set(centurion.id, centurionPlayer);
+        } else {
+          // Update existing object properties
+          centurionPlayer.x = centurion.x;
+          centurionPlayer.y = centurion.y;
+          centurionPlayer.direction = centurion.direction;
+        }
+        // Update chat bubble
+        const bubble = npcInteractionBubbles.get(centurion.id);
+        const now = Date.now();
+        if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
+          centurionPlayer.chatBubble = {
+            text: bubble.text,
+            createdAt: bubble.createdAt,
+          };
+        } else {
+          centurionPlayer.chatBubble = undefined;
+          if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
+            npcInteractionBubbles.delete(centurion.id);
+          }
+        }
+        centurionPlayers.push(centurionPlayer);
+        continue;
+      }
+      
+      // For off-screen but nearby NPCs, throttle updates to every 1000ms (1 second)
+      // This significantly reduces CPU usage when many NPCs are nearby but off-screen
+      if (!isVisibleNPC) {
+        const lastUpdate = centurionLastUpdateTime.get(centurion.id) || 0;
+        const timeSinceLastUpdate = time - lastUpdate;
+        if (timeSinceLastUpdate < 1000) {
+          // Skip update this frame - reuse cached player object
+          let centurionPlayer = centurionPlayerCache.get(centurion.id);
+          if (!centurionPlayer) {
+            centurionPlayer = {
+              id: centurion.id,
+              name: centurion.name,
+              x: centurion.x,
+              y: centurion.y,
+              direction: centurion.direction,
+              orbs: 0,
+              roomId: '',
+              sprite: {
+                body: 'default',
+                outfit: centurion.outfit,
+              },
+              chatBubble: undefined,
+            };
+            centurionPlayerCache.set(centurion.id, centurionPlayer);
+          } else {
+            // Update existing object properties
+            centurionPlayer.x = centurion.x;
+            centurionPlayer.y = centurion.y;
+            centurionPlayer.direction = centurion.direction;
+          }
+          // Update chat bubble
+          const bubble = npcInteractionBubbles.get(centurion.id);
+          const now = Date.now();
+          if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
+            centurionPlayer.chatBubble = {
+              text: bubble.text,
+              createdAt: bubble.createdAt,
+            };
+          } else {
+            centurionPlayer.chatBubble = undefined;
+            if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
+              npcInteractionBubbles.delete(centurion.id);
+            }
+          }
           centurionPlayers.push(centurionPlayer);
           continue;
         }
@@ -744,36 +768,44 @@ export function updateCenturionPlayers(time: number, deltaTime: number = 16, cam
       centurion.changeDirectionTime = time;
     }
     
-    // Create player object for rendering
-    const centurionPlayer: PlayerWithChat = {
-      id: centurion.id,
-      name: centurion.name,
-      x: centurion.x,
-      y: centurion.y,
-      direction: centurion.direction,
-      orbs: 0,
-      roomId: '',
-      sprite: {
-        body: 'default',
-        outfit: centurion.outfit,
-      },
-      // Add speech bubble if clicked
-      chatBubble: (() => {
-        const bubble = npcInteractionBubbles.get(centurion.id);
-        const now = Date.now();
-        if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
-          return {
-            text: bubble.text,
-            createdAt: bubble.createdAt,
-          };
-        }
-        // Clean up expired bubbles
-        if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
-          npcInteractionBubbles.delete(centurion.id);
-        }
-        return undefined;
-      })(),
-    };
+    // Reuse cached player object instead of creating new one
+    let centurionPlayer = centurionPlayerCache.get(centurion.id);
+    if (!centurionPlayer) {
+      centurionPlayer = {
+        id: centurion.id,
+        name: centurion.name,
+        x: centurion.x,
+        y: centurion.y,
+        direction: centurion.direction,
+        orbs: 0,
+        roomId: '',
+        sprite: {
+          body: 'default',
+          outfit: centurion.outfit,
+        },
+        chatBubble: undefined,
+      };
+      centurionPlayerCache.set(centurion.id, centurionPlayer);
+    } else {
+      // Update existing object properties
+      centurionPlayer.x = centurion.x;
+      centurionPlayer.y = centurion.y;
+      centurionPlayer.direction = centurion.direction;
+    }
+    // Update chat bubble
+    const bubble = npcInteractionBubbles.get(centurion.id);
+    const now = Date.now();
+    if (bubble && now - bubble.createdAt < NPC_SPEECH_DURATION) {
+      centurionPlayer.chatBubble = {
+        text: bubble.text,
+        createdAt: bubble.createdAt,
+      };
+    } else {
+      centurionPlayer.chatBubble = undefined;
+      if (bubble && now - bubble.createdAt >= NPC_SPEECH_DURATION) {
+        npcInteractionBubbles.delete(centurion.id);
+      }
+    }
     
     centurionPlayers.push(centurionPlayer);
   }
@@ -9968,11 +10000,30 @@ let currentMapType: MapType = 'cafe';
 
 export function setCurrentMap(mapType: MapType): void {
   if (mapType !== currentMapType) {
-    console.log(`Map type changed from ${currentMapType} to ${mapType}`);
+    const previousMapType = currentMapType;
+    console.log(`Map type changed from ${previousMapType} to ${mapType}`);
     currentMapType = mapType;
     // Clear animation state for all players when map changes to prevent corruption
     // This fixes laggy movement when joining casino with speed boosts
     extendedPlayerAnimations.clear();
+    
+    // Clear centurion player cache when switching maps (centurions are forest-specific)
+    if (mapType !== 'forest') {
+      centurionPlayerCache.clear();
+    }
+    
+    // Clear casino-specific caches when leaving casino
+    if (previousMapType === 'casino' && mapType !== 'casino') {
+      // Leaving casino - clear casino caches
+      plazaWallTopCache = null;
+      plazaWallTopCacheInitialized = false;
+      slotMachineCache = null;
+      slotMachineCacheInitialized = false;
+      casinoPathsCache = null;
+      casinoPathsCacheInitialized = false;
+      console.log('Cleared casino caches when leaving casino');
+    }
+    
     console.log('Cleared player animation state due to map change');
   }
 }
@@ -16633,7 +16684,8 @@ export function drawPlayerDirectionArrows(
   ctx.save();
   ctx.globalAlpha = opacity;
   
-  for (const [playerId, player] of players.entries()) {
+  // Use for...of directly on Map instead of .entries() to avoid iterator allocation
+  for (const [playerId, player] of players) {
     if (playerId === localPlayerId) continue;
     if (typeof player.x !== 'number' || typeof player.y !== 'number') continue;
     
@@ -16735,15 +16787,37 @@ export function drawMiniMePet(
     sprite: {
       ...player.sprite,
       outfit: (() => {
-        // Optimized: Manual filter instead of .filter() to avoid array allocation
-        const filteredOutfit: string[] = [];
-        for (let i = 0; i < player.sprite.outfit.length; i++) {
-          const itemId = player.sprite.outfit[i];
-          if (!itemId.startsWith('pet_')) {
-            filteredOutfit.push(itemId);
-          }
+        // Cache filtered outfit per player to avoid creating new arrays every frame
+        const outfitCacheKey = `${player.id}_mini_me_outfit`;
+        if (!(drawMiniMePet as any).__outfitCache) {
+          (drawMiniMePet as any).__outfitCache = new Map();
+          (drawMiniMePet as any).__outfitHashes = new Map();
         }
-        return filteredOutfit;
+        let cachedOutfit = (drawMiniMePet as any).__outfitCache.get(outfitCacheKey);
+        
+        // Only rebuild outfit if player's outfit changed
+        const currentOutfit = player.sprite?.outfit || EMPTY_OUTFIT_ARRAY;
+        const outfitHash = currentOutfit.join(',');
+        const lastOutfitHash = (drawMiniMePet as any).__outfitHashes.get(outfitCacheKey);
+        
+        if (!cachedOutfit || lastOutfitHash !== outfitHash) {
+          // Build filtered outfit array (reuse from pool if available)
+          cachedOutfit = stringArrayPool.acquire();
+          cachedOutfit.length = 0; // Clear any existing items
+          
+          for (let i = 0; i < currentOutfit.length; i++) {
+            const itemId = currentOutfit[i];
+            if (!itemId.startsWith('pet_')) {
+              cachedOutfit.push(itemId);
+            }
+          }
+          
+          // Cache the outfit and hash
+          (drawMiniMePet as any).__outfitCache.set(outfitCacheKey, cachedOutfit);
+          (drawMiniMePet as any).__outfitHashes.set(outfitCacheKey, outfitHash);
+        }
+        
+        return cachedOutfit;
       })() // Remove pet items
     }
   };
