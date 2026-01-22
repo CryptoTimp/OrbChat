@@ -2998,7 +2998,7 @@ export function GameCanvas() {
         drawChatBubble(ctx, player, currentTime, camera.zoom);
       }
     }
-    for (const { player } of realPlayers) {
+    for (const { player, isLocal } of realPlayers) {
       if (player.chatBubble) {
         drawChatBubble(ctx, player, currentTime, camera.zoom);
       }

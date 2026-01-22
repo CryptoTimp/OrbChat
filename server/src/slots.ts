@@ -17,27 +17,31 @@ export interface SlotMachineState {
 // All slot machines
 const slotMachines: Map<string, SlotMachineState> = new Map();
 
-// Bonus game state tracking per player
+// Bonus game state tracking per player AND per slot machine
 export interface BonusGameState {
   freeSpinsRemaining: number;
   isInBonus: boolean;
 }
 
+// Key format: `${playerId}:${slotMachineId}` to track bonus state per slot machine
 const bonusGameStates: Map<string, BonusGameState> = new Map();
 
-// Get bonus game state for a player
-export function getBonusGameState(playerId: string): BonusGameState | undefined {
-  return bonusGameStates.get(playerId);
+// Get bonus game state for a player on a specific slot machine
+export function getBonusGameState(playerId: string, slotMachineId: string): BonusGameState | undefined {
+  const key = `${playerId}:${slotMachineId}`;
+  return bonusGameStates.get(key);
 }
 
-// Set bonus game state for a player
-export function setBonusGameState(playerId: string, state: BonusGameState): void {
-  bonusGameStates.set(playerId, state);
+// Set bonus game state for a player on a specific slot machine
+export function setBonusGameState(playerId: string, slotMachineId: string, state: BonusGameState): void {
+  const key = `${playerId}:${slotMachineId}`;
+  bonusGameStates.set(key, state);
 }
 
-// Clear bonus game state for a player
-export function clearBonusGameState(playerId: string): void {
-  bonusGameStates.delete(playerId);
+// Clear bonus game state for a player on a specific slot machine
+export function clearBonusGameState(playerId: string, slotMachineId: string): void {
+  const key = `${playerId}:${slotMachineId}`;
+  bonusGameStates.delete(key);
 }
 
 // Initialize slot machines
@@ -116,17 +120,17 @@ export function leaveSlotMachine(slotMachineId: string, playerId: string): { suc
   return { success: true };
 }
 
-// Symbol weights for probability (based on user testing)
-// Common: 50%, Uncommon: 20%, Rare: 10%, Epic: 8%, Legendary: 6%, Godlike: 3%, Orb: 1%, Bonus: 2%
+// Symbol weights for probability (adjusted to increase rare/epic/legendary combinations)
+// Further reduced common/uncommon by 15%, increased rare/epic/legendary by 15% for more profitable wins
 const SYMBOL_WEIGHTS: Record<SlotSymbol, number> = {
-  common: 50,
-  uncommon: 20,
-  rare: 10,
-  epic: 8,
-  legendary: 6,
-  godlike: 3,
-  orb: 1,
-  bonus: 2  // Very rare bonus symbol (~2% chance)
+  common: 30,      // Reduced by 15% from 35 (was 50%)
+  uncommon: 13,    // Reduced by 15% from 15 (was 20%)
+  rare: 21,        // Increased by 15% from 18 (was 10%)
+  epic: 17,        // Increased by 15% from 15 (was 8%)
+  legendary: 14,   // Increased by 15% from 12 (was 6%)
+  godlike: 3,      // Same (3%)
+  orb: 1,          // Same (1%)
+  bonus: 25        // Bonus symbol only appears on row 2 (middle row) of any column (~21.5% per symbol, bonus trigger ~1 in 100 spins for 3 on row 2)
 };
 
 const TOTAL_WEIGHT = Object.values(SYMBOL_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
@@ -146,30 +150,31 @@ const BONUS_SYMBOL_WEIGHTS: Record<SlotSymbol, number> = {
 
 const BONUS_TOTAL_WEIGHT = Object.values(BONUS_SYMBOL_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
 
-// Payout multipliers (adjusted based on user testing - common odds increased to 50%, so payouts reduced)
+// Payout multipliers (adjusted - common/uncommon give kickback but always less than bet)
 // Payouts are multipliers of bet amount
+// Common and uncommon payouts are < 1.0x to ensure players always lose money but get small kickback
 const PAYOUTS: Record<string, number> = {
   '5_orb': 1000,
   '5_godlike': 500,
   '5_legendary': 250,
   '5_epic': 100,
   '5_rare': 50,
-  '5_uncommon': 20,
-  '5_common': 5, // 5 commons: 25k (bet 5k = 25k, bet 25k = 125k) - reduced since odds increased
+  '5_uncommon': 0.95,  // 95% of bet (bet 5k = 4.75k payout, lose 0.25k)
+  '5_common': 0.9,     // 90% of bet (bet 5k = 4.5k payout, lose 0.5k)
   '4_orb': 200,
   '4_godlike': 100,
   '4_legendary': 50,
   '4_epic': 25,
   '4_rare': 15,
-  '4_uncommon': 8,
-  '4_common': 3, // 4 commons: 15k (bet 5k = 15k, bet 25k = 75k) - reduced from 5x
+  '4_uncommon': 0.8,   // 80% of bet (bet 5k = 4k payout, lose 1k)
+  '4_common': 0.7,     // 70% of bet (bet 5k = 3.5k payout, lose 1.5k)
   '3_orb': 50,
   '3_godlike': 25,
   '3_legendary': 10,
   '3_epic': 5,
   '3_rare': 3,
-  '3_uncommon': 2,
-  '3_common': 1.5, // 3 commons: 7.5k (bet 5k = 7.5k, bet 25k = 37.5k) - small win
+  '3_uncommon': 0.6,   // 60% of bet (bet 5k = 3k payout, lose 2k)
+  '3_common': 0.5,     // 50% of bet (bet 5k = 2.5k payout, lose 2.5k)
 };
 
 // Debug helper to log payout calculation
@@ -249,12 +254,69 @@ function generateBonusSymbol(): SlotSymbol {
 }
 
 // Spin the slot machine (generate 15 symbols: 3 rows × 5 columns)
+// Bonus symbols can ONLY appear on row 1 (middle row, index 1) - any column can have bonus symbols
+// However, if 3 bonus symbols land on row 2, at least one must be in the middle column (column 2)
+// This prevents misleading scenarios where 3 bonus symbols appear but don't trigger the bonus
 export function spinSlots(): SlotSymbol[][] {
-  return [
+  const symbols: SlotSymbol[][] = [
     [generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol()], // Top row
     [generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol()], // Middle row
     [generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol()]  // Bottom row
   ];
+  
+  // Ensure bonus symbols only appear on middle row (row 1, index 1) - any column can have bonus symbols
+  // If a bonus symbol was generated elsewhere, replace it with a regular symbol
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 5; col++) {
+      // If it's a bonus symbol and NOT on middle row (row 1), replace it
+      if (symbols[row][col] === 'bonus' && row !== 1) {
+        // Replace with a weighted random symbol (excluding bonus to avoid infinite loop)
+        let random = Math.random() * (TOTAL_WEIGHT - SYMBOL_WEIGHTS.bonus);
+        const regularSymbols: SlotSymbol[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike', 'orb'];
+        for (const symbol of regularSymbols) {
+          random -= SYMBOL_WEIGHTS[symbol];
+          if (random <= 0) {
+            symbols[row][col] = symbol;
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  // Check if we have 3 bonus symbols on row 2 but none in the middle column
+  // If so, replace one of the non-middle-column bonus symbols with a regular symbol
+  const middleRow = symbols[1];
+  const bonusCount = middleRow.filter(s => s === 'bonus').length;
+  const hasBonusInMiddleColumn = middleRow[2] === 'bonus';
+  
+  if (bonusCount >= 3 && !hasBonusInMiddleColumn) {
+    // Find bonus symbols not in the middle column and replace one of them
+    const nonMiddleBonusIndices: number[] = [];
+    for (let col = 0; col < 5; col++) {
+      if (col !== 2 && middleRow[col] === 'bonus') {
+        nonMiddleBonusIndices.push(col);
+      }
+    }
+    
+    // Replace one of the non-middle-column bonus symbols
+    if (nonMiddleBonusIndices.length > 0) {
+      const indexToReplace = nonMiddleBonusIndices[Math.floor(Math.random() * nonMiddleBonusIndices.length)];
+      // Replace with a weighted random symbol (excluding bonus to avoid infinite loop)
+      let random = Math.random() * (TOTAL_WEIGHT - SYMBOL_WEIGHTS.bonus);
+      const regularSymbols: SlotSymbol[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'godlike', 'orb'];
+      for (const symbol of regularSymbols) {
+        random -= SYMBOL_WEIGHTS[symbol];
+        if (random <= 0) {
+          middleRow[indexToReplace] = symbol;
+          console.log(`[Slots] Replaced bonus symbol at column ${indexToReplace} to prevent misleading 3-bonus without middle column trigger`);
+          break;
+        }
+      }
+    }
+  }
+  
+  return symbols;
 }
 
 // Spin slots with bonus game weights (increased probability)
@@ -266,15 +328,16 @@ export function spinSlotsWithBonus(): SlotSymbol[][] {
   ];
 }
 
-// Check if bonus trigger is activated (3 bonus symbols on middle reel - index 2)
+// Check if bonus trigger is activated (3 bonus symbols horizontally on row 2, with one being the middle column)
 export function checkBonusTrigger(symbols: SlotSymbol[][]): boolean {
-  // Requirement: "3 glowing bonus tiles in any position on the middle reel"
-  // Check the middle reel (column index 2) - all 3 rows
-  const middleReelSymbols = [symbols[0][2], symbols[1][2], symbols[2][2]]; // Top, middle, bottom rows of middle reel
-  const bonusCount = middleReelSymbols.filter(s => s === 'bonus').length;
+  // Requirement: "3 bonus symbols horizontally on row 2 (middle row, index 1), with one being the middle column (column 2)"
+  // Bonus symbols only appear on middle row (row 1, index 1)
+  const middleRow = symbols[1]; // Row 2 (middle row) - array of 5 columns
+  const bonusCount = middleRow.filter(s => s === 'bonus').length;
+  const hasBonusInMiddleColumn = middleRow[2] === 'bonus'; // Check if middle column (column 2) has bonus
   
-  // Trigger if we have 3 bonus symbols on the middle reel (all 3 rows)
-  return bonusCount >= 3;
+  // Trigger when we have 3 bonus symbols on the middle row AND at least one is in the middle column
+  return bonusCount >= 3 && hasBonusInMiddleColumn;
 }
 
 // Calculate payout based on symbols (ONLY checks middle row for 3+ of a kind)

@@ -3208,9 +3208,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     // Validate bet amount
     const numericBet = Number(betAmount);
     console.log('[Slots] Validating bet amount:', { betAmount, numericBet, type: typeof betAmount });
-    if (isNaN(numericBet) || numericBet < 5000 || numericBet > 25000) {
-      console.error('[Slots] Invalid bet amount:', { betAmount, numericBet, isNaN: isNaN(numericBet), lessThanMin: numericBet < 5000, greaterThanMax: numericBet > 25000 });
-      socket.emit('slot_machine_error', { slotMachineId, message: `Invalid bet amount: ${numericBet}. Must be between 5,000 and 25,000 orbs.` });
+    if (isNaN(numericBet) || numericBet < 5000 || numericBet > 10000) {
+      console.error('[Slots] Invalid bet amount:', { betAmount, numericBet, isNaN: isNaN(numericBet), lessThanMin: numericBet < 5000, greaterThanMax: numericBet > 10000 });
+      socket.emit('slot_machine_error', { slotMachineId, message: `Invalid bet amount: ${numericBet}. Must be between 5,000 and 10,000 orbs.` });
       return;
     }
     
@@ -3240,7 +3240,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       type SlotSymbol = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'godlike' | 'orb' | 'bonus';
       
       // Check if player is in bonus game
-      let bonusState = getBonusGameState(playerId);
+      let bonusState = getBonusGameState(playerId, slotMachineId);
       const isInBonusGame = bonusState?.isInBonus ?? false;
       
       // Spin the reels FIRST to check if bonus will trigger (before deducting bet)
@@ -3318,26 +3318,32 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
           freeSpinsRemaining: 10,
           isInBonus: true
         };
-        setBonusGameState(playerId, bonusState);
+        setBonusGameState(playerId, slotMachineId, bonusState);
         console.log('[Slots] Started bonus game with 10 free spins');
       } else if (bonusTriggered && isInBonusGame) {
         // Retrigger: add 10 more free spins
         bonusState!.freeSpinsRemaining += 10;
-        setBonusGameState(playerId, bonusState!);
+        setBonusGameState(playerId, slotMachineId, bonusState!);
         console.log('[Slots] Bonus retriggered! Added 10 more free spins. Total:', bonusState!.freeSpinsRemaining);
       } else if (isInBonusGame) {
-        // Decrement free spins
+        // Decrement free spins AFTER processing the spin
+        // This ensures the final spin (when freeSpinsRemaining is 1) is still processed as a bonus game spin
         bonusState!.freeSpinsRemaining--;
         if (bonusState!.freeSpinsRemaining <= 0) {
-          // Bonus game ended
-          clearBonusGameState(playerId);
-          bonusState = undefined;
-          console.log('[Slots] Bonus game ended');
+          // Bonus game ended - but keep isInBonus true for this result so client knows it was a bonus spin
+          // We'll clear it after sending the result
+          bonusState = { freeSpinsRemaining: 0, isInBonus: true }; // Keep isInBonus true for final spin
+          console.log('[Slots] Bonus game ended (final spin completed, but keeping isInBonus true for result)');
         } else {
-          setBonusGameState(playerId, bonusState!);
+          setBonusGameState(playerId, slotMachineId, bonusState!);
           console.log('[Slots] Free spins remaining:', bonusState!.freeSpinsRemaining);
         }
       }
+      
+      // Re-fetch bonus state after updates to ensure we have the latest state
+      // This ensures bonusState is correct even if there were any issues with the local variable
+      const currentBonusState = getBonusGameState(playerId, slotMachineId);
+      const finalBonusState = currentBonusState || bonusState;
       
       // Calculate payout (use original bet amount for multiplier, even in bonus game)
       const payout = calculatePayout(symbols, numericBet);
@@ -3378,11 +3384,22 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       }
       
       // Emit result to player
-      const bonusGameStatePayload = bonusState ? {
-        isBonusGame: bonusState.isInBonus,
-        freeSpinsRemaining: bonusState.freeSpinsRemaining,
+      // Always include bonusGameState when bonus triggers or when in bonus game
+      // Include it even if freeSpinsRemaining is 0 (so client knows it was the final bonus spin)
+      const bonusGameStatePayload = (bonusTriggered || finalBonusState) ? {
+        isBonusGame: finalBonusState?.isInBonus ?? (bonusTriggered ? true : false),
+        freeSpinsRemaining: finalBonusState?.freeSpinsRemaining ?? (bonusTriggered ? 10 : 0),
         bonusTriggered: bonusTriggered
       } : undefined;
+      
+      // Clear bonus state AFTER sending result if it's ended
+      // This ensures the final spin is still processed as a bonus game spin
+      if (finalBonusState && finalBonusState.freeSpinsRemaining <= 0 && !bonusTriggered) {
+        // Update state to mark bonus game as ended, then clear it
+        setBonusGameState(playerId, slotMachineId, { freeSpinsRemaining: 0, isInBonus: false });
+        clearBonusGameState(playerId, slotMachineId);
+        console.log('[Slots] Cleared bonus game state after sending final result');
+      }
       
       // Send all 3 rows to client (3 rows × 5 columns)
       socket.emit('slot_machine_result', {

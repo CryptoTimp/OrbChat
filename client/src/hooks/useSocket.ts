@@ -501,16 +501,26 @@ function attachListeners(sock: Socket) {
     const state = useGameStore.getState();
     console.log('Current playerId:', state.playerId, 'Received playerId:', playerId, 'Match:', playerId === state.playerId);
     
+    // Check if this is a slot win message (contains "spun" and "won")
+    const isSlotWin = text.includes('spun') && text.includes('won');
+    
     // Skip if this is our own message (already added via optimistic update)
-    if (playerId === state.playerId) {
+    // BUT: Always show slot win messages above player heads, even for the current player
+    if (playerId === state.playerId && !isSlotWin) {
       console.log('Skipping own message (already shown via optimistic update)');
       return;
     }
     
-    console.log('Adding chat message from other player');
+    console.log('Adding chat message from other player' + (isSlotWin ? ' (slot win)' : ''));
     state.updatePlayerChat(playerId, text, createdAt, textColor);
     state.addChatMessage(playerId, text, createdAt, textColor);
     console.log('Chat message added, current messages count:', state.chatMessages.length);
+    
+    // Debug: Log if this is a slot win for the local player
+    if (isSlotWin && playerId === state.playerId) {
+      const player = state.players.get(playerId);
+      console.log('[Slot Win Chat] Local player chatBubble set:', player?.chatBubble);
+    }
   });
   
   // Orb events

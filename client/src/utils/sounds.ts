@@ -168,6 +168,18 @@ export const playLevelUpSound = () => {
   }
 };
 
+// Play the bonus trigger sound for slot machine bonus games
+export const playBonusTriggerSound = () => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    const sound = new Audio('/level-up-retro-video-game-438908.mp3');
+    sound.volume = state.sfxVolume / 100;
+    sound.play().catch((err) => {
+      console.error('Failed to play bonus trigger sound:', err);
+    });
+  }
+};
+
 // Play the sell item sound
 export const playSellSound = () => {
   const state = useGameStore.getState();
@@ -225,5 +237,34 @@ export const playBlackjackLossSound = () => {
     const sound = new Audio('/classic-game-action-negative-8-224414.mp3');
     sound.volume = state.sfxVolume / 100;
     sound.play().catch(() => {});
+  }
+};
+
+// Play the bonus symbol sound with pitch control (pitch increases with count: 1.0, 1.15, 1.3 for 1, 2, 3 bonus symbols)
+export const playBonusSymbolSound = (bonusCount: number) => {
+  const state = useGameStore.getState();
+  if (state.sfxEnabled) {
+    // Calculate pitch: 1.0 for 1 bonus, 1.15 for 2, 1.3 for 3
+    const pitch = 1.0 + (bonusCount - 1) * 0.15;
+    
+    // Use Web Audio API to control pitch
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    fetch('/level-up-289723.mp3')
+      .then(response => response.arrayBuffer())
+      .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+      .then(audioBuffer => {
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+        
+        source.buffer = audioBuffer;
+        source.playbackRate.value = pitch; // Control pitch via playback rate
+        gainNode.gain.value = state.sfxVolume / 100;
+        
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        source.start(0);
+      })
+      .catch(() => {});
   }
 };

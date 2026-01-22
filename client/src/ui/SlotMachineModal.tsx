@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '../state/gameStore';
 import { useSocket } from '../hooks/useSocket';
-import { playClickSound, playCloseSound, playLevelUpSound, playBlackjackLossSound } from '../utils/sounds';
+import { playClickSound, playCloseSound, playLevelUpSound, playBlackjackLossSound, playBonusSymbolSound, playBonusTriggerSound } from '../utils/sounds';
 import { ItemRarity } from '../types';
 import { updateUserOrbs } from '../firebase/auth';
 
 const MIN_BET = 5000;
-const MAX_BET = 25000;
-const BET_OPTIONS = [5000, 10000, 15000, 20000, 25000];
+const MAX_BET = 10000;
+const BET_OPTIONS = [5000, 10000];
 
 // Slot symbols based on rarity types + orbs + bonus
 type SlotSymbol = ItemRarity | 'orb' | 'bonus';
@@ -16,19 +16,36 @@ const SYMBOL_ORDER: SlotSymbol[] = ['common', 'uncommon', 'rare', 'epic', 'legen
 
 // Standard 5-reel slot machine odds (weighted probabilities)
 // NOTE: These should match server/src/slots.ts SYMBOL_WEIGHTS
+// Further adjusted: reduced common/uncommon by 15%, increased rare/epic/legendary by 15%
 const SYMBOL_WEIGHTS: Record<SlotSymbol, number> = {
-  common: 50,      // Most common (50%)
-  uncommon: 20,    // Common (20%)
-  rare: 10,        // Uncommon (10%)
-  epic: 8,         // Rare (8%)
-  legendary: 6,    // Very rare (6%)
-  godlike: 3,      // Extremely rare (3%)
+  common: 30,      // Reduced by 15% from 35 (was 50%)
+  uncommon: 13,    // Reduced by 15% from 15 (was 20%)
+  rare: 21,        // Increased by 15% from 18 (was 10%)
+  epic: 17,        // Increased by 15% from 15 (was 8%)
+  legendary: 14,   // Increased by 15% from 12 (was 6%)
+  godlike: 3,      // Same (3%)
   orb: 1,          // Rarest (1% - jackpot symbol)
-  bonus: 2         // Very rare (2% - bonus trigger)
+  bonus: 25        // Bonus symbol only appears on row 2 (middle row) of any column (~21.5% per symbol, bonus trigger ~1 in 100 spins for 3 on row 2)
 };
 
 // Calculate total weight for probability normalization
 const TOTAL_WEIGHT = Object.values(SYMBOL_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
+
+// Spinning animation weights - bonus symbols appear more often during spins for visual excitement
+// but actual win odds remain the same (determined by server)
+const SPIN_ANIMATION_WEIGHTS: Record<SlotSymbol, number> = {
+  common: 35,      // Reduced to make room for more bonus symbols
+  uncommon: 15,    // Reduced slightly
+  rare: 8,         // Reduced slightly
+  epic: 6,         // Reduced slightly
+  legendary: 4,    // Reduced slightly
+  godlike: 2,      // Same
+  orb: 1,          // Same
+  bonus: 29        // Much higher (~29% vs 0.2%) - creates excitement during spins on middle reel
+};
+
+// Calculate total weight for spin animation
+const SPIN_ANIMATION_TOTAL_WEIGHT = Object.values(SPIN_ANIMATION_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
 
 // Bonus game symbol weights (matching server - skewed toward higher rarity rewards)
 const BONUS_SYMBOL_WEIGHTS: Record<SlotSymbol, number> = {
@@ -50,28 +67,29 @@ function calculateProbability(weight: number, totalWeight: number): number {
 }
 
 // Payout multipliers for winning combinations (must match server/src/slots.ts)
+// Common and uncommon payouts are < 1.0x to ensure players always lose money but get small kickback
 const PAYOUTS: Record<string, number> = {
   '5_orb': 1000,           // 5 orbs = 1000x
   '5_godlike': 500,        // 5 godlike = 500x
   '5_legendary': 250,      // 5 legendary = 250x
   '5_epic': 100,           // 5 epic = 100x
   '5_rare': 50,            // 5 rare = 50x
-  '5_uncommon': 20,        // 5 uncommon = 20x
-  '5_common': 5,           // 5 common = 5x (matches server)
+  '5_uncommon': 0.95,      // 5 uncommon = 0.95x (95% of bet - small kickback)
+  '5_common': 0.9,         // 5 common = 0.9x (90% of bet - small kickback)
   '4_orb': 200,            // 4 orbs = 200x
   '4_godlike': 100,        // 4 godlike = 100x
   '4_legendary': 50,       // 4 legendary = 50x
   '4_epic': 25,            // 4 epic = 25x
   '4_rare': 15,            // 4 rare = 15x
-  '4_uncommon': 8,         // 4 uncommon = 8x
-  '4_common': 3,           // 4 common = 3x (matches server)
+  '4_uncommon': 0.8,       // 4 uncommon = 0.8x (80% of bet - small kickback)
+  '4_common': 0.7,         // 4 common = 0.7x (70% of bet - small kickback)
   '3_orb': 50,             // 3 orbs = 50x
   '3_godlike': 25,         // 3 godlike = 25x
   '3_legendary': 10,       // 3 legendary = 10x
   '3_epic': 5,             // 3 epic = 5x
   '3_rare': 3,             // 3 rare = 3x
-  '3_uncommon': 2,         // 3 uncommon = 2x
-  '3_common': 1.5,         // 3 common = 1.5x (matches server)
+  '3_uncommon': 0.6,       // 3 uncommon = 0.6x (60% of bet - small kickback)
+  '3_common': 0.5,         // 3 common = 0.5x (50% of bet - small kickback)
 };
 
 // Get symbol color based on rarity
@@ -84,14 +102,31 @@ function getSymbolColor(symbol: SlotSymbol): string {
     case 'legendary': return '#f59e0b';   // Orange
     case 'godlike': return '#ef4444';     // Red
     case 'orb': return '#fbbf24';         // Gold
-    case 'bonus': return '#ff6b35';       // Bright orange/red for bonus (glowing)
+    case 'bonus': return '#9333ea';       // Cosmic purple (will be animated)
     default: return '#ffffff';
   }
 }
 
-// Get symbol display - returns orb emoji
+// Get symbol display - returns orb emoji or "B" for bonus
 function getSymbolText(symbol: SlotSymbol): string {
-  return '●'; // Always show orb symbol
+  if (symbol === 'bonus') {
+    return 'B'; // Animated "B" for bonus symbol
+  }
+  return '●'; // Orb symbol for all other symbols
+}
+
+// Format number with K/M abbreviations
+function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    const value = num / 1000000;
+    // Check if value is effectively a whole number (accounting for floating point precision)
+    return (Math.abs(value % 1) < 0.0001 ? Math.round(value).toString() : value.toFixed(1)) + 'M';
+  } else if (num >= 1000) {
+    const value = num / 1000;
+    // Check if value is effectively a whole number (accounting for floating point precision)
+    return (Math.abs(value % 1) < 0.0001 ? Math.round(value).toString() : value.toFixed(1)) + 'K';
+  }
+  return num.toString();
 }
 
 interface ReelState {
@@ -153,7 +188,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const [sessionStartingBalance, setSessionStartingBalance] = useState<number | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0); // Track last spin time for cooldown
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0); // Cooldown remaining in seconds
-  const pendingResultRef = useRef<{ symbols: SlotSymbol[][]; payout: number; bet: number; newBalance?: number; bonusTriggered?: boolean } | null>(null);
+  const pendingResultRef = useRef<{ slotMachineId: string; symbols: SlotSymbol[][]; payout: number; bet: number; newBalance?: number; bonusTriggered?: boolean; bonusGameState?: { isBonusGame: boolean; freeSpinsRemaining: number; bonusTriggered: boolean } } | null>(null);
   const sessionSlotChangesRef = useRef<number>(0); // Track only slot machine balance changes for session P/L
   const autoSpinTimeoutRef = useRef<number | null>(null); // Track auto-spin timeout
   const isBonusGameRef = useRef<boolean>(false); // Track bonus game state for auto-spin
@@ -164,6 +199,10 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const [isBonusGame, setIsBonusGame] = useState(false);
   const [freeSpinsRemaining, setFreeSpinsRemaining] = useState(0);
   const [bonusTriggered, setBonusTriggered] = useState(false);
+  const [cumulativeBonusPayout, setCumulativeBonusPayout] = useState(0); // Track total winnings during bonus game
+  const [showBonusWinModal, setShowBonusWinModal] = useState(false); // Show final bonus win modal
+  const [displayedBonusWin, setDisplayedBonusWin] = useState(0); // Animated displayed amount
+  const bonusModalClosedRef = useRef<boolean>(false); // Track if bonus modal was manually closed
   
   // Dev toggle for testing
   const [devForceBonus, setDevForceBonus] = useState(false);
@@ -176,6 +215,32 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
       bonusTriggered
     });
   }, [isBonusGame, freeSpinsRemaining, bonusTriggered]);
+  
+  // Animate bonus win tick-up effect
+  useEffect(() => {
+    if (showBonusWinModal && cumulativeBonusPayout > 0) {
+      const duration = 2000; // 2 seconds to tick up
+      const steps = 60; // 60 animation steps
+      const increment = cumulativeBonusPayout / steps;
+      const stepDuration = duration / steps;
+      
+      let currentStep = 0;
+      const interval = setInterval(() => {
+        currentStep++;
+        // Calculate the animated value, but ensure we always use whole numbers for display
+        const animatedValue = increment * currentStep;
+        const newValue = Math.min(cumulativeBonusPayout, Math.floor(animatedValue));
+        setDisplayedBonusWin(newValue);
+        
+        if (currentStep >= steps || newValue >= cumulativeBonusPayout) {
+          setDisplayedBonusWin(cumulativeBonusPayout); // Ensure final value is exact
+          clearInterval(interval);
+        }
+      }, stepDuration);
+      
+      return () => clearInterval(interval);
+    }
+  }, [showBonusWinModal, cumulativeBonusPayout]);
   
   // Drag state for modal
   const [isDragging, setIsDragging] = useState(false);
@@ -199,6 +264,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const reelStartTimesRef = useRef<number[]>([]); // Start time for each reel
   const finalSymbolsRef = useRef<SlotSymbol[][] | null>(null); // Store final symbols from server (3 rows × 5 columns)
   const reelLandedSoundPlayedRef = useRef<boolean[]>([]); // Track if landing sound has been played for each reel
+  const bonusSymbolCountRef = useRef<number>(0); // Track how many bonus symbols have landed during current spin
+  const bonusSymbolSoundPlayedRef = useRef<boolean[]>([]); // Track if bonus sound has been played for each reel
   
   // Slot machine names map
   const SLOT_MACHINE_NAMES: Record<string, string> = {
@@ -272,13 +339,15 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
       setSlotMachineName(SLOT_MACHINE_NAMES[slotMachineId] || 'Slot Machine');
       
       // Only initialize once when modal first opens
+      // Use SPIN_ANIMATION_WEIGHTS to make bonus symbols appear more often during spins
+      // (actual win odds are determined by server, so this is just visual)
       const extendedSymbols: SlotSymbol[] = [];
       for (let i = 0; i < 100; i++) {
-        // Weighted random selection (include bonus symbol)
-        let random = Math.random() * TOTAL_WEIGHT;
+        // Weighted random selection using spin animation weights (bonus appears more often)
+        let random = Math.random() * SPIN_ANIMATION_TOTAL_WEIGHT;
         const allSymbols: SlotSymbol[] = [...SYMBOL_ORDER, 'bonus'];
         for (const symbol of allSymbols) {
-          random -= SYMBOL_WEIGHTS[symbol] || 0;
+          random -= SPIN_ANIMATION_WEIGHTS[symbol] || 0;
           if (random <= 0) {
             extendedSymbols.push(symbol);
             break;
@@ -406,24 +475,24 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
         const aliveParticles = prev.filter(p => p.life > 0);
         
         // Find bonus symbols in the reels and spawn particles around them
-        if (!isSpinning && reels.length > 0 && !isBonusGame) {
-          reels.forEach((reel, reelIndex) => {
-            // Check if the center symbol (currentIndex) is a bonus symbol
-            if (reel.symbols.length > 0 && !reel.spinning) {
-              const centerSymbolIndex = reel.currentIndex % reel.symbols.length;
-              const centerSymbol = reel.symbols[centerSymbolIndex];
-              
-              if (centerSymbol === 'bonus') {
+        // Only spawn particles when bonus symbols are actually visible (on middle row)
+        if (!isSpinning && reels.length > 0 && !isBonusGame && finalSymbolsRef.current) {
+          const middleRow = finalSymbolsRef.current[1];
+          if (middleRow) {
+            // Spawn particles for bonus symbols on the middle row (any column)
+            // Check all columns on the middle row for bonus symbols
+            middleRow.forEach((symbol, colIndex) => {
+              if (symbol === 'bonus') {
                 // Spawn particles around this bonus symbol
                 // Calculate approximate position (reels are in a grid, positioned in center area)
                 // Reels area starts around 20% from top and takes up ~60% of modal height
                 const reelWidth = 100 / 5; // 5 reels
-                const reelCenterX = (reelIndex * reelWidth) + (reelWidth / 2);
+                const reelCenterX = (colIndex * reelWidth) + (reelWidth / 2);
                 const reelCenterY = 45; // Middle of reel area (approximately)
                 
                 // Spawn particles more frequently around bonus symbols
                 if (Math.random() > 0.3) { // 70% chance each frame
-                  const bonusColors = ['#ff6b35', '#ff8c42', '#ffa500', '#ff6347', '#ff4500'];
+                  const bonusColors = ['#9333ea', '#4f46e5', '#3b82f6', '#6366f1', '#8b5cf6']; // Cosmic purple/indigo colors
                   const angle = Math.random() * Math.PI * 2;
                   const distance = Math.random() * 8 + 3; // 3-11% from center
                   const speed = Math.random() * 0.2 + 0.05;
@@ -440,8 +509,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                   });
                 }
               }
-            }
-          });
+            });
+          }
         }
         
         // Update particle positions and life
@@ -554,6 +623,19 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
           if (!reelLandedSoundPlayedRef.current[index]) {
             playClickSound();
             reelLandedSoundPlayedRef.current[index] = true;
+          }
+          
+          // Check if this reel landed on a bonus symbol on row 2 (middle row) and play sound immediately
+          // finalSymbolsRef is [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
+          // index is the column/reel index (0-4), so we check the middle row (index 1) for this column
+          if (!bonusSymbolSoundPlayedRef.current[index] && finalSymbolsRef.current && finalSymbolsRef.current[1]) {
+            const middleRow = finalSymbolsRef.current[1];
+            if (middleRow[index] === 'bonus') {
+              // Bonus symbol landed on row 2 - increment count and play sound with increasing pitch
+              bonusSymbolCountRef.current++;
+              playBonusSymbolSound(bonusSymbolCountRef.current);
+              bonusSymbolSoundPlayedRef.current[index] = true;
+            }
           }
           
           // CRITICAL: Keep the reel at final position and DO NOT reset
@@ -755,9 +837,86 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
         
         // Process pending result - NOW update balance and show result
         if (pendingResultRef.current) {
-          const { symbols, payout, bet, newBalance, bonusTriggered: wasBonusTriggered } = pendingResultRef.current;
+          // Verify this result is for this specific slot machine
+          if (pendingResultRef.current.slotMachineId !== slotMachineId) {
+            console.log('[SlotMachineModal] Ignoring pending result - wrong slotMachineId:', pendingResultRef.current.slotMachineId, 'expected:', slotMachineId);
+            return; // Don't process results for other slot machines
+          }
           
-          // Get current bonus game state for auto-spin check
+          const { symbols, payout, bet, newBalance, bonusTriggered: wasBonusTriggered, bonusGameState } = pendingResultRef.current;
+          
+          // Apply bonus game state AFTER animation completes (so reels play out first)
+          // Capture state before updating
+          const wasInBonusGame = isBonusGame;
+          const previousFreeSpins = freeSpinsRemaining;
+          
+          // Track cumulative bonus payout during bonus game
+          // In bonus game: payout is already the win amount (no bet deducted, it's pure win)
+          // In base game: payout is net (payout - bet)
+          // For bonus game, we want to accumulate the actual win amount
+          const actualPayout = wasInBonusGame ? payout : (payout > 0 ? payout : 0); // In bonus game, payout is already the win
+          
+          // Reset cumulative when bonus game starts (when bonus is triggered)
+          if (bonusGameState?.bonusTriggered && !wasInBonusGame) {
+            setCumulativeBonusPayout(0); // Reset at start of bonus game
+          }
+          
+          if (wasInBonusGame && actualPayout > 0) {
+            // During bonus game, accumulate payouts (use wasInBonusGame to check before state update)
+            setCumulativeBonusPayout(prev => prev + actualPayout);
+          }
+          
+          if (bonusGameState) {
+            // Don't apply bonus game state if user manually closed the bonus modal
+            if (bonusModalClosedRef.current && !bonusGameState.bonusTriggered) {
+              // User closed the modal, don't re-apply bonus state unless it's a new bonus trigger
+              console.log('[SlotMachineModal] Skipping bonus state application - modal was manually closed');
+              bonusModalClosedRef.current = false; // Reset flag after skipping
+            } else {
+              console.log('[SlotMachineModal] Applying bonus game state after animation:', {
+                isBonusGame: bonusGameState.isBonusGame,
+                freeSpinsRemaining: bonusGameState.freeSpinsRemaining,
+                bonusTriggered: bonusGameState.bonusTriggered
+              });
+              // CRITICAL: Always use the exact value from server, don't increment
+              setIsBonusGame(bonusGameState.isBonusGame);
+              setFreeSpinsRemaining(bonusGameState.freeSpinsRemaining); // Use server value directly
+              setBonusTriggered(bonusGameState.bonusTriggered);
+              // Update refs
+              isBonusGameRef.current = bonusGameState.isBonusGame;
+              freeSpinsRemainingRef.current = bonusGameState.freeSpinsRemaining;
+              
+              // Check if bonus game just ended (was in bonus, now not, or freeSpins went to 0)
+              if (wasInBonusGame && (!bonusGameState.isBonusGame || bonusGameState.freeSpinsRemaining === 0)) {
+                // Bonus game ended - wait a moment for reels to fully settle, then show final win modal
+                setTimeout(() => {
+                  setShowBonusWinModal(true);
+                  setDisplayedBonusWin(0); // Start from 0 for tick-up animation
+                }, 500); // 500ms delay to let reels fully settle and user see the final result
+              }
+              
+              if (bonusGameState.bonusTriggered) {
+                // Play special sound for bonus trigger (after reels finish)
+                playBonusTriggerSound();
+                bonusModalClosedRef.current = false; // Reset flag on new bonus trigger
+              }
+            }
+          } else {
+            // Only clear bonus state if we're not currently in a bonus game
+            // This prevents clearing the state during a bonus game spin
+            if (!isBonusGame) {
+              console.log('[SlotMachineModal] No bonusGameState provided, clearing bonus state');
+              // Clear bonus game state if not provided (bonus game ended)
+              setIsBonusGame(false);
+              setFreeSpinsRemaining(0);
+              setBonusTriggered(false);
+              // Update refs
+              isBonusGameRef.current = false;
+              freeSpinsRemainingRef.current = 0;
+            }
+          }
+          
+          // Get current bonus game state for reference
           const currentIsBonusGame = isBonusGame;
           const currentFreeSpins = freeSpinsRemaining;
           
@@ -802,6 +961,9 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
           
           setLastResult({ symbols, payout });
           
+          // Note: Bonus symbol sounds are now played as each reel stops (in the animation loop)
+          // This allows players to hear the incremental pitch increase as multiple bonus symbols land
+          
           // Add to game history (keep last 10)
           setGameHistory(prev => {
             const newHistory = [...prev, { won: payout > 0, amount: payout > 0 ? payout : -bet, bet }];
@@ -821,46 +983,15 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
             if (isBigWin) {
               playLevelUpSound();
             }
-            // Small wins don't play sound
-          } else if (!wasBonusTriggered) {
-            // Only play loss sound if bonus wasn't triggered
+            // Small wins (including kickback payouts) don't play sound
+          } else if (payout === 0 && !wasBonusTriggered) {
+            // Only play loss sound when payout is exactly 0 (no win at all) and bonus wasn't triggered
             playBlackjackLossSound();
           }
           
           pendingResultRef.current = null;
           
-          // Auto-spin free spins if in bonus game and still have free spins remaining
-          // Use refs to get the latest state values (they're updated when bonus state changes)
-          const shouldAutoSpin = isBonusGameRef.current && freeSpinsRemainingRef.current > 0;
-          console.log('[SlotMachine] Auto-spin check after animation:', {
-            shouldAutoSpin,
-            isBonusGame: isBonusGameRef.current,
-            freeSpinsRemaining: freeSpinsRemainingRef.current,
-            isSpinning
-          });
-          
-          if (shouldAutoSpin) {
-            console.log('[SlotMachine] Scheduling auto-spin. Remaining:', freeSpinsRemainingRef.current);
-            // Clear any existing timeout
-            if (autoSpinTimeoutRef.current) {
-              clearTimeout(autoSpinTimeoutRef.current);
-            }
-            // Wait a short delay before auto-spinning (1.5 seconds)
-            autoSpinTimeoutRef.current = window.setTimeout(() => {
-              // Check refs again (they're always up-to-date)
-              if (isBonusGameRef.current && freeSpinsRemainingRef.current > 0 && !isSpinning) {
-                console.log('[SlotMachine] Executing auto-spin. Remaining:', freeSpinsRemainingRef.current);
-                handleSpin();
-              } else {
-                console.log('[SlotMachine] Auto-spin cancelled:', {
-                  isBonusGame: isBonusGameRef.current,
-                  freeSpinsRemaining: freeSpinsRemainingRef.current,
-                  isSpinning
-                });
-              }
-              autoSpinTimeoutRef.current = null;
-            }, 1500);
-          }
+          // Auto-spin removed - players must manually click spin during bonus games
         }
         
         // DO NOT continue animation - reels are done and should stay at final positions
@@ -985,57 +1116,13 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
     };
   }, []);
   
-  // Auto-spin effect: Watch for when animation completes (isSpinning goes from true to false)
+  // Auto-spin removed - players must manually click spin during bonus games
   useEffect(() => {
-    // Only trigger auto-spin when animation JUST completed (was spinning, now not spinning)
-    const animationJustCompleted = wasSpinningRef.current && !isSpinning;
-    
-    // Update ref for next check
+    // Update ref for tracking animation state (still used for other purposes)
     wasSpinningRef.current = isSpinning;
     
-    // Only auto-spin if:
-    // 1. Animation just completed (transition from spinning to not spinning)
-    // 2. In bonus game
-    // 3. Have free spins remaining
-    // 4. Modal is open
-    if (animationJustCompleted && isBonusGame && freeSpinsRemaining > 0 && slotMachineOpen) {
-      console.log('[SlotMachine] Auto-spin effect triggered (animation completed):', {
-        wasSpinning: wasSpinningRef.current,
-        isSpinning,
-        isBonusGame,
-        freeSpinsRemaining,
-        slotMachineOpen
-      });
-      
-      // Clear any existing timeout
-      if (autoSpinTimeoutRef.current) {
-        clearTimeout(autoSpinTimeoutRef.current);
-      }
-      
-      // Wait 1.5 seconds before auto-spinning
-      autoSpinTimeoutRef.current = window.setTimeout(() => {
-        // Double-check conditions before spinning (use refs for latest values)
-        if (!isSpinning && isBonusGameRef.current && freeSpinsRemainingRef.current > 0 && slotMachineOpen) {
-          console.log('[SlotMachine] Auto-spin executing. Remaining:', freeSpinsRemainingRef.current);
-          handleSpin();
-        } else {
-          console.log('[SlotMachine] Auto-spin cancelled in effect:', {
-            isSpinning,
-            isBonusGame: isBonusGameRef.current,
-            freeSpinsRemaining: freeSpinsRemainingRef.current,
-            slotMachineOpen
-          });
-        }
-        autoSpinTimeoutRef.current = null;
-      }, 1500);
-      
-      return () => {
-        if (autoSpinTimeoutRef.current) {
-          clearTimeout(autoSpinTimeoutRef.current);
-          autoSpinTimeoutRef.current = null;
-        }
-      };
-    } else if (!isSpinning && !isBonusGame) {
+    // Clear auto-spin timeout if not in bonus game (cleanup)
+    if (!isSpinning && !isBonusGame) {
       // Clear timeout if not in bonus game
       if (autoSpinTimeoutRef.current) {
         clearTimeout(autoSpinTimeoutRef.current);
@@ -1046,6 +1133,9 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   
   // Listen for slot machine result from server
   useEffect(() => {
+    // Capture slotMachineId in closure to ensure we're checking against the correct one
+    const currentSlotMachineId = slotMachineId;
+    
     const handleSlotResult = (event: CustomEvent<{ 
       slotMachineId: string; 
       slotMachineName: string; 
@@ -1061,7 +1151,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
       const { slotMachineId: resultSlotMachineId, slotMachineName, symbols, payout, newBalance, bonusGameState } = event.detail;
       
       console.log('[SlotMachineModal] Received slot_machine_result:', { 
-        slotMachineId: resultSlotMachineId, 
+        resultSlotMachineId,
+        currentSlotMachineId,
         slotMachineName, 
         symbols, 
         payout, 
@@ -1069,8 +1160,14 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
         bonusGameState 
       });
       
-      // Only process results for this specific slot machine
-      if (resultSlotMachineId !== slotMachineId) return;
+      // Only process results for this specific slot machine - check early and return immediately
+      // This MUST be the first check to prevent any state updates for other slot machines
+      if (resultSlotMachineId !== currentSlotMachineId) {
+        console.log('[SlotMachineModal] Ignoring result - slotMachineId mismatch:', resultSlotMachineId, '!==', currentSlotMachineId);
+        return; // Exit immediately - don't process anything for other slot machines
+      }
+      
+      console.log('[SlotMachineModal] Processing result for slot machine:', currentSlotMachineId);
       
       // Update slot machine name if provided
       if (slotMachineName) {
@@ -1119,50 +1216,36 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
       setIsSpinning(true);
       setActiveReelIndex(0);
       
-      // Update bonus game state if provided
-      console.log('[SlotMachineModal] Processing bonusGameState:', bonusGameState);
-      if (bonusGameState) {
-        console.log('[SlotMachineModal] Setting bonus game state:', {
-          isBonusGame: bonusGameState.isBonusGame,
-          freeSpinsRemaining: bonusGameState.freeSpinsRemaining,
-          bonusTriggered: bonusGameState.bonusTriggered
-        });
-        // CRITICAL: Always use the exact value from server, don't increment
-        setIsBonusGame(bonusGameState.isBonusGame);
-        setFreeSpinsRemaining(bonusGameState.freeSpinsRemaining); // Use server value directly
-        setBonusTriggered(bonusGameState.bonusTriggered);
-        // Update refs for auto-spin logic
-        isBonusGameRef.current = bonusGameState.isBonusGame;
-        freeSpinsRemainingRef.current = bonusGameState.freeSpinsRemaining;
-        
-        if (bonusGameState.bonusTriggered) {
-          // Play special sound for bonus trigger
-          playLevelUpSound();
-        }
-      } else {
-        console.log('[SlotMachineModal] No bonusGameState provided, clearing bonus state');
-        // Clear bonus game state if not provided (bonus game ended)
-        setIsBonusGame(false);
-        setFreeSpinsRemaining(0);
-        setBonusTriggered(false);
-        // Update refs
-        isBonusGameRef.current = false;
-        freeSpinsRemainingRef.current = 0;
-      }
+      // Reset bonus symbol tracking for new spin
+      bonusSymbolCountRef.current = 0;
+      bonusSymbolSoundPlayedRef.current = [false, false, false, false, false]; // Reset for all 5 reels
+      
+      // Store bonus game state but don't apply it yet - wait for animation to complete
+      // This allows the reels to play out before showing the bonus screen
+      console.log('[SlotMachineModal] Received bonusGameState (will apply after animation):', bonusGameState);
       
       // Store result but don't show/play sounds or update balance until animation completes
       // payout is net payout (payout - bet)
       // If payout > 0: we won (payout is the net win amount)
       // If payout <= 0: we lost (payout is negative or 0, meaning we lost the bet)
       // Use betAmount from component state (the bet that was placed)
-      pendingResultRef.current = { symbols, payout, bet: betAmount, newBalance, bonusTriggered: bonusGameState?.bonusTriggered || false };
+      // Store bonusGameState to apply after animation completes
+      pendingResultRef.current = { 
+        slotMachineId: resultSlotMachineId, // Store slotMachineId to verify it matches when processing
+        symbols, 
+        payout, 
+        bet: betAmount, 
+        newBalance, 
+        bonusTriggered: bonusGameState?.bonusTriggered || false,
+        bonusGameState: bonusGameState || undefined // Store full bonus game state to apply after animation
+      };
     };
     
     window.addEventListener('slot_machine_result', handleSlotResult as EventListener);
     return () => {
       window.removeEventListener('slot_machine_result', handleSlotResult as EventListener);
     };
-  }, [slotMachineId, betAmount]);
+  }, [slotMachineId]); // Only depend on slotMachineId - handler will be recreated when it changes
 
   // Drag handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1241,10 +1324,22 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
 
   if (!slotMachineOpen) return null;
   
-  // Calculate paid amount from last result (show actual payout, even if negative/loss)
-  const paidAmount = lastResult ? lastResult.payout : 0;
+  // Calculate paid amount from last result
+  // During bonus game: payout is already the win amount (no bet deducted), show cumulative
+  // During base game: Server sends netPayout (payout - bet), so we need to add bet back to get actual payout amount
+  // Show actual payout amount in green, or 0 if no payout
+  let paidAmount = 0;
+  if (isBonusGame) {
+    // During bonus game, show cumulative payout
+    paidAmount = cumulativeBonusPayout;
+  } else if (lastResult) {
+    // Base game: payout is net (payout - bet), add bet back to get actual payout
+    const netPayout = lastResult.payout; // This is payout - bet from server
+    paidAmount = Math.max(0, netPayout + betAmount); // Add bet back to get actual payout, but don't go below 0
+  }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
       <div
         ref={modalRef}
@@ -1544,6 +1639,15 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         const fractionalOffset = (reel.currentIndex % 1) || 0; // Get fractional part if stored
                         const position = basePosition + (offset * symbolHeight) - (fractionalOffset * symbolHeight);
                         
+                        // During spinning, show bonus symbols on middle row (offset 0) of any column for visual excitement
+                        // When stopped, only middle row will show bonus symbols (handled in stopped state)
+                        const isMiddleRow = offset === 0; // Middle row is offset 0 (center position)
+                        // Allow bonus symbols on middle row of any column during spinning (for excitement)
+                        const isBonus = safeSymbol === 'bonus' && isMiddleRow;
+                        // If bonus symbol is not on middle row, replace it with common symbol
+                        const displaySymbol = (safeSymbol === 'bonus' && !isMiddleRow) ? 'common' : safeSymbol;
+                        const displayIsBonus = isBonus;
+                        
                         return (
                           <div
                             key={i}
@@ -1554,23 +1658,37 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                               top: `${position}%`,
                               height: `${symbolHeight}%`,
                               transition: 'none', // No transition during spin for smooth scrolling
-                              ...(isCenter ? {
+                              ...(isCenter && displayIsBonus ? {
+                                borderColor: '#9333ea',
+                                backgroundColor: 'rgba(147, 51, 234, 0.1)',
+                                boxShadow: '0 0 20px rgba(147, 51, 234, 0.5), 0 0 40px rgba(79, 70, 229, 0.3)'
+                              } : isCenter ? {
                                 borderColor: currentTheme.primary,
                                 backgroundColor: `${currentTheme.primary}20`
                               } : {})
                             }}
                           >
                             <div
-                              className="text-5xl font-bold"
+                              className="text-4xl font-bold flex items-center justify-center"
                               style={{ 
-                                color: getSymbolColor(safeSymbol),
-                                textShadow: safeSymbol === 'bonus'
-                                  ? `0 0 15px ${getSymbolColor(safeSymbol)}, 0 0 30px ${getSymbolColor(safeSymbol)}, 0 0 45px ${getSymbolColor(safeSymbol)}`
-                                  : `0 0 10px ${getSymbolColor(safeSymbol)}, 0 0 20px ${getSymbolColor(safeSymbol)}`,
-                                filter: safeSymbol === 'bonus' ? 'drop-shadow(0 0 8px rgba(255, 107, 53, 0.8))' : 'none'
+                                color: displayIsBonus ? '#9333ea' : getSymbolColor(displaySymbol),
+                                textShadow: displayIsBonus
+                                  ? `0 0 20px rgba(147, 51, 234, 0.8), 0 0 40px rgba(79, 70, 229, 0.6), 0 0 60px rgba(59, 130, 246, 0.4)`
+                                  : `0 0 10px ${getSymbolColor(displaySymbol)}, 0 0 20px ${getSymbolColor(displaySymbol)}`,
+                                filter: displayIsBonus ? 'drop-shadow(0 0 12px rgba(147, 51, 234, 0.9))' : 'none',
+                                background: displayIsBonus ? 'linear-gradient(135deg, #9333ea 0%, #4f46e5 50%, #3b82f6 100%)' : 'none',
+                                WebkitBackgroundClip: displayIsBonus ? 'text' : 'initial',
+                                WebkitTextFillColor: displayIsBonus ? 'transparent' : 'initial',
+                                backgroundClip: displayIsBonus ? 'text' : 'initial',
+                                lineHeight: '1',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '100%',
+                                height: '100%'
                               }}
                             >
-                              {getSymbolText(safeSymbol)}
+                              {getSymbolText(displaySymbol)}
                             </div>
                           </div>
                         );
@@ -1583,8 +1701,9 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         const rowIndex = offset + 1; // -1 -> 0 (top), 0 -> 1 (middle), 1 -> 2 (bottom)
                         
                         // Get symbol from finalSymbolsRef (3 rows × 5 columns)
+                        // finalSymbolsRef is [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
                         let safeSymbol: SlotSymbol = 'common';
-                        if (finalSymbolsRef.current && finalSymbolsRef.current[rowIndex] && finalSymbolsRef.current[rowIndex][reelIndex]) {
+                        if (finalSymbolsRef.current && finalSymbolsRef.current[rowIndex] && finalSymbolsRef.current[rowIndex][reelIndex] !== undefined) {
                           // Use the actual symbol from the server result
                           safeSymbol = finalSymbolsRef.current[rowIndex][reelIndex];
                         } else {
@@ -1596,6 +1715,24 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                           safeSymbol = reel.symbols[symbolIndex] || 'common';
                         }
                         
+                        // Show bonus symbols on row 2 (middle row, offset 0) of any column
+                        // Bonus symbols only appear on the middle row (row 1, index 1)
+                        const isMiddleRow = offset === 0; // Middle row is offset 0 (center position)
+                        
+                        // Show bonus symbols on middle row of any column when they land
+                        // This allows players to see "near-miss" scenarios (1 or 2 bonus symbols)
+                        let isBonus = false;
+                        if (safeSymbol === 'bonus' && isMiddleRow) {
+                          // Bonus symbol on middle row - show it (even if bonus didn't trigger)
+                          isBonus = true;
+                        } else if (safeSymbol === 'bonus') {
+                          // Bonus symbol on other rows - replace with common (bonus only on middle row)
+                          safeSymbol = 'common';
+                        }
+                        
+                        const displaySymbol = safeSymbol;
+                        const displayIsBonus = isBonus;
+                        
                         return (
                           <div
                             key={offset}
@@ -1604,23 +1741,37 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                             }`}
                             style={{
                               top: `${(offset + 1) * 33.33}%`,
-                              ...(isCenter ? {
+                              ...(isCenter && displayIsBonus ? {
+                                borderColor: '#9333ea',
+                                backgroundColor: 'rgba(147, 51, 234, 0.1)',
+                                boxShadow: '0 0 20px rgba(147, 51, 234, 0.5), 0 0 40px rgba(79, 70, 229, 0.3)'
+                              } : isCenter ? {
                                 borderColor: currentTheme.primary,
                                 backgroundColor: `${currentTheme.primary}20`
                               } : {})
                             }}
                           >
                             <div
-                              className="text-5xl font-bold"
+                              className="text-4xl font-bold flex items-center justify-center"
                               style={{ 
-                                color: getSymbolColor(safeSymbol),
-                                textShadow: safeSymbol === 'bonus'
-                                  ? `0 0 15px ${getSymbolColor(safeSymbol)}, 0 0 30px ${getSymbolColor(safeSymbol)}, 0 0 45px ${getSymbolColor(safeSymbol)}`
-                                  : `0 0 10px ${getSymbolColor(safeSymbol)}, 0 0 20px ${getSymbolColor(safeSymbol)}`,
-                                filter: safeSymbol === 'bonus' ? 'drop-shadow(0 0 8px rgba(255, 107, 53, 0.8))' : 'none'
+                                color: displayIsBonus ? '#9333ea' : getSymbolColor(displaySymbol),
+                                textShadow: displayIsBonus
+                                  ? `0 0 20px rgba(147, 51, 234, 0.8), 0 0 40px rgba(79, 70, 229, 0.6), 0 0 60px rgba(59, 130, 246, 0.4)`
+                                  : `0 0 10px ${getSymbolColor(displaySymbol)}, 0 0 20px ${getSymbolColor(displaySymbol)}`,
+                                filter: displayIsBonus ? 'drop-shadow(0 0 12px rgba(147, 51, 234, 0.9))' : 'none',
+                                background: displayIsBonus ? 'linear-gradient(135deg, #9333ea 0%, #4f46e5 50%, #3b82f6 100%)' : 'none',
+                                WebkitBackgroundClip: displayIsBonus ? 'text' : 'initial',
+                                WebkitTextFillColor: displayIsBonus ? 'transparent' : 'initial',
+                                backgroundClip: displayIsBonus ? 'text' : 'initial',
+                                lineHeight: '1',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '100%',
+                                height: '100%'
                               }}
                             >
-                              {getSymbolText(safeSymbol)}
+                              {getSymbolText(displaySymbol)}
                             </div>
                           </div>
                         );
@@ -1691,7 +1842,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               <span className="text-xs sm:text-sm font-pixel text-gray-400 whitespace-nowrap">PAID:</span>
               <span className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${
-                paidAmount > 0 ? 'text-green-400' : paidAmount < 0 ? 'text-red-400' : 'text-gray-500'
+                paidAmount > 0 ? 'text-green-400' : 'text-gray-500'
               }`}>
                 {paidAmount > 0 ? '+' : ''}{paidAmount.toLocaleString()}
               </span>
@@ -1714,6 +1865,67 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
         >
           <div className="absolute bottom-1 right-1 w-2 h-2 border-r-2 border-b-2 border-amber-400"></div>
         </div>
+        
+        {/* Bonus Win Modal - Shows total winnings after bonus game ends, positioned over the slot modal */}
+        {showBonusWinModal && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-auto">
+            <div className="absolute inset-0 bg-black/80" onClick={() => {}}></div>
+            <div 
+              className="relative bg-gradient-to-b from-orange-900/95 to-red-900/95 border-4 border-orange-400 rounded-2xl p-8 sm:p-12 max-w-md w-full mx-4 shadow-2xl"
+              style={{
+                boxShadow: '0 0 50px rgba(255, 107, 53, 0.8), 0 0 100px rgba(255, 69, 0, 0.6), inset 0 0 30px rgba(255, 107, 53, 0.3)'
+              }}
+            >
+              <button
+                onClick={() => {
+                  playCloseSound();
+                  setShowBonusWinModal(false);
+                  setCumulativeBonusPayout(0); // Reset cumulative after closing
+                  // Clear bonus game state to return to base game
+                  setIsBonusGame(false);
+                  setFreeSpinsRemaining(0);
+                  setBonusTriggered(false);
+                  isBonusGameRef.current = false;
+                  freeSpinsRemainingRef.current = 0;
+                  bonusModalClosedRef.current = true; // Mark that modal was manually closed
+                }}
+                className="absolute top-4 right-4 text-white hover:text-orange-300 transition-colors text-2xl sm:text-3xl font-bold"
+                style={{ textShadow: '0 0 10px rgba(255, 107, 53, 0.8)' }}
+              >
+                ✕
+              </button>
+              
+              <div className="text-center">
+                <h2 
+                  className="text-3xl sm:text-4xl font-pixel mb-4 animate-pulse"
+                  style={{ 
+                    color: '#ffa500',
+                    textShadow: '0 0 20px #ffa500, 0 0 40px #ff6b35, 0 0 60px #ff4500'
+                  }}
+                >
+                  BONUS WIN!
+                </h2>
+                
+                <div className="mb-6">
+                  <div className="text-sm sm:text-base font-pixel text-orange-200 mb-2">Total Winnings:</div>
+                  <div 
+                    className="text-5xl sm:text-6xl font-pixel font-bold"
+                    style={{ 
+                      color: '#ffa500',
+                      textShadow: '0 0 30px #ffa500, 0 0 60px #ff6b35, 0 0 90px #ff4500'
+                    }}
+                  >
+                    +{formatNumber(displayedBonusWin)}
+                  </div>
+                </div>
+                
+                <div className="text-xs sm:text-sm font-pixel text-orange-200">
+                  Click ✕ to continue
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Info Modal */}
@@ -1808,8 +2020,10 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                     </div>
                   </div>
                   <div className="mt-3 p-3 bg-orange-900/20 border border-orange-500/30 rounded text-xs font-pixel text-orange-300">
-                    <p className="mb-1">• Bonus game triggers when you get 3+ bonus symbols with the middle reel (3rd column) being bonus</p>
-                    <p className="mb-1">• Bonus game gives you 10 free spins with 8x increased probability for rare symbols</p>
+                    <p className="mb-1">• Bonus game triggers when you get 3 bonus symbols horizontally on row 2 (middle row), with one being the middle column</p>
+                    <p className="mb-1">• Bonus trigger odds: ~1.0% (1 in 100 spins) - Bonus symbols only appear on row 2 (middle row) of any column</p>
+                    <p className="mb-1">• You can see 1-2 bonus symbols on row 2 during regular play (near-miss scenarios)</p>
+                    <p className="mb-1">• Bonus game gives you 10 free spins with increased probability for rare+ symbols</p>
                     <p>• Bonus symbols cannot appear during bonus game (no retriggers)</p>
                   </div>
                 </div>
@@ -1826,8 +2040,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         <div>5 Legendary: <span className="text-orange-400">250x</span></div>
                         <div>5 Epic: <span className="text-purple-400">100x</span></div>
                         <div>5 Rare: <span className="text-blue-400">50x</span></div>
-                        <div>5 Uncommon: <span className="text-green-400">20x</span></div>
-                        <div>5 Common: <span className="text-gray-400">5x</span></div>
+                        <div>5 Uncommon: <span className="text-yellow-400">0.95x</span> <span className="text-xs text-gray-500">(kickback)</span></div>
+                        <div>5 Common: <span className="text-yellow-400">0.9x</span> <span className="text-xs text-gray-500">(kickback)</span></div>
                       </div>
                     </div>
                     <div>
@@ -1838,8 +2052,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         <div>4 Legendary: <span className="text-orange-400">50x</span></div>
                         <div>4 Epic: <span className="text-purple-400">25x</span></div>
                         <div>4 Rare: <span className="text-blue-400">15x</span></div>
-                        <div>4 Uncommon: <span className="text-green-400">8x</span></div>
-                        <div>4 Common: <span className="text-gray-400">3x</span></div>
+                        <div>4 Uncommon: <span className="text-yellow-400">0.8x</span> <span className="text-xs text-gray-500">(kickback)</span></div>
+                        <div>4 Common: <span className="text-yellow-400">0.7x</span> <span className="text-xs text-gray-500">(kickback)</span></div>
                       </div>
                     </div>
                     <div>
@@ -1850,8 +2064,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         <div>3 Legendary: <span className="text-orange-400">10x</span></div>
                         <div>3 Epic: <span className="text-purple-400">5x</span></div>
                         <div>3 Rare: <span className="text-blue-400">3x</span></div>
-                        <div>3 Uncommon: <span className="text-green-400">2x</span></div>
-                        <div>3 Common: <span className="text-gray-400">1.5x</span></div>
+                        <div>3 Uncommon: <span className="text-yellow-400">0.6x</span> <span className="text-xs text-gray-500">(kickback)</span></div>
+                        <div>3 Common: <span className="text-yellow-400">0.5x</span> <span className="text-xs text-gray-500">(kickback)</span></div>
                       </div>
                     </div>
                   </div>
@@ -1870,5 +2084,6 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -15464,7 +15464,10 @@ export function drawChatBubble(ctx: CanvasRenderingContext2D, player: PlayerWith
   let defaultTextColor = player.chatBubble.textColor || orbColorInfo.color;
   
   // Map color strings to actual color values
-  if (defaultTextColor === 'white') {
+  // If it's already a hex color (starts with #), use it directly
+  if (defaultTextColor && defaultTextColor.startsWith('#')) {
+    // Already a hex color, use as-is
+  } else if (defaultTextColor === 'white') {
     defaultTextColor = '#ffffff';
   } else if (defaultTextColor === 'green') {
     defaultTextColor = '#4ade80'; // green-400
