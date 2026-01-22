@@ -117,16 +117,19 @@ function getSymbolText(symbol: SlotSymbol): string {
 
 // Format number with K/M abbreviations
 function formatNumber(num: number): string {
-  if (num >= 1000000) {
-    const value = num / 1000000;
+  // Ensure we're working with an integer
+  const intNum = Math.floor(num);
+  
+  if (intNum >= 1000000) {
+    const value = intNum / 1000000;
     // Check if value is effectively a whole number (accounting for floating point precision)
     return (Math.abs(value % 1) < 0.0001 ? Math.round(value).toString() : value.toFixed(1)) + 'M';
-  } else if (num >= 1000) {
-    const value = num / 1000;
+  } else if (intNum >= 1000) {
+    const value = intNum / 1000;
     // Check if value is effectively a whole number (accounting for floating point precision)
     return (Math.abs(value % 1) < 0.0001 ? Math.round(value).toString() : value.toFixed(1)) + 'K';
   }
-  return num.toString();
+  return intNum.toString();
 }
 
 interface ReelState {
@@ -202,6 +205,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const [cumulativeBonusPayout, setCumulativeBonusPayout] = useState(0); // Track total winnings during bonus game
   const [showBonusWinModal, setShowBonusWinModal] = useState(false); // Show final bonus win modal
   const [displayedBonusWin, setDisplayedBonusWin] = useState(0); // Animated displayed amount
+  const tickUpIntervalRef = useRef<number | null>(null); // Track tick-up animation interval
   const bonusModalClosedRef = useRef<boolean>(false); // Track if bonus modal was manually closed
   
   // Dev toggle for testing
@@ -218,27 +222,52 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   
   // Animate bonus win tick-up effect
   useEffect(() => {
+    // Clear any existing interval first
+    if (tickUpIntervalRef.current) {
+      clearInterval(tickUpIntervalRef.current);
+      tickUpIntervalRef.current = null;
+    }
+    
     if (showBonusWinModal && cumulativeBonusPayout > 0) {
+      // Reset displayed value to 0 when modal opens
+      setDisplayedBonusWin(0);
+      
       const duration = 2000; // 2 seconds to tick up
       const steps = 60; // 60 animation steps
       const increment = cumulativeBonusPayout / steps;
       const stepDuration = duration / steps;
       
       let currentStep = 0;
+      const targetPayout = cumulativeBonusPayout; // Capture the target value
+      
       const interval = setInterval(() => {
         currentStep++;
         // Calculate the animated value, but ensure we always use whole numbers for display
         const animatedValue = increment * currentStep;
-        const newValue = Math.min(cumulativeBonusPayout, Math.floor(animatedValue));
-        setDisplayedBonusWin(newValue);
+        // Use Math.floor and ensure it's an integer
+        const newValue = Math.min(targetPayout, Math.floor(animatedValue));
         
-        if (currentStep >= steps || newValue >= cumulativeBonusPayout) {
-          setDisplayedBonusWin(cumulativeBonusPayout); // Ensure final value is exact
+        // Ensure we always set an integer value
+        setDisplayedBonusWin(Math.floor(newValue));
+        
+        if (currentStep >= steps || newValue >= targetPayout) {
+          setDisplayedBonusWin(Math.floor(targetPayout)); // Ensure final value is exact integer
           clearInterval(interval);
+          tickUpIntervalRef.current = null;
         }
       }, stepDuration);
       
-      return () => clearInterval(interval);
+      tickUpIntervalRef.current = interval;
+      
+      return () => {
+        if (tickUpIntervalRef.current) {
+          clearInterval(tickUpIntervalRef.current);
+          tickUpIntervalRef.current = null;
+        }
+      };
+    } else if (!showBonusWinModal) {
+      // Reset displayed value when modal closes
+      setDisplayedBonusWin(0);
     }
   }, [showBonusWinModal, cumulativeBonusPayout]);
   
@@ -396,143 +425,22 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
     }
   }, [localPlayer?.orbs, isSpinning]);
   
-  // Particle animation effect (flaming particles during bonus game)
+  // Particle animation effect (flaming particles during bonus game) - DISABLED for performance
   useEffect(() => {
-    if (!slotMachineOpen) {
-      setParticles([]);
-      if (particleAnimationRef.current) {
-        cancelAnimationFrame(particleAnimationRef.current);
-      }
-      return;
+    // Disabled particle effects to prevent lag with multiple slot machines open
+    setParticles([]);
+    if (particleAnimationRef.current) {
+      cancelAnimationFrame(particleAnimationRef.current);
     }
-    
-    const animateParticles = () => {
-      setParticles(prev => {
-        const now = Date.now();
-        const newParticles = [...prev];
-        
-        // Remove dead particles
-        const aliveParticles = newParticles.filter(p => p.life > 0);
-        
-        // Spawn new particles during bonus game (flaming effect)
-        if (isBonusGame) {
-          const timeSinceLastSpawn = now - lastParticleSpawnRef.current;
-          if (timeSinceLastSpawn > 50) { // Spawn every 50ms during bonus game
-            // Spawn 2-3 particles at bottom of modal
-            const spawnCount = Math.floor(Math.random() * 2) + 2;
-            for (let i = 0; i < spawnCount; i++) {
-              const fireColors = ['#ff6b35', '#ff4500', '#ff8c42', '#ffa500', '#ff6347'];
-              aliveParticles.push({
-                x: Math.random() * 100, // Random X position
-                y: 100, // Start at bottom
-                vx: (Math.random() - 0.5) * 0.5, // Slight horizontal drift
-                vy: -(Math.random() * 2 + 1), // Upward velocity (flames rise)
-                life: 1.0,
-                maxLife: 1.0,
-                size: Math.random() * 8 + 4, // 4-12px
-                color: fireColors[Math.floor(Math.random() * fireColors.length)]
-              });
-            }
-            lastParticleSpawnRef.current = now;
-          }
-        }
-        
-        // Update particle positions and life
-        return aliveParticles.map(p => ({
-          ...p,
-          x: p.x + p.vx,
-          y: p.y + p.vy,
-          life: Math.max(0, p.life - 0.02), // Fade out
-          size: p.size * 0.98 // Slightly shrink
-        })).filter(p => p.life > 0 && p.y > -10); // Remove dead or off-screen particles
-      });
-      
-      particleAnimationRef.current = requestAnimationFrame(animateParticles);
-    };
-    
-    particleAnimationRef.current = requestAnimationFrame(animateParticles);
-    
-    return () => {
-      if (particleAnimationRef.current) {
-        cancelAnimationFrame(particleAnimationRef.current);
-      }
-    };
   }, [slotMachineOpen, isBonusGame]);
   
-  // Bonus symbol particle effect (for base game bonus symbols)
+  // Bonus symbol particle effect (for base game bonus symbols) - DISABLED for performance
   useEffect(() => {
-    if (!slotMachineOpen) {
-      setBonusSymbolParticles([]);
-      if (bonusParticleAnimationRef.current) {
-        cancelAnimationFrame(bonusParticleAnimationRef.current);
-      }
-      return;
+    // Disabled particle effects to prevent lag with multiple slot machines open
+    setBonusSymbolParticles([]);
+    if (bonusParticleAnimationRef.current) {
+      cancelAnimationFrame(bonusParticleAnimationRef.current);
     }
-    
-    const animateBonusParticles = () => {
-      setBonusSymbolParticles(prev => {
-        const now = Date.now();
-        const aliveParticles = prev.filter(p => p.life > 0);
-        
-        // Find bonus symbols in the reels and spawn particles around them
-        // Only spawn particles when bonus symbols are actually visible (on middle row)
-        if (!isSpinning && reels.length > 0 && !isBonusGame && finalSymbolsRef.current) {
-          const middleRow = finalSymbolsRef.current[1];
-          if (middleRow) {
-            // Spawn particles for bonus symbols on the middle row (any column)
-            // Check all columns on the middle row for bonus symbols
-            middleRow.forEach((symbol, colIndex) => {
-              if (symbol === 'bonus') {
-                // Spawn particles around this bonus symbol
-                // Calculate approximate position (reels are in a grid, positioned in center area)
-                // Reels area starts around 20% from top and takes up ~60% of modal height
-                const reelWidth = 100 / 5; // 5 reels
-                const reelCenterX = (colIndex * reelWidth) + (reelWidth / 2);
-                const reelCenterY = 45; // Middle of reel area (approximately)
-                
-                // Spawn particles more frequently around bonus symbols
-                if (Math.random() > 0.3) { // 70% chance each frame
-                  const bonusColors = ['#9333ea', '#4f46e5', '#3b82f6', '#6366f1', '#8b5cf6']; // Cosmic purple/indigo colors
-                  const angle = Math.random() * Math.PI * 2;
-                  const distance = Math.random() * 8 + 3; // 3-11% from center
-                  const speed = Math.random() * 0.2 + 0.05;
-                  
-                  aliveParticles.push({
-                    x: reelCenterX + Math.cos(angle) * distance,
-                    y: reelCenterY + Math.sin(angle) * distance,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed - 0.15, // Slight upward drift
-                    life: 1.0,
-                    maxLife: 1.0,
-                    size: Math.random() * 5 + 3, // 3-8px
-                    color: bonusColors[Math.floor(Math.random() * bonusColors.length)]
-                  });
-                }
-              }
-            });
-          }
-        }
-        
-        // Update particle positions and life
-        return aliveParticles.map(p => ({
-          ...p,
-          x: p.x + p.vx,
-          y: p.y + p.vy,
-          life: Math.max(0, p.life - 0.015), // Fade out
-          size: p.size * 0.99 // Slightly shrink
-        })).filter(p => p.life > 0 && p.x >= -5 && p.x <= 105 && p.y >= -5 && p.y <= 105); // Remove dead or off-screen particles
-      });
-      
-      bonusParticleAnimationRef.current = requestAnimationFrame(animateBonusParticles);
-    };
-    
-    bonusParticleAnimationRef.current = requestAnimationFrame(animateBonusParticles);
-    
-    return () => {
-      if (bonusParticleAnimationRef.current) {
-        cancelAnimationFrame(bonusParticleAnimationRef.current);
-      }
-    };
   }, [slotMachineOpen, reels, isSpinning]);
   
   // Sequential reel animation (left to right, 3 seconds per reel)
