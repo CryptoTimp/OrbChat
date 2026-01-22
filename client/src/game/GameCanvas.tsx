@@ -2405,9 +2405,9 @@ export function GameCanvas() {
     
     // Use for...of instead of forEach to avoid iterator allocation
     for (const [id, player] of currentPlayers) {
-      if (id === currentPlayerId) return;
+      if (id === currentPlayerId) continue;
       
-      if (typeof player.x !== 'number' || typeof player.y !== 'number') return;
+      if (typeof player.x !== 'number' || typeof player.y !== 'number') continue;
       
       // Performance optimization: only interpolate players in or near viewport
       const playerWorldX = player.x * SCALE;
