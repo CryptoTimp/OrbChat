@@ -1,7 +1,7 @@
 import { PlayerWithChat, Orb, GAME_CONSTANTS, CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, MapType, ShopItem, ItemRarity, Direction, Shrine, TreasureChest } from '../types';
 import { Camera, worldToScreen, isVisible } from './Camera';
 import { instrumentFunction } from '../utils/functionProfiler';
-import { particleArrayPool, playerArrayPool, playerWithChatArrayPool, stringArrayPool } from '../utils/arrayPool';
+import { particleArrayPool, playerArrayPool, stringArrayPool } from '../utils/arrayPool';
 
 const { TILE_SIZE, SCALE, MAP_WIDTH, MAP_HEIGHT, PLAYER_WIDTH, PLAYER_HEIGHT, ORB_SIZE } = GAME_CONSTANTS;
 
@@ -571,7 +571,7 @@ export function updateCenturionPlayers(time: number, deltaTime: number = 16, cam
   initializeCenturions();
   
   // Reuse array from pool to avoid allocation
-  const centurionPlayers = playerWithChatArrayPool.acquire();
+  const centurionPlayers = playerArrayPool.acquire();
   
   // Calculate viewport bounds for distance checking
   let viewportWidth = Infinity;
@@ -10000,30 +10000,11 @@ let currentMapType: MapType = 'cafe';
 
 export function setCurrentMap(mapType: MapType): void {
   if (mapType !== currentMapType) {
-    const previousMapType = currentMapType;
-    console.log(`Map type changed from ${previousMapType} to ${mapType}`);
+    console.log(`Map type changed from ${currentMapType} to ${mapType}`);
     currentMapType = mapType;
     // Clear animation state for all players when map changes to prevent corruption
     // This fixes laggy movement when joining casino with speed boosts
     extendedPlayerAnimations.clear();
-    
-    // Clear centurion player cache when switching maps (centurions are forest-specific)
-    if (mapType !== 'forest') {
-      centurionPlayerCache.clear();
-    }
-    
-    // Clear casino-specific caches when leaving casino
-    if (previousMapType === 'casino' && mapType !== 'casino') {
-      // Leaving casino - clear casino caches
-      plazaWallTopCache = null;
-      plazaWallTopCacheInitialized = false;
-      slotMachineCache = null;
-      slotMachineCacheInitialized = false;
-      casinoPathsCache = null;
-      casinoPathsCacheInitialized = false;
-      console.log('Cleared casino caches when leaving casino');
-    }
-    
     console.log('Cleared player animation state due to map change');
   }
 }
@@ -16684,8 +16665,7 @@ export function drawPlayerDirectionArrows(
   ctx.save();
   ctx.globalAlpha = opacity;
   
-  // Use for...of directly on Map instead of .entries() to avoid iterator allocation
-  for (const [playerId, player] of players) {
+  for (const [playerId, player] of players.entries()) {
     if (playerId === localPlayerId) continue;
     if (typeof player.x !== 'number' || typeof player.y !== 'number') continue;
     
@@ -16787,37 +16767,15 @@ export function drawMiniMePet(
     sprite: {
       ...player.sprite,
       outfit: (() => {
-        // Cache filtered outfit per player to avoid creating new arrays every frame
-        const outfitCacheKey = `${player.id}_mini_me_outfit`;
-        if (!(drawMiniMePet as any).__outfitCache) {
-          (drawMiniMePet as any).__outfitCache = new Map();
-          (drawMiniMePet as any).__outfitHashes = new Map();
-        }
-        let cachedOutfit = (drawMiniMePet as any).__outfitCache.get(outfitCacheKey);
-        
-        // Only rebuild outfit if player's outfit changed
-        const currentOutfit = player.sprite?.outfit || EMPTY_OUTFIT_ARRAY;
-        const outfitHash = currentOutfit.join(',');
-        const lastOutfitHash = (drawMiniMePet as any).__outfitHashes.get(outfitCacheKey);
-        
-        if (!cachedOutfit || lastOutfitHash !== outfitHash) {
-          // Build filtered outfit array (reuse from pool if available)
-          cachedOutfit = stringArrayPool.acquire();
-          cachedOutfit.length = 0; // Clear any existing items
-          
-          for (let i = 0; i < currentOutfit.length; i++) {
-            const itemId = currentOutfit[i];
-            if (!itemId.startsWith('pet_')) {
-              cachedOutfit.push(itemId);
-            }
+        // Optimized: Manual filter instead of .filter() to avoid array allocation
+        const filteredOutfit: string[] = [];
+        for (let i = 0; i < player.sprite.outfit.length; i++) {
+          const itemId = player.sprite.outfit[i];
+          if (!itemId.startsWith('pet_')) {
+            filteredOutfit.push(itemId);
           }
-          
-          // Cache the outfit and hash
-          (drawMiniMePet as any).__outfitCache.set(outfitCacheKey, cachedOutfit);
-          (drawMiniMePet as any).__outfitHashes.set(outfitCacheKey, outfitHash);
         }
-        
-        return cachedOutfit;
+        return filteredOutfit;
       })() // Remove pet items
     }
   };

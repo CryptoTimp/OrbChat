@@ -54,7 +54,6 @@ class ObjectPool<T> {
 // Global array pools for common types
 export const orbArrayPool = new ArrayPool<any>(5);
 export const playerArrayPool = new ArrayPool<{ player: any; isLocal: boolean; renderY: number }>(5);
-export const playerWithChatArrayPool = new ArrayPool<any>(5); // For PlayerWithChat[] arrays (used by updateCenturionPlayers, updateVillagers)
 export const particleArrayPool = new ArrayPool<any>(10);
 export const numberArrayPool = new ArrayPool<number>(10);
 export const stringArrayPool = new ArrayPool<string>(10);
