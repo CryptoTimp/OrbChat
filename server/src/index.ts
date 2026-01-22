@@ -3236,8 +3236,8 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         setBonusGameState,
         clearBonusGameState
       } = slotModule;
-      // Use SlotSymbol type from the imported module
-      type SlotSymbol = Parameters<typeof checkBonusTrigger>[0][number];
+      // Use SlotSymbol type - define it directly to match slots.ts
+      type SlotSymbol = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'godlike' | 'orb' | 'bonus';
       
       // Check if player is in bonus game
       let bonusState = getBonusGameState(playerId);

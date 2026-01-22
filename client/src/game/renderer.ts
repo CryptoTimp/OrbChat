@@ -8501,9 +8501,8 @@ function drawBlackjackTablesImpl(ctx: CanvasRenderingContext2D, time: number, ho
   // Update dealer speech bubbles (including blackjack dealers)
   updateDealerSpeechBubbles(time);
   
-  // Clear previous positions
-  blackjackTablePositions.clear();
-  
+  // Don't clear positions - reuse existing objects to avoid allocations
+  // Only update if positions don't exist or have changed
   const tableRadiusSize = 60 * p; // Table size (major radius)
   const tableMinorRadius = tableRadiusSize * 0.6; // Minor radius for ellipse
   
@@ -8521,8 +8520,17 @@ function drawBlackjackTablesImpl(ctx: CanvasRenderingContext2D, time: number, ho
     const dealerY = cached.dealerY;
     const dealerAngle = cached.dealerAngle;
     
-    // Store position for click detection
-    blackjackTablePositions.set(tableId, { x: tableX, y: tableY, radius: tableRadiusSize });
+    // Store position for click detection - reuse existing object if available
+    let tablePos = blackjackTablePositions.get(tableId);
+    if (!tablePos) {
+      tablePos = { x: tableX, y: tableY, radius: tableRadiusSize };
+      blackjackTablePositions.set(tableId, tablePos);
+    } else {
+      // Update existing object instead of creating new one
+      tablePos.x = tableX;
+      tablePos.y = tableY;
+      tablePos.radius = tableRadiusSize;
+    }
     
     const isHovered = hoveredTableId === tableId;
     
@@ -8630,7 +8638,16 @@ function drawBlackjackTablesImpl(ctx: CanvasRenderingContext2D, time: number, ho
     
     // Use cached dealer position (already calculated)
     // Store blackjack dealer position for click detection (must be stored before other dealers)
-    dealerPositions.set(dealerId, { x: dealerX, y: dealerY });
+    // Reuse existing object if available to avoid allocations
+    let dealerPos = dealerPositions.get(dealerId);
+    if (!dealerPos) {
+      dealerPos = { x: dealerX, y: dealerY };
+      dealerPositions.set(dealerId, dealerPos);
+    } else {
+      // Update existing object instead of creating new one
+      dealerPos.x = dealerX;
+      dealerPos.y = dealerY;
+    }
     
     // Draw dealer seat (light grey) - draw before dealer so dealer appears on top
     // Optimized: Use simple fills instead of gradients to avoid memory allocations
@@ -9487,18 +9504,6 @@ function drawSlotMachinesImpl(ctx: CanvasRenderingContext2D, time: number, hover
     const slotX = cached.slotX;
     const slotY = cached.slotY;
     
-    // Parse theme colors to RGB for glow effect
-    const parseColor = (color: string) => {
-      const hex = color.replace('#', '');
-      return {
-        r: parseInt(hex.substring(0, 2), 16),
-        g: parseInt(hex.substring(2, 4), 16),
-        b: parseInt(hex.substring(4, 6), 16)
-      };
-    };
-    const themeRgb = parseColor(theme.primary);
-    const themeSecondaryRgb = parseColor(theme.secondary);
-    
     // Use cached seat positions
     for (let seat = 0; seat < cached.seatPositions.length; seat++) {
       const seatPos = cached.seatPositions[seat];
@@ -9533,13 +9538,23 @@ function drawSlotMachinesImpl(ctx: CanvasRenderingContext2D, time: number, hover
     const slotX = cached.slotX;
     const slotY = cached.slotY;
     
-    // Store position for click detection
-    slotMachinePositions.set(dir.id, { 
-      x: slotX - slotMachineWidth / 2, 
-      y: slotY - slotMachineHeight / 2, 
-      width: slotMachineWidth, 
-      height: slotMachineHeight 
-    });
+    // Store position for click detection - reuse existing object if available
+    let slotPos = slotMachinePositions.get(dir.id);
+    if (!slotPos) {
+      slotPos = { 
+        x: slotX - slotMachineWidth / 2, 
+        y: slotY - slotMachineHeight / 2, 
+        width: slotMachineWidth, 
+        height: slotMachineHeight 
+      };
+      slotMachinePositions.set(dir.id, slotPos);
+    } else {
+      // Update existing object instead of creating new one
+      slotPos.x = slotX - slotMachineWidth / 2;
+      slotPos.y = slotY - slotMachineHeight / 2;
+      slotPos.width = slotMachineWidth;
+      slotPos.height = slotMachineHeight;
+    }
     
     const isHovered = hoveredSlotMachineId === dir.id;
     
