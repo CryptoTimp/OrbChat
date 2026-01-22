@@ -205,7 +205,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   const [cumulativeBonusPayout, setCumulativeBonusPayout] = useState(0); // Track total winnings during bonus game
   const [showBonusWinModal, setShowBonusWinModal] = useState(false); // Show final bonus win modal
   const [displayedBonusWin, setDisplayedBonusWin] = useState(0); // Animated displayed amount
-  const tickUpIntervalRef = useRef<number | null>(null); // Track tick-up animation interval
+  const tickUpIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null); // Track tick-up animation interval
   const bonusModalClosedRef = useRef<boolean>(false); // Track if bonus modal was manually closed
   
   // Dev toggle for testing
