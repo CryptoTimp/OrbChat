@@ -399,6 +399,18 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       }
     }
     
+    // Check if player is trying to join casino with insufficient balance
+    if (roomId.startsWith('casino-')) {
+      const playerBalance = orbs || 0;
+      if (playerBalance < 5000000) {
+        console.log(`[Casino] Rejecting join: Player ${playerId} has insufficient balance (${playerBalance} < 5000000)`);
+        socket.emit('error', { 
+          message: `You need at least 5M orbs to enter the casino. You currently have ${playerBalance.toLocaleString()} orbs.` 
+        });
+        return;
+      }
+    }
+    
     // Create player with data from Firebase
     // If joining forest room and was in casino/lounge, spawn at portal
     const returningFromCasino = wasInCasinoRoom && roomMapType === 'forest';
@@ -871,6 +883,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         
         // Remove player from casino room
         rooms.removePlayerFromRoom(roomId, playerId);
+        
+        // Broadcast player_left to all clients in the room
+        io.to(roomId).emit('player_left', { playerId });
         
         // Remove socket mappings and emit kick event
         playerSockets.forEach(playerSocket => {
@@ -1739,6 +1754,7 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
     }
     
     console.log(`[Blackjack] Placing bet: player=${playerId}, amount=${numericAmount}, currentOrbs=${currentOrbs} (from ${player.orbs > 0 ? 'room state' : 'Firebase'})`);
+    
     const result = blackjack.placeBet(tableId, playerId, numericAmount, currentOrbs);
     if (result.success) {
       // CRITICAL: Server manages ALL balance updates for blackjack
@@ -1759,37 +1775,6 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       player.orbs = newBalance;
       players.updatePlayerOrbs(playerId, newBalance);
       console.log(`[Blackjack] Updated room state: ${playerId} -> ${newBalance} orbs`);
-      
-      // Check if player balance dropped below 5M in casino - kick them to plaza
-      if (mapping.roomId.startsWith('casino-') && newBalance < 5000000) {
-        // Extract server region from casino room ID (e.g., "casino-eu-1" -> "eu-1")
-        const serverRegion = mapping.roomId.replace('casino-', '');
-        const plazaRoomId = `plaza-${serverRegion}`;
-        
-        console.log(`[Casino] Player ${playerId} balance dropped below 5M (${newBalance}), kicking to plaza: ${plazaRoomId}`);
-        
-        // Find all sockets for this player in the casino room
-        const playerSockets = Array.from(socketToPlayer.entries())
-          .filter(([_, playerMapping]) => playerMapping.playerId === playerId && playerMapping.roomId === mapping.roomId)
-          .map(([socketId]) => io.sockets.sockets.get(socketId))
-          .filter(Boolean) as Socket[];
-        
-        // Remove player from casino room
-        rooms.removePlayerFromRoom(mapping.roomId, playerId);
-        
-        // Remove socket mappings and emit kick event
-        playerSockets.forEach(playerSocket => {
-          socketToPlayer.delete(playerSocket.id);
-          playerSocket.emit('force_room_change', { 
-            roomId: plazaRoomId,
-            reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
-          });
-          playerSocket.disconnect();
-        });
-        
-        // Don't send balance update since player is being kicked
-        return;
-      }
       
       // Broadcast orb update to clients (clients receive and display only, do NOT update Firebase)
       // CRITICAL: Only emit AFTER Firebase update is complete to prevent race conditions
@@ -1941,6 +1926,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                         
                         // Remove player from casino room
                         rooms.removePlayerFromRoom(roomIdForPayouts, payoutPlayerId);
+                        
+                        // Broadcast player_left to all clients in the room
+                        io.to(roomIdForPayouts).emit('player_left', { playerId: payoutPlayerId });
                         
                         // Remove socket mappings and emit kick event
                         playerSockets.forEach(playerSocket => {
@@ -2522,6 +2510,9 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
               
               // Remove player from casino room
               rooms.removePlayerFromRoom(mapping.roomId, payoutPlayerId);
+              
+              // Broadcast player_left to all clients in the room
+              io.to(mapping.roomId).emit('player_left', { playerId: payoutPlayerId });
               
               // Remove socket mappings and emit kick event
               playerSockets.forEach(playerSocket => {
@@ -3498,20 +3489,28 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         
         console.log(`[Casino] Player ${playerId} balance dropped below 5M (${finalBalance}), kicking to plaza: ${plazaRoomId}`);
         
+        // Find all sockets for this player in the casino room
+        const playerSockets = Array.from(socketToPlayer.entries())
+          .filter(([_, playerMapping]) => playerMapping.playerId === playerId && playerMapping.roomId === roomId)
+          .map(([socketId]) => io.sockets.sockets.get(socketId))
+          .filter(Boolean) as Socket[];
+        
         // Remove player from casino room
         rooms.removePlayerFromRoom(roomId, playerId);
         
-        // Remove socket mapping
-        socketToPlayer.delete(socket.id);
+        // Broadcast player_left to all clients in the room
+        io.to(roomId).emit('player_left', { playerId });
         
-        // Emit kick event to client to force room change
-        socket.emit('force_room_change', { 
-          roomId: plazaRoomId,
-          reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
+        // Remove socket mappings and emit kick event
+        playerSockets.forEach(playerSocket => {
+          socketToPlayer.delete(playerSocket.id);
+          playerSocket.emit('force_room_change', { 
+            roomId: plazaRoomId,
+            reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
+          });
+          playerSocket.disconnect();
         });
         
-        // Also disconnect and let them reconnect to plaza
-        socket.disconnect();
         return; // Don't send slot result since player is being kicked
       }
       
@@ -3569,6 +3568,37 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         rewardType: 'slots'
       });
       console.log('[Slots] Broadcasted final balance update. Balance:', finalBalance, 'Net payout:', netPayout);
+      
+      // Check if player balance dropped below 5M in casino AFTER result - kick them to plaza
+      if (roomId.startsWith('casino-') && finalBalance < 5000000) {
+        // Extract server region from casino room ID (e.g., "casino-eu-1" -> "eu-1")
+        const serverRegion = roomId.replace('casino-', '');
+        const plazaRoomId = `plaza-${serverRegion}`;
+        
+        console.log(`[Casino] Player ${playerId} balance dropped below 5M (${finalBalance}), kicking to plaza: ${plazaRoomId}`);
+        
+        // Find all sockets for this player in the casino room
+        const playerSockets = Array.from(socketToPlayer.entries())
+          .filter(([_, playerMapping]) => playerMapping.playerId === playerId && playerMapping.roomId === roomId)
+          .map(([socketId]) => io.sockets.sockets.get(socketId))
+          .filter(Boolean) as Socket[];
+        
+        // Remove player from casino room
+        rooms.removePlayerFromRoom(roomId, playerId);
+        
+        // Broadcast player_left to all clients in the room
+        io.to(roomId).emit('player_left', { playerId });
+        
+        // Remove socket mappings and emit kick event
+        playerSockets.forEach(playerSocket => {
+          socketToPlayer.delete(playerSocket.id);
+          playerSocket.emit('force_room_change', { 
+            roomId: plazaRoomId,
+            reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
+          });
+          playerSocket.disconnect();
+        });
+      }
       
     } catch (error) {
       console.error('[Slots] Error processing spin:', error);
