@@ -169,7 +169,7 @@ const PAYOUTS: Record<string, number> = {
   '3_epic': 5,
   '3_rare': 3,
   '3_uncommon': 2,
-  '3_common': 0.5, // 3 commons: 2.5k (bet 5k = 2.5k, bet 25k = 12.5k) - lose half bet since odds increased
+  '3_common': 1.5, // 3 commons: 7.5k (bet 5k = 7.5k, bet 25k = 37.5k) - small win
 };
 
 // Debug helper to log payout calculation
@@ -248,44 +248,41 @@ function generateBonusSymbol(): SlotSymbol {
   return 'common'; // Fallback
 }
 
-// Spin the slot machine (generate 5 symbols)
-export function spinSlots(): SlotSymbol[] {
+// Spin the slot machine (generate 15 symbols: 3 rows × 5 columns)
+export function spinSlots(): SlotSymbol[][] {
   return [
-    generateSymbol(),
-    generateSymbol(),
-    generateSymbol(),
-    generateSymbol(),
-    generateSymbol()
+    [generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol()], // Top row
+    [generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol()], // Middle row
+    [generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol(), generateSymbol()]  // Bottom row
   ];
 }
 
 // Spin slots with bonus game weights (increased probability)
-export function spinSlotsWithBonus(): SlotSymbol[] {
+export function spinSlotsWithBonus(): SlotSymbol[][] {
   return [
-    generateBonusSymbol(),
-    generateBonusSymbol(),
-    generateBonusSymbol(),
-    generateBonusSymbol(),
-    generateBonusSymbol()
+    [generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol()], // Top row
+    [generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol()], // Middle row
+    [generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol(), generateBonusSymbol()]  // Bottom row
   ];
 }
 
 // Check if bonus trigger is activated (3 bonus symbols on middle reel - index 2)
-export function checkBonusTrigger(symbols: SlotSymbol[]): boolean {
+export function checkBonusTrigger(symbols: SlotSymbol[][]): boolean {
   // Requirement: "3 glowing bonus tiles in any position on the middle reel"
-  // Since we have 5 reels with 1 symbol each, we interpret this as:
-  // The middle reel (index 2) must be a bonus symbol, and we need 3 bonus symbols total
-  // This means: middle reel is bonus + 2 other reels are bonus = 3 bonus symbols total
-  const bonusCount = symbols.filter(s => s === 'bonus').length;
-  const middleReelIsBonus = symbols[2] === 'bonus';
+  // Check the middle reel (column index 2) - all 3 rows
+  const middleReelSymbols = [symbols[0][2], symbols[1][2], symbols[2][2]]; // Top, middle, bottom rows of middle reel
+  const bonusCount = middleReelSymbols.filter(s => s === 'bonus').length;
   
-  // Trigger if we have 3 bonus symbols total AND the middle reel is one of them
-  return bonusCount >= 3 && middleReelIsBonus;
+  // Trigger if we have 3 bonus symbols on the middle reel (all 3 rows)
+  return bonusCount >= 3;
 }
 
-// Calculate payout based on symbols (pays for 3+ of a kind anywhere, not just consecutive)
-export function calculatePayout(symbols: SlotSymbol[], betAmount: number): number {
-  // Count occurrences of each symbol (exclude bonus from payout calculation)
+// Calculate payout based on symbols (ONLY checks middle row for 3+ of a kind)
+export function calculatePayout(symbols: SlotSymbol[][], betAmount: number): number {
+  // ONLY check the middle row (index 1) for payouts
+  const middleRow = symbols[1];
+  
+  // Count occurrences of each symbol in the middle row (exclude bonus from payout calculation)
   const counts: Record<SlotSymbol, number> = {
     common: 0,
     uncommon: 0,
@@ -297,7 +294,7 @@ export function calculatePayout(symbols: SlotSymbol[], betAmount: number): numbe
     bonus: 0  // Bonus symbols don't count for payouts
   };
   
-  for (const symbol of symbols) {
+  for (const symbol of middleRow) {
     if (symbol !== 'bonus') {
       counts[symbol]++;
     }
@@ -314,16 +311,16 @@ export function calculatePayout(symbols: SlotSymbol[], betAmount: number): numbe
       const multiplier = PAYOUTS[payoutKey];
       
       if (multiplier === undefined) {
-        console.warn(`[Slots] Missing payout entry for: ${payoutKey}. Symbols: ${symbols.join(', ')}`);
+        console.warn(`[Slots] Missing payout entry for: ${payoutKey}. Middle row: ${middleRow.join(', ')}`);
         return 0;
       }
       
       const payout = Math.floor(betAmount * multiplier);
-      console.log(`[Slots] Payout: ${payoutKey} (${count} of ${symbol}) = ${multiplier}x bet = ${payout} orbs (bet: ${betAmount})`);
+      console.log(`[Slots] Middle row payout: ${payoutKey} (${count} of ${symbol}) = ${multiplier}x bet = ${payout} orbs (bet: ${betAmount})`);
       return payout;
     }
   }
   
-  console.log(`[Slots] No payout - no 3+ of a kind found. Symbols: ${symbols.join(', ')}`);
+  console.log(`[Slots] No payout - no 3+ of a kind found in middle row: ${middleRow.join(', ')}`);
   return 0; // No win
 }

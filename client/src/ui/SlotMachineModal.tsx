@@ -49,7 +49,7 @@ function calculateProbability(weight: number, totalWeight: number): number {
   return (weight / totalWeight) * 100;
 }
 
-// Payout multipliers for winning combinations
+// Payout multipliers for winning combinations (must match server/src/slots.ts)
 const PAYOUTS: Record<string, number> = {
   '5_orb': 1000,           // 5 orbs = 1000x
   '5_godlike': 500,        // 5 godlike = 500x
@@ -57,21 +57,21 @@ const PAYOUTS: Record<string, number> = {
   '5_epic': 100,           // 5 epic = 100x
   '5_rare': 50,            // 5 rare = 50x
   '5_uncommon': 20,        // 5 uncommon = 20x
-  '5_common': 10,          // 5 common = 10x
+  '5_common': 5,           // 5 common = 5x (matches server)
   '4_orb': 200,            // 4 orbs = 200x
   '4_godlike': 100,        // 4 godlike = 100x
   '4_legendary': 50,       // 4 legendary = 50x
   '4_epic': 25,            // 4 epic = 25x
   '4_rare': 15,            // 4 rare = 15x
   '4_uncommon': 8,         // 4 uncommon = 8x
-  '4_common': 5,           // 4 common = 5x
+  '4_common': 3,           // 4 common = 3x (matches server)
   '3_orb': 50,             // 3 orbs = 50x
   '3_godlike': 25,         // 3 godlike = 25x
   '3_legendary': 10,       // 3 legendary = 10x
   '3_epic': 5,             // 3 epic = 5x
   '3_rare': 3,             // 3 rare = 3x
   '3_uncommon': 2,         // 3 uncommon = 2x
-  '3_common': 1.5,         // 3 common = 1.5x
+  '3_common': 1.5,         // 3 common = 1.5x (matches server)
 };
 
 // Get symbol color based on rarity
@@ -146,14 +146,14 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   ]);
   const [isSpinning, setIsSpinning] = useState(false);
   const [activeReelIndex, setActiveReelIndex] = useState<number | null>(null); // Which reel is currently spinning (0-4)
-  const [lastResult, setLastResult] = useState<{ symbols: SlotSymbol[]; payout: number } | null>(null);
+  const [lastResult, setLastResult] = useState<{ symbols: SlotSymbol[][]; payout: number } | null>(null);
   const [balance, setBalance] = useState(localPlayer?.orbs || 0);
   const [gameHistory, setGameHistory] = useState<Array<{ won: boolean; amount: number; bet: number }>>([]);
   const [showInfo, setShowInfo] = useState(false);
   const [sessionStartingBalance, setSessionStartingBalance] = useState<number | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0); // Track last spin time for cooldown
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0); // Cooldown remaining in seconds
-  const pendingResultRef = useRef<{ symbols: SlotSymbol[]; payout: number; bet: number; newBalance?: number; bonusTriggered?: boolean } | null>(null);
+  const pendingResultRef = useRef<{ symbols: SlotSymbol[][]; payout: number; bet: number; newBalance?: number; bonusTriggered?: boolean } | null>(null);
   const sessionSlotChangesRef = useRef<number>(0); // Track only slot machine balance changes for session P/L
   const autoSpinTimeoutRef = useRef<number | null>(null); // Track auto-spin timeout
   const isBonusGameRef = useRef<boolean>(false); // Track bonus game state for auto-spin
@@ -197,7 +197,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
   
   const animationFrameRef = useRef<number>();
   const reelStartTimesRef = useRef<number[]>([]); // Start time for each reel
-  const finalSymbolsRef = useRef<SlotSymbol[] | null>(null); // Store final symbols from server
+  const finalSymbolsRef = useRef<SlotSymbol[][] | null>(null); // Store final symbols from server (3 rows × 5 columns)
   const reelLandedSoundPlayedRef = useRef<boolean[]>([]); // Track if landing sound has been played for each reel
   
   // Slot machine names map
@@ -1041,7 +1041,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
     const handleSlotResult = (event: CustomEvent<{ 
       slotMachineId: string; 
       slotMachineName: string; 
-      symbols: SlotSymbol[]; 
+      symbols: SlotSymbol[][]; // Now 3 rows × 5 columns
       payout: number; 
       newBalance?: number;
       bonusGameState?: {
@@ -1070,14 +1070,15 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
       }
       
       // DON'T update balance yet - wait for animation to complete
-      // Store final symbols for animation
+      // Store final symbols for animation (3 rows × 5 columns)
       finalSymbolsRef.current = symbols;
       
       // Update reels to show result - set target indices and start animation
       // IMPORTANT: Preserve current positions - don't reset them
-      setReels(prev => prev.map((reel, index) => {
-        // Find the symbol in the reel's symbol array
-        const targetSymbol = symbols[index];
+      // symbols is now [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
+      setReels(prev => prev.map((reel, columnIndex) => {
+        // Get the middle row symbol for this column (for the center position of the reel)
+        const targetSymbol = symbols[1][columnIndex]; // Middle row, this column
         
         // CRITICAL: Ensure the target symbol exists in the symbols array
         // If not found, add it to the array at a specific position
@@ -1085,7 +1086,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
         
         if (symbolIndex < 0) {
           // Target symbol not found - this shouldn't happen, but handle it
-          console.warn('[SlotMachine] Target symbol not found in reel symbols array:', targetSymbol, 'for reel', index);
+          console.warn('[SlotMachine] Target symbol not found in reel symbols array:', targetSymbol, 'for reel', columnIndex);
           // Add the target symbol to the array at index 0
           reel.symbols[0] = targetSymbol;
           symbolIndex = 0;
@@ -1232,8 +1233,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
 
   if (!slotMachineOpen) return null;
   
-  // Calculate paid amount from last result
-  const paidAmount = lastResult ? (lastResult.payout > 0 ? lastResult.payout : 0) : 0;
+  // Calculate paid amount from last result (show actual payout, even if negative/loss)
+  const paidAmount = lastResult ? lastResult.payout : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -1362,8 +1363,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
             </button>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            {/* Dev Toggle: Force Bonus Spin */}
-            <label className="flex items-center gap-2 text-xs font-pixel text-gray-400 cursor-pointer">
+            {/* Dev Toggle: Force Bonus Spin - Hidden */}
+            {/* <label className="flex items-center gap-2 text-xs font-pixel text-gray-400 cursor-pointer">
               <input
                 type="checkbox"
                 checked={devForceBonus}
@@ -1373,7 +1374,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                 title="Dev: Force bonus trigger on next spin"
               />
               <span className="whitespace-nowrap">Force Bonus</span>
-            </label>
+            </label> */}
             {sessionStartingBalance !== null && (
               <div className="flex items-center gap-1 sm:gap-2">
                 <span className="text-xs sm:text-sm font-pixel text-gray-400 whitespace-nowrap"></span>
@@ -1492,7 +1493,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
               {reels.map((reel, reelIndex) => {
                 // Check if middle reel (index 2) has bonus symbols for highlighting
                 const isMiddleReel = reelIndex === 2;
-                const hasBonusSymbol = finalSymbolsRef.current && finalSymbolsRef.current[reelIndex] === 'bonus';
+                // Check if middle row of middle reel has bonus symbol
+                const hasBonusSymbol = finalSymbolsRef.current && finalSymbolsRef.current[1] && finalSymbolsRef.current[1][reelIndex] === 'bonus';
                 const shouldHighlight = isMiddleReel && (bonusTriggered || hasBonusSymbol);
                 
                 return (
@@ -1566,30 +1568,24 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         );
                       })
                     ) : (
-                      // When stopped, show 3 symbols (current, above, below)
-                      // CRITICAL: Ensure we use the correct currentIndex and symbols array from the last spin
+                      // When stopped, show 3 symbols (top row, middle row, bottom row)
+                      // Use finalSymbolsRef which contains [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
                       [-1, 0, 1].map(offset => {
-                        // Ensure currentIndex is valid and within bounds
-                        const safeCurrentIndex = reel.currentIndex >= 0 && reel.currentIndex < reel.symbols.length 
-                          ? reel.currentIndex 
-                          : (reel.symbols.length > 0 ? 0 : 0);
-                        const symbolIndex = (safeCurrentIndex + offset + reel.symbols.length) % reel.symbols.length;
-                        const symbol = reel.symbols[symbolIndex];
                         const isCenter = offset === 0;
+                        const rowIndex = offset + 1; // -1 -> 0 (top), 0 -> 1 (middle), 1 -> 2 (bottom)
                         
-                        // Safety check: if symbol is undefined, use the targetIndex or finalSymbolsRef
-                        let safeSymbol: SlotSymbol = symbol;
-                        if (!safeSymbol) {
-                          // Try to get from finalSymbolsRef if available (the actual result from server)
-                          if (finalSymbolsRef.current && finalSymbolsRef.current[reelIndex] && offset === 0) {
-                            safeSymbol = finalSymbolsRef.current[reelIndex];
-                          } else if (reel.symbols.length > 0) {
-                            // Fallback to targetIndex or currentIndex
-                            const fallbackIndex = reel.targetIndex >= 0 ? reel.targetIndex : reel.currentIndex;
-                            safeSymbol = reel.symbols[fallbackIndex % reel.symbols.length] || 'common';
-                          } else {
-                            safeSymbol = 'common';
-                          }
+                        // Get symbol from finalSymbolsRef (3 rows × 5 columns)
+                        let safeSymbol: SlotSymbol = 'common';
+                        if (finalSymbolsRef.current && finalSymbolsRef.current[rowIndex] && finalSymbolsRef.current[rowIndex][reelIndex]) {
+                          // Use the actual symbol from the server result
+                          safeSymbol = finalSymbolsRef.current[rowIndex][reelIndex];
+                        } else {
+                          // Fallback: use the reel's symbol array (for display before server result arrives)
+                          const safeCurrentIndex = reel.currentIndex >= 0 && reel.currentIndex < reel.symbols.length 
+                            ? reel.currentIndex 
+                            : (reel.symbols.length > 0 ? 0 : 0);
+                          const symbolIndex = (safeCurrentIndex + offset + reel.symbols.length) % reel.symbols.length;
+                          safeSymbol = reel.symbols[symbolIndex] || 'common';
                         }
                         
                         return (
@@ -1686,8 +1682,10 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
             </div>
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               <span className="text-xs sm:text-sm font-pixel text-gray-400 whitespace-nowrap">PAID:</span>
-              <span className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${paidAmount > 0 ? 'text-green-400' : 'text-gray-500'}`}>
-                {paidAmount.toLocaleString()}
+              <span className={`text-sm sm:text-lg font-pixel whitespace-nowrap ${
+                paidAmount > 0 ? 'text-green-400' : paidAmount < 0 ? 'text-red-400' : 'text-gray-500'
+              }`}>
+                {paidAmount > 0 ? '+' : ''}{paidAmount.toLocaleString()}
               </span>
             </div>
           </div>
@@ -1821,7 +1819,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         <div>5 Epic: <span className="text-purple-400">100x</span></div>
                         <div>5 Rare: <span className="text-blue-400">50x</span></div>
                         <div>5 Uncommon: <span className="text-green-400">20x</span></div>
-                        <div>5 Common: <span className="text-gray-400">10x</span></div>
+                        <div>5 Common: <span className="text-gray-400">5x</span></div>
                       </div>
                     </div>
                     <div>
@@ -1833,7 +1831,7 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
                         <div>4 Epic: <span className="text-purple-400">25x</span></div>
                         <div>4 Rare: <span className="text-blue-400">15x</span></div>
                         <div>4 Uncommon: <span className="text-green-400">8x</span></div>
-                        <div>4 Common: <span className="text-gray-400">5x</span></div>
+                        <div>4 Common: <span className="text-gray-400">3x</span></div>
                       </div>
                     </div>
                     <div>

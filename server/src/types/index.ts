@@ -235,7 +235,7 @@ export interface ServerToClientEvents {
   slot_machine_result: (data: { 
     slotMachineId: string; 
     slotMachineName: string; 
-    symbols: string[]; 
+    symbols: string[][]; // 3 rows × 5 columns
     payout: number; 
     newBalance: number;
     bonusGameState?: {

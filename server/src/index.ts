@@ -3244,35 +3244,33 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const isInBonusGame = bonusState?.isInBonus ?? false;
       
       // Spin the reels FIRST to check if bonus will trigger (before deducting bet)
-      let symbols: SlotSymbol[];
+      let symbols: SlotSymbol[][];
       let bonusTriggered = false;
       
       if (forceBonus && !isInBonusGame) {
         // Dev toggle: force 3 bonus symbols on middle reel (only if not already in bonus game)
-        symbols = [
-          'bonus',
-          'bonus',
-          'bonus',  // Middle reel (index 2) - 3 bonus symbols
-          'bonus',
-          'bonus'
-        ] as SlotSymbol[];
+        // Generate 3 rows, with all 3 rows of middle reel being bonus
+        const topRow: SlotSymbol[] = ['common', 'common', 'bonus', 'common', 'common'];
+        const middleRow: SlotSymbol[] = ['common', 'common', 'bonus', 'common', 'common'];
+        const bottomRow: SlotSymbol[] = ['common', 'common', 'bonus', 'common', 'common'];
+        symbols = [topRow, middleRow, bottomRow] as SlotSymbol[][];
         bonusTriggered = true;
         console.log('[Slots] Dev toggle: Forced bonus trigger');
       } else if (forceBonus && isInBonusGame) {
         // If forceBonus is true but already in bonus game, just use bonus weights (don't retrigger)
-        symbols = spinSlotsWithBonus();
+        symbols = spinSlotsWithBonus() as SlotSymbol[][];
         bonusTriggered = false; // Don't retrigger bonus if already in bonus game
         console.log('[Slots] Dev toggle: Already in bonus game, using bonus weights without retrigger');
       } else if (isInBonusGame) {
         // Use bonus game weights (increased probability)
-        symbols = spinSlotsWithBonus();
-        console.log('[Slots] Bonus game spin - Generated symbols:', symbols.join(', '));
+        symbols = spinSlotsWithBonus() as SlotSymbol[][];
+        console.log('[Slots] Bonus game spin - Generated symbols (3 rows)');
       } else {
         // Regular spin
-        symbols = spinSlots();
-        console.log('[Slots] Generated symbols:', symbols.join(', '));
+        symbols = spinSlots() as SlotSymbol[][];
+        console.log('[Slots] Generated symbols (3 rows)');
         
-        // Check for bonus trigger (3 bonus symbols with middle reel being bonus)
+        // Check for bonus trigger (3 bonus symbols on middle reel)
         bonusTriggered = checkBonusTrigger(symbols);
         if (bonusTriggered) {
           console.log('[Slots] Bonus trigger activated!');
@@ -3347,22 +3345,14 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
       const finalBalance = balanceAfterBet + payout;
       
       // Debug logging for payout issues
+      const symbolsFlat = symbols.flat(); // Flatten for logging
       console.log('[Slots] Payout calculation:', {
-        symbols: symbols.join(', '),
+        symbols: symbolsFlat.join(', '),
         payout,
         betAmount: numericBet,
         netPayout,
         isFreeSpin,
         finalBalance
-      });
-      
-      console.log('[Slots] Payout calculation:', {
-        symbols: symbols.join(', '),
-        payout,
-        netPayout,
-        balanceAfterBet,
-        finalBalance,
-        balanceChange: finalBalance - currentOrbs
       });
       
       // Update player balance with final result
@@ -3394,10 +3384,11 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         bonusTriggered: bonusTriggered
       } : undefined;
       
+      // Send all 3 rows to client (3 rows × 5 columns)
       socket.emit('slot_machine_result', {
         slotMachineId,
         slotMachineName,
-        symbols,
+        symbols: symbols, // Send all 3 rows (top, middle, bottom)
         payout: netPayout, // Net payout (win - bet, or -bet if loss, or pure win in bonus)
         newBalance: finalBalance,
         bonusGameState: bonusGameStatePayload
