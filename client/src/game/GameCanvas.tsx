@@ -130,7 +130,7 @@ const EMPTY_OUTFIT_ARRAY: string[] = [];
 const DEFAULT_SPRITE = { body: 'default', outfit: EMPTY_OUTFIT_ARRAY };
 
 import { instrumentFunction } from '../utils/functionProfiler';
-import { orbArrayPool, playerArrayPool, numberArrayPool, playerWrapperPool } from '../utils/arrayPool';
+import { orbArrayPool, playerArrayPool, numberArrayPool, playerWrapperPool, type PlayerWrapper } from '../utils/arrayPool';
 
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2867,13 +2867,14 @@ export function GameCanvas() {
     // Restore original x/y values for interpolated players (we temporarily changed them to renderX/renderY)
     // Also release wrapper objects back to pool
     for (const playerData of allPlayers) {
-      if (playerData._restoreX !== undefined && playerData._restoreY !== undefined) {
-        const player = playerData.player as InterpolatedPlayer;
-        player.x = playerData._restoreX;
-        player.y = playerData._restoreY;
+      const wrapper = playerData as PlayerWrapper;
+      if (wrapper._restoreX !== undefined && wrapper._restoreY !== undefined) {
+        const player = wrapper.player as InterpolatedPlayer;
+        player.x = wrapper._restoreX;
+        player.y = wrapper._restoreY;
       }
       // Release wrapper object back to pool
-      playerWrapperPool.release(playerData);
+      playerWrapperPool.release(wrapper);
     }
     
     // Release arrays back to pool

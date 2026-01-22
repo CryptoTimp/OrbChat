@@ -59,7 +59,7 @@ export const numberArrayPool = new ArrayPool<number>(10);
 export const stringArrayPool = new ArrayPool<string>(10);
 
 // Object pool for player wrapper objects
-interface PlayerWrapper {
+export interface PlayerWrapper {
   player: any;
   isLocal: boolean;
   renderY: number;
