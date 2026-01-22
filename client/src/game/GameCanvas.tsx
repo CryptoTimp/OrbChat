@@ -1504,7 +1504,7 @@ export function GameCanvas() {
       
       // Calculate speed multiplier from equipped boosts (always get fresh outfit from store)
       let speedMultiplier = 1.0;
-      const equippedOutfit = freshLocalPlayer.sprite?.outfit || [];
+      const equippedOutfit = freshLocalPlayer.sprite?.outfit || EMPTY_OUTFIT_ARRAY;
       
       // Known speed boost multipliers (fallback if shop items not loaded) - scaled up 50% + 150%, then reduced 25%
       const SPEED_BOOST_FALLBACK: Record<string, number> = {

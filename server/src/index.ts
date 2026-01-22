@@ -889,16 +889,12 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         
         // Remove socket mappings and emit kick event BEFORE disconnecting
         playerSockets.forEach(playerSocket => {
-          // Emit event first so client can receive it
           playerSocket.emit('force_room_change', { 
             roomId: plazaRoomId,
             reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
           });
-          // Disconnect after a short delay to ensure event is received
-          setTimeout(() => {
-            socketToPlayer.delete(playerSocket.id);
-            playerSocket.disconnect();
-          }, 100);
+          // Update socket mapping to new room immediately so they're ready to join
+          socketToPlayer.set(playerSocket.id, { playerId, roomId: plazaRoomId });
         });
         
         // Don't send balance update since player is being kicked
@@ -1933,19 +1929,15 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
                         // Broadcast player_left to all clients in the room
                         io.to(roomIdForPayouts).emit('player_left', { playerId: payoutPlayerId });
                         
-                        // Remove socket mappings and emit kick event BEFORE disconnecting
-                        playerSockets.forEach(playerSocket => {
-                          // Emit event first so client can receive it
-                          playerSocket.emit('force_room_change', { 
-                            roomId: plazaRoomId,
-                            reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
-                          });
-                          // Disconnect after a short delay to ensure event is received
-                          setTimeout(() => {
-                            socketToPlayer.delete(playerSocket.id);
-                            playerSocket.disconnect();
-                          }, 100);
-                        });
+        // Emit kick event - client will handle room change, socket mapping will update when they join new room
+        playerSockets.forEach(playerSocket => {
+          playerSocket.emit('force_room_change', { 
+            roomId: plazaRoomId,
+            reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
+          });
+          // Update socket mapping to new room immediately so they're ready to join
+          socketToPlayer.set(playerSocket.id, { playerId, roomId: plazaRoomId });
+        });
                         
                         // Don't send balance update since player is being kicked
                         continue;
@@ -2527,18 +2519,13 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
               // Broadcast player_left to all clients in the room
               io.to(mapping.roomId).emit('player_left', { playerId: payoutPlayerId });
               
-              // Remove socket mappings and emit kick event BEFORE disconnecting
+              // Emit kick event - client will handle room change, socket mapping will update when they join new room
               playerSockets.forEach(playerSocket => {
-                // Emit event first so client can receive it
                 playerSocket.emit('force_room_change', { 
                   roomId: plazaRoomId,
                   reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
                 });
-                // Disconnect after a short delay to ensure event is received
-                setTimeout(() => {
-                  socketToPlayer.delete(playerSocket.id);
-                  playerSocket.disconnect();
-                }, 100);
+                // Don't disconnect - let client join new room naturally, socket mapping will update automatically
               });
               
               // Don't send balance update since player is being kicked
@@ -3527,16 +3514,12 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         
         // Remove socket mappings and emit kick event BEFORE disconnecting
         playerSockets.forEach(playerSocket => {
-          // Emit event first so client can receive it
           playerSocket.emit('force_room_change', { 
             roomId: plazaRoomId,
             reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
           });
-          // Disconnect after a short delay to ensure event is received
-          setTimeout(() => {
-            socketToPlayer.delete(playerSocket.id);
-            playerSocket.disconnect();
-          }, 100);
+          // Update socket mapping to new room immediately so they're ready to join
+          socketToPlayer.set(playerSocket.id, { playerId, roomId: plazaRoomId });
         });
         
         return; // Don't send slot result since player is being kicked
@@ -3619,16 +3602,12 @@ io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents>)
         
         // Remove socket mappings and emit kick event BEFORE disconnecting
         playerSockets.forEach(playerSocket => {
-          // Emit event first so client can receive it
           playerSocket.emit('force_room_change', { 
             roomId: plazaRoomId,
             reason: 'Your balance dropped below 5M. You have been moved to the plaza.'
           });
-          // Disconnect after a short delay to ensure event is received
-          setTimeout(() => {
-            socketToPlayer.delete(playerSocket.id);
-            playerSocket.disconnect();
-          }, 100);
+          // Update socket mapping to new room immediately so they're ready to join
+          socketToPlayer.set(playerSocket.id, { playerId, roomId: plazaRoomId });
         });
       }
       

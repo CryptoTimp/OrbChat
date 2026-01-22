@@ -2198,10 +2198,22 @@ export interface TreeData {
 
 // Store forest trees for collision and foliage overlay
 let forestTrees: TreeData[] = [];
+// Cache treeAreas to avoid recreating array every frame
+let cachedTreeAreas: Array<{
+  canopyX: number;
+  canopyY: number;
+  canopyRadius: number;
+  trunkX: number;
+  trunkY: number;
+  trunkW: number;
+  trunkH: number;
+}> | null = null;
 
 // Reset forest trees (called when background is regenerated)
 export function resetForestTrees(): void {
   forestTrees = [];
+  // Clear cached treeAreas when forestTrees is reset
+  cachedTreeAreas = null;
 }
 
 export function getForestTrees(): TreeData[] {
@@ -4036,6 +4048,8 @@ function drawForestBackground(ctx: CanvasRenderingContext2D): void {
   // Build tree data and draw only TRUNKS (foliage drawn later on top of players)
   // Clear and rebuild tree data (trees are regenerated each time background is drawn)
   forestTrees = [];
+  // Clear cached treeAreas when forestTrees is rebuilt
+  cachedTreeAreas = null;
   
   // Helper to check if a position is on a path
   const isOnPath = (tx: number, ty: number): boolean => {
@@ -4098,15 +4112,19 @@ function drawForestBackground(ctx: CanvasRenderingContext2D): void {
   const plazaRadius = 540 * p; // Large paved area (increased by 200% from 180 = 540)
   
   // Build a list of tree areas to avoid for mushroom placement (using stored tree data)
-  const treeAreas = forestTrees.map(tree => ({
-    canopyX: tree.canopyX,
-    canopyY: tree.canopyY,
-    canopyRadius: tree.canopyRadius,
-    trunkX: tree.trunkX,
-    trunkY: tree.trunkY,
-    trunkW: tree.trunkW,
-    trunkH: tree.trunkH,
-  }));
+  // Cache treeAreas to avoid recreating array every frame (major memory leak fix)
+  if (!cachedTreeAreas || cachedTreeAreas.length !== forestTrees.length) {
+    cachedTreeAreas = forestTrees.map(tree => ({
+      canopyX: tree.canopyX,
+      canopyY: tree.canopyY,
+      canopyRadius: tree.canopyRadius,
+      trunkX: tree.trunkX,
+      trunkY: tree.trunkY,
+      trunkW: tree.trunkW,
+      trunkH: tree.trunkH,
+    }));
+  }
+  const treeAreas = cachedTreeAreas;
   
   // Helper to check if position is too close to any tree (canopy or trunk)
   const isNearTree = (x: number, y: number): boolean => {
