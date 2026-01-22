@@ -515,8 +515,10 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
           // Always use targetIndex from server result, double-check with finalSymbolsRef
           let finalIndex = reel.targetIndex;
           
-          if (finalSymbolsRef.current && finalSymbolsRef.current[index]) {
-            const targetSymbol = finalSymbolsRef.current[index];
+          // finalSymbolsRef is [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
+          // index is the column/reel index (0-4), so we need to get the middle row (index 1) for this column
+          if (finalSymbolsRef.current && finalSymbolsRef.current[1] && finalSymbolsRef.current[1][index]) {
+            const targetSymbol = finalSymbolsRef.current[1][index]; // Middle row, this column
             const symbolIndex = reel.symbols.findIndex(s => s === targetSymbol);
             if (symbolIndex >= 0) {
               finalIndex = symbolIndex;
@@ -537,8 +539,8 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
           // If not, update it to ensure correct display
           // Create a new symbols array to avoid mutating the original
           const updatedSymbols = [...reel.symbols];
-          if (finalSymbolsRef.current && finalSymbolsRef.current[index]) {
-            const targetSymbol = finalSymbolsRef.current[index];
+          if (finalSymbolsRef.current && finalSymbolsRef.current[1] && finalSymbolsRef.current[1][index]) {
+            const targetSymbol = finalSymbolsRef.current[1][index]; // Middle row, this column
             const currentSymbolAtIndex = updatedSymbols[finalIndex];
             
             // If the symbol at the final index doesn't match the target, update it
@@ -586,8 +588,10 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
           }
           
           // Double-check with finalSymbolsRef to ensure correct target
-          if (finalSymbolsRef.current && finalSymbolsRef.current[index]) {
-            const targetSymbol = finalSymbolsRef.current[index];
+          // finalSymbolsRef is [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
+          // index is the column/reel index (0-4), so we need to get the middle row (index 1) for this column
+          if (finalSymbolsRef.current && finalSymbolsRef.current[1] && finalSymbolsRef.current[1][index]) {
+            const targetSymbol = finalSymbolsRef.current[1][index]; // Middle row, this column
             const symbolIndex = reel.symbols.findIndex(s => s === targetSymbol);
             if (symbolIndex >= 0) {
               finalIndex = symbolIndex;
@@ -615,8 +619,10 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
         let targetIndex = reel.targetIndex;
         
         // Double-check with finalSymbolsRef if available to ensure correct target
-        if (finalSymbolsRef.current && finalSymbolsRef.current[index]) {
-          const targetSymbol = finalSymbolsRef.current[index];
+        // finalSymbolsRef is [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
+        // index is the column/reel index (0-4), so we need to get the middle row (index 1) for this column
+        if (finalSymbolsRef.current && finalSymbolsRef.current[1] && finalSymbolsRef.current[1][index]) {
+          const targetSymbol = finalSymbolsRef.current[1][index]; // Middle row, this column
           const symbolIndex = reel.symbols.findIndex(s => s === targetSymbol);
           if (symbolIndex >= 0) {
             targetIndex = symbolIndex;
@@ -708,8 +714,10 @@ export function SlotMachineModal({ slotMachineId }: SlotMachineModalProps) {
           // Get the final target symbol from server
           let finalIndex = reel.currentIndex; // Use current position (already set by animation)
           
-          if (finalSymbolsRef.current && finalSymbolsRef.current[index]) {
-            const targetSymbol = finalSymbolsRef.current[index];
+          // finalSymbolsRef is [topRow, middleRow, bottomRow] where each row is [col0, col1, col2, col3, col4]
+          // index is the column/reel index (0-4), so we need to get the middle row (index 1) for this column
+          if (finalSymbolsRef.current && finalSymbolsRef.current[1] && finalSymbolsRef.current[1][index]) {
+            const targetSymbol = finalSymbolsRef.current[1][index]; // Middle row, this column
             // Find or ensure the target symbol is at the final index
             const symbolIndex = reel.symbols.findIndex(s => s === targetSymbol);
             if (symbolIndex >= 0) {
